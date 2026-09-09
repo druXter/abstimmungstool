@@ -84,6 +84,21 @@ export default async function ErstellenPage({
             <input type="datetime-local" name="closesAt" className="w-full border border-gray-300 p-2 rounded" />
           </div>
 
+          <div>
+            <label className="block text-sm font-medium mb-1">Deine E-Mail-Adresse (optional)</label>
+            <input
+              type="email"
+              name="creatorEmail"
+              maxLength={200}
+              className="w-full border border-gray-300 p-2 rounded"
+              placeholder="damit du den Verwaltungs-Link nicht selbst abspeichern musst"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Falls angegeben, schicken wir dir den Verwaltungs-Link direkt per Mail - nur als Backup,
+              falls du den auf der nächsten Seite angezeigten Link nicht selbst sicherst.
+            </p>
+          </div>
+
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" name="allowMultipleChoices" className="w-4 h-4" />
             <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>

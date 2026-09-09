@@ -27,8 +27,15 @@ Kein Nutzer-Konto nötig - weder zum Anlegen noch zum Abstimmen.
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
   daher über 100% liegen, das ist beabsichtigt (siehe `app/[pollId]/poll-results.tsx`).
 * **Verwaltungs-Link:** Beim Erstellen bekommt man einen privaten Link
-  (`/[pollId]/verwalten?token=...`), um die Abstimmung vorzeitig zu schließen oder
-  unwiderruflich zu löschen - Besitz des Tokens ist die einzige Berechtigung dafür.
+  (`/[pollId]/verwalten?token=...`), um die Abstimmung nachträglich zu bearbeiten
+  (Titel/Beschreibung/Optionen/Einstellungen), vorzeitig zu schließen oder
+  unwiderruflich zu löschen - Besitz des Tokens ist die einzige Berechtigung dafür,
+  es gibt bewusst kein Konto-System dafür (siehe "Bearbeiten ohne Konto" unten).
+* **Verwaltungs-Link per Mail (optional):** Beim Anlegen kann eine E-Mail-Adresse
+  angegeben werden, an die der Verwaltungs-Link zusätzlich geschickt wird (siehe
+  `app/lib/mail.ts`) - reines Backup, falls man den auf dem Bildschirm angezeigten
+  Link nicht selbst sichert. Ohne konfiguriertes `SMTP_HOST` bleibt das Feld einfach
+  wirkungslos, kein Pflichtfeld.
 
 ## Verifizierte Abstimmungen (Mehrfachabstimmen bei Einbindung ausschließen)
 
@@ -67,6 +74,25 @@ Payload (JSON): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools
 * Prüf-Implementierung: `app/lib/rsvp-verification.ts` (`verifyRsvpToken`). Zum
   lokalen Testen ohne rsvp-app: `signRsvpTokenForTesting()` in derselben Datei -
   bewusst nicht produktiv verlinkt, nur für Entwicklung/Tests.
+
+## Bearbeiten ohne Konto
+
+Eine Abstimmung lässt sich über `/[pollId]/verwalten/bearbeiten?token=...` (Link auf
+der Verwaltungsseite) nachträglich anpassen: Titel, Beschreibung, automatisches
+Schließungsdatum, beide Schalter (Mehrfachauswahl, RSVP-Verifizierung) sowie die
+Optionen selbst - bestehende Optionen können umbenannt werden, neue hinzugefügt
+werden (bis `MAX_OPTIONS`), und Optionen OHNE bereits abgegebene Stimmen gelöscht
+werden. Optionen MIT Stimmen können umbenannt, aber nicht gelöscht werden (die
+Löschung wird serverseitig stillschweigend ignoriert) - das verhindert, versehentlich
+bereits abgegebene Stimmen zu verwaisen.
+
+Bewusst **kein** Konto-System dafür, obwohl das naheliegend erscheinen könnte (siehe
+z.B. rsvp-app) - der `creatorToken` ist bereits exakt die Berechtigung, die ein
+Konto auch bräuchte, nur ohne Login/Passwort/Session-Infrastruktur. Ein echtes
+Konto-System würde genau die Komplexität zurückbringen, die dieses Tool bewusst
+vermeidet. Die einzige reale Schwäche des Ansatzes - man kann den Verwaltungs-Link
+verlieren - wird durch die optionale Mail-Zustellung beim Anlegen abgefedert (siehe
+oben), nicht durch ein Konto-System ersetzt.
 
 ## Bewusste Grenzen (kein Missverständnis)
 

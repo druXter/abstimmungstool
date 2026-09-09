@@ -38,6 +38,12 @@ model Poll {
   title                   String
   description             String?
   creatorToken            String       @unique @default(uuid())
+  // Optional beim Anlegen angegeben - falls gesetzt, wird der Verwaltungs-Link direkt
+  // per Mail zugeschickt (siehe sendManagementLinkEmail in app/lib/mail.ts), damit der
+  // Ersteller ihn nicht nur einmalig auf dem Bildschirm kopieren muss. Rein optional,
+  // ändert nichts an der eigentlichen Berechtigung (die bleibt bei creatorToken) - ein
+  // fehlendes SMTP_HOST lässt dieses Feld einfach ungenutzt, kein Pflichtfeld.
+  creatorEmail            String?
   requireRsvpVerification Boolean      @default(false)
   allowMultipleChoices    Boolean      @default(false)
   closesAt                DateTime?

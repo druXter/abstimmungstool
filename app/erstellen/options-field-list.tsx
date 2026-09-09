@@ -8,11 +8,23 @@ const START_COUNT = 4
 /**
  * Erweiterbare Liste von Options-Eingabefeldern bis max (Standard 25 - muss mit
  * MAX_OPTIONS in app/actions.ts übereinstimmen) - leere Felder werden beim Absenden
- * serverseitig ignoriert (siehe createPoll), man muss also nicht alle sichtbaren
- * Felder ausfüllen.
+ * serverseitig ignoriert (siehe createPoll/updatePoll), man muss also nicht alle
+ * sichtbaren Felder ausfüllen. Wiederverwendet von der Bearbeiten-Seite (mit
+ * abweichendem `name`, da dort zwischen bestehenden und neu hinzugefügten Optionen
+ * unterschieden werden muss - siehe app/[pollId]/verwalten/bearbeiten/page.tsx) und
+ * startet dort mit 0 sichtbaren Feldern statt 4, da bereits bestehende Optionen
+ * separat angezeigt werden.
  */
-export default function OptionsFieldList({ max = 25 }: { max?: number }) {
-  const [count, setCount] = useState(START_COUNT)
+export default function OptionsFieldList({
+  name = 'option',
+  max = 25,
+  startCount = START_COUNT
+}: {
+  name?: string
+  max?: number
+  startCount?: number
+}) {
+  const [count, setCount] = useState(startCount)
 
   return (
     <div className="space-y-2">
@@ -20,7 +32,7 @@ export default function OptionsFieldList({ max = 25 }: { max?: number }) {
         <input
           key={i}
           type="text"
-          name="option"
+          name={name}
           maxLength={200}
           className="w-full border border-gray-300 p-2 rounded"
           placeholder={`Option ${i + 1}`}
@@ -35,7 +47,7 @@ export default function OptionsFieldList({ max = 25 }: { max?: number }) {
           + Weitere Option hinzufügen
         </button>
       )}
-      <p className="text-xs text-gray-500">Mindestens 2, maximal {max} Optionen.</p>
+      <p className="text-xs text-gray-500">Maximal {max} Optionen insgesamt.</p>
     </div>
   )
 }

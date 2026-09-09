@@ -7,6 +7,8 @@ import { prisma } from './lib/prisma'
 import { isCreateAllowed, unlockCreatePin } from './lib/create-pin'
 import { getOrCreateVoterToken } from './lib/voter'
 import { verifyRsvpToken } from './lib/rsvp-verification'
+import { sendManagementLinkEmail } from './lib/mail'
+import { baseUrl } from './lib/base-url'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
@@ -39,6 +41,7 @@ export async function createPoll(formData: FormData) {
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
   const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
+  const creatorEmail = (formData.get('creatorEmail') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
 
   const rawOptions = formData.getAll('option') as string[]
   const options = rawOptions
@@ -59,13 +62,96 @@ export async function createPoll(formData: FormData) {
       closesAt,
       requireRsvpVerification,
       allowMultipleChoices,
+      creatorEmail,
       options: {
         create: uniqueOptions.map((label, position) => ({ label, position }))
       }
     }
   })
 
+  const managementLink = `${baseUrl()}/${poll.id}/verwalten?token=${poll.creatorToken}`
+  if (creatorEmail) {
+    await sendManagementLinkEmail(creatorEmail, poll.title, managementLink, `${baseUrl()}/${poll.id}`).catch(() => {})
+  }
+
   redirect(`/${poll.id}/verwalten?token=${poll.creatorToken}&created=1`)
+}
+
+/**
+ * Bearbeitet eine bestehende Abstimmung - nur mit dem privaten creatorToken möglich
+ * (gleiches Prinzip wie überall sonst in diesem Projekt). Optionen mit bereits
+ * abgegebenen Stimmen können umbenannt, aber NICHT gelöscht werden (ein entsprechender
+ * Löschwunsch wird stillschweigend ignoriert) - das verhindert, versehentlich bereits
+ * abgegebene Stimmen zu verwaisen/verlieren. Optionen ohne Stimmen dürfen frei entfernt
+ * werden, neue können jederzeit ergänzt werden (bis MAX_OPTIONS insgesamt).
+ */
+export async function updatePoll(formData: FormData) {
+  const pollId = formData.get('pollId') as string
+  const token = formData.get('creatorToken') as string
+
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    include: { options: { include: { _count: { select: { votes: true } } } } }
+  })
+  if (!poll || poll.creatorToken !== token) return
+
+  const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
+  if (title === '') return
+
+  const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
+  const closesAtInput = formData.get('closesAt') as string
+  const closesAt = closesAtInput ? new Date(closesAtInput) : null
+  const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
+  const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
+
+  const existingIds = formData.getAll('existingOptionId') as string[]
+  const existingLabels = formData.getAll('existingOptionLabel') as string[]
+  const deleteIds = new Set(formData.getAll('deleteOptionId') as string[])
+
+  const validExistingIds = new Set(poll.options.map(o => o.id))
+  const optionsWithVotes = new Set(poll.options.filter(o => o._count.votes > 0).map(o => o.id))
+
+  const keptOptions: { id: string; label: string }[] = []
+  for (let i = 0; i < existingIds.length; i++) {
+    const id = existingIds[i]
+    if (!validExistingIds.has(id)) continue // gehört nicht zu diesem Poll - ignorieren
+    if (deleteIds.has(id) && !optionsWithVotes.has(id)) continue // Löschen erlaubt, da keine Stimmen
+
+    const label = (existingLabels[i] || '').trim().slice(0, MAX_TEXT_LENGTH)
+    if (label === '') continue
+    keptOptions.push({ id, label })
+  }
+
+  const newLabels = (formData.getAll('newOption') as string[])
+    .map(o => o.trim().slice(0, MAX_TEXT_LENGTH))
+    .filter(o => o !== '')
+    .slice(0, MAX_OPTIONS - keptOptions.length)
+
+  if (keptOptions.length + newLabels.length < 2) return
+
+  await prisma.$transaction(async (tx) => {
+    await tx.poll.update({
+      where: { id: pollId },
+      data: { title, description, closesAt, requireRsvpVerification, allowMultipleChoices }
+    })
+
+    const keptIds = new Set(keptOptions.map(o => o.id))
+    const toDelete = poll.options.filter(o => !keptIds.has(o.id) && !optionsWithVotes.has(o.id))
+    for (const opt of toDelete) {
+      await tx.pollOption.delete({ where: { id: opt.id } })
+    }
+
+    for (let i = 0; i < keptOptions.length; i++) {
+      await tx.pollOption.update({ where: { id: keptOptions[i].id }, data: { label: keptOptions[i].label, position: i } })
+    }
+
+    for (let i = 0; i < newLabels.length; i++) {
+      await tx.pollOption.create({ data: { pollId, label: newLabels[i], position: keptOptions.length + i } })
+    }
+  })
+
+  revalidatePath(`/${pollId}`)
+  redirect(`/${pollId}/verwalten?token=${token}&saved=1`)
 }
 
 /**

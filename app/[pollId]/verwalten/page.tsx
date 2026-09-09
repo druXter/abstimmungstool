@@ -15,10 +15,10 @@ export default async function VerwaltenPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ token?: string; created?: string }>
+  searchParams: Promise<{ token?: string; created?: string; saved?: string }>
 }) {
   const { pollId } = await params
-  const { token, created } = await searchParams
+  const { token, created, saved } = await searchParams
 
   // Besitz des creatorToken ist die einzige Berechtigung für diese Seite - kein Login.
   if (!token) notFound()
@@ -48,7 +48,13 @@ export default async function VerwaltenPage({
         {created === '1' && (
           <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg text-sm">
             🎉 Abstimmung erstellt! Speichere diese Seite - der Verwaltungs-Link unten ist deine
-            einzige Möglichkeit, sie später zu schließen oder zu löschen.
+            einzige Möglichkeit, sie später zu bearbeiten, zu schließen oder zu löschen.
+          </div>
+        )}
+
+        {saved === '1' && (
+          <div className="bg-green-50 border border-green-200 text-green-800 p-4 rounded-lg text-sm">
+            ✅ Änderungen gespeichert.
           </div>
         )}
 
@@ -59,6 +65,12 @@ export default async function VerwaltenPage({
           <CopyableField label="Verwaltungs-Link (nur für dich - nicht teilen!)" value={managementLink} />
 
           <div className="flex flex-wrap gap-3 pt-2 border-t border-gray-100">
+            <Link
+              href={`/${poll.id}/verwalten/bearbeiten?token=${poll.creatorToken}`}
+              className="text-sm bg-blue-100 text-blue-800 hover:bg-blue-200 px-3 py-1.5 rounded transition"
+            >
+              ✏️ Bearbeiten
+            </Link>
             {!isClosed ? (
               <form action={closePoll}>
                 <input type="hidden" name="pollId" value={poll.id} />
