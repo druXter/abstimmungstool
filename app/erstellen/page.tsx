@@ -84,6 +84,21 @@ export default async function ErstellenPage({
             <input type="datetime-local" name="closesAt" className="w-full border border-gray-300 p-2 rounded" />
           </div>
 
+          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" name="requireRsvpVerification" className="w-4 h-4" />
+              <span className="text-sm font-medium text-amber-900">
+                Nur über rsvp-app abstimmbar (max. 1 Stimme pro Person)
+              </span>
+            </label>
+            <p className="text-xs text-amber-700">
+              Ersetzt die anonyme Cookie-Identität durch eine über rsvp-app verifizierte E-Mail - dafür
+              muss diese Abstimmung über einen entsprechend eingerichteten Link/Button in rsvp-app
+              aufgerufen werden. Direkter, anonymer Zugriff auf diese Seite kann dann nicht abstimmen.
+              Nur sinnvoll, sobald diese Verknüpfung eingerichtet ist (siehe README).
+            </p>
+          </div>
+
           <SubmitButton>Abstimmung erstellen</SubmitButton>
         </form>
       </div>

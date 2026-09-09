@@ -13,20 +13,30 @@ datasource db {
 
 // Eine Abstimmung mit beliebig vielen Optionen (siehe PollOption). Bewusst ohne
 // Nutzer-Konten: Anlegen ist nur mit der gemeinsamen CREATE_PIN möglich (siehe
-// app/lib/create-pin.ts), Stimmabgabe ist komplett anonym (siehe Vote.voterToken).
-// creatorToken ist der private Verwaltungslink (Abstimmung schließen/löschen) -
-// gleiches Prinzip wie Participant.editToken in rsvp-app: Besitz des Tokens ist die
-// einzige Berechtigung, es gibt keinen Login dafür.
+// app/lib/create-pin.ts), Stimmabgabe ist standardmäßig komplett anonym (siehe
+// Vote.voterToken). creatorToken ist der private Verwaltungslink (Abstimmung
+// schließen/löschen) - gleiches Prinzip wie Participant.editToken in rsvp-app:
+// Besitz des Tokens ist die einzige Berechtigung, es gibt keinen Login dafür.
+//
+// requireRsvpVerification: schaltet für GENAU DIESE Abstimmung von der anonymen
+// Cookie-Identität auf eine über rsvp-app verifizierte E-Mail um (siehe
+// app/lib/rsvp-verification.ts) - damit ist "eine Stimme pro echter Person" statt
+// nur "eine Stimme pro Browser" möglich, kostet aber die Offenheit für Leute ohne
+// RSVP-Konto: direkter/anonymer Zugriff kann dann bewusst NICHT abstimmen (siehe
+// app/[pollId]/page.tsx) - kein unverifizierter Fallback, sonst wäre die Garantie
+// wertlos. Rein additiv und pro Abstimmung einzeln gewählt, ändert nichts am
+// Standardverhalten aller anderen (nicht so markierten) Abstimmungen.
 model Poll {
-  id           String       @id @default(cuid())
-  title        String
-  description  String?
-  creatorToken String       @unique @default(uuid())
-  closesAt     DateTime?
-  closedAt     DateTime?
-  createdAt    DateTime     @default(now())
-  options      PollOption[]
-  votes        Vote[]
+  id                      String       @id @default(cuid())
+  title                   String
+  description             String?
+  creatorToken            String       @unique @default(uuid())
+  requireRsvpVerification Boolean      @default(false)
+  closesAt                DateTime?
+  closedAt                DateTime?
+  createdAt               DateTime     @default(now())
+  options                 PollOption[]
+  votes                   Vote[]
 }
 
 model PollOption {
@@ -38,22 +48,32 @@ model PollOption {
   votes    Vote[]
 }
 
-// Eine Stimme hängt an einem zufälligen, im Browser gespeicherten voterToken-Cookie
-// (siehe app/lib/voter.ts) statt an einem Konto. Pro Poll darf ein voterToken nur
-// eine einzige Stimme haben (@@unique) - wird aber überschrieben (nicht dupliziert),
-// solange die Abstimmung noch offen ist, damit man seine Wahl ändern kann.
-// Bekannte, bewusst in Kauf genommene Grenze: Wer Cookies löscht oder ein anderes
-// Gerät nutzt, kann erneut abstimmen - für den vorgesehenen Rahmen (kleine,
-// vertraute Gruppe) ist das ein akzeptabler Kompromiss, kein Sicherheitsversprechen
-// für öffentliche Abstimmungen mit Fremden.
+// Eine Stimme hängt entweder an einem zufälligen, im Browser gespeicherten
+// voterToken-Cookie (siehe app/lib/voter.ts) ODER, bei Poll.requireRsvpVerification,
+// an einer über rsvp-app verifizierten E-Mail (siehe app/lib/rsvp-verification.ts) -
+// pro Poll gilt immer nur genau eine der beiden Spalten, nie beide gleichzeitig
+// (welche, entscheidet Poll.requireRsvpVerification zum Zeitpunkt der Stimmabgabe,
+// siehe castVote in app/actions.ts). Beide @@unique-Constraints greifen unabhängig
+// voneinander - NULL-Werte kollidieren in SQLite nicht untereinander, daher stört
+// die jeweils ungenutzte Spalte (durchgehend NULL) die Eindeutigkeit der anderen nie.
+// Pro Identität darf ein Poll nur eine einzige Stimme haben (@@unique) - wird aber
+// überschrieben (nicht dupliziert), solange die Abstimmung noch offen ist, damit man
+// seine Wahl ändern kann.
+// Bekannte, bewusst in Kauf genommene Grenze der Cookie-Variante: Wer Cookies löscht
+// oder ein anderes Gerät nutzt, kann erneut abstimmen - für den vorgesehenen Rahmen
+// (kleine, vertraute Gruppe) ein akzeptierter Kompromiss, kein Sicherheitsversprechen
+// für öffentliche Abstimmungen mit Fremden. Genau diese Lücke schließt die
+// verifizierte Variante, wo sie eingesetzt wird.
 model Vote {
-  id         String     @id @default(cuid())
-  pollId     String
-  poll       Poll       @relation(fields: [pollId], references: [id])
-  optionId   String
-  option     PollOption @relation(fields: [optionId], references: [id])
-  voterToken String
-  createdAt  DateTime   @default(now())
+  id            String     @id @default(cuid())
+  pollId        String
+  poll          Poll       @relation(fields: [pollId], references: [id])
+  optionId      String
+  option        PollOption @relation(fields: [optionId], references: [id])
+  voterToken    String?
+  verifiedEmail String?
+  createdAt     DateTime   @default(now())
 
   @@unique([pollId, voterToken])
+  @@unique([pollId, verifiedEmail])
 }

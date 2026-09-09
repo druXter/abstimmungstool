@@ -5,7 +5,8 @@ import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { prisma } from './lib/prisma'
 import { isCreateAllowed, unlockCreatePin } from './lib/create-pin'
-import { getOrCreateVoterToken, getVoterToken } from './lib/voter'
+import { getOrCreateVoterToken } from './lib/voter'
+import { verifyRsvpToken } from './lib/rsvp-verification'
 
 const MAX_OPTIONS = 20
 const MAX_TEXT_LENGTH = 200
@@ -36,6 +37,7 @@ export async function createPoll(formData: FormData) {
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
   const closesAtInput = formData.get('closesAt') as string
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
+  const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
 
   const rawOptions = formData.getAll('option') as string[]
   const options = rawOptions
@@ -54,6 +56,7 @@ export async function createPoll(formData: FormData) {
       title,
       description,
       closesAt,
+      requireRsvpVerification,
       options: {
         create: uniqueOptions.map((label, position) => ({ label, position }))
       }
@@ -64,14 +67,19 @@ export async function createPoll(formData: FormData) {
 }
 
 /**
- * Gibt (oder ändert) die eigene Stimme ab - identifiziert ausschließlich über das
- * anonyme voterToken-Cookie (siehe app/lib/voter.ts), kein Konto nötig. Ein Upsert
- * statt Insert erlaubt das Ändern der eigenen Wahl, solange die Abstimmung offen ist.
+ * Gibt (oder ändert) die eigene Stimme ab. Zwei Identitäts-Modi, je nach
+ * Poll.requireRsvpVerification (siehe schema.prisma für die Begründung):
+ * - Standard: anonymes voterToken-Cookie (siehe app/lib/voter.ts), kein Konto nötig.
+ * - Bei requireRsvpVerification: verifizierte E-Mail aus einem von rsvp-app
+ *   signierten Token (siehe app/lib/rsvp-verification.ts) - fehlt ein gültiger
+ *   Token, wird die Stimme abgelehnt (fail-closed), es gibt bewusst KEINEN
+ *   anonymen Fallback, sonst wäre die "eine Stimme pro Person"-Garantie wertlos.
+ * Ein Upsert statt Insert erlaubt in beiden Modi das Ändern der eigenen Wahl,
+ * solange die Abstimmung offen ist.
  * Bewusst als reines Formular ohne Client-JS gebaut (kein onSubmit-Handler) - daher
  * `void` statt eines Rückgabewerts mit Fehlermeldung; ungültige/verspätete Anfragen
- * (Poll inzwischen geschlossen o.ä.) werden wie an anderen Stellen dieses Projekts
- * stillschweigend ignoriert statt einer Fehlermeldung, das UI bietet ohnehin nur
- * gültige Optionen einer offenen Abstimmung zur Auswahl an.
+ * werden wie an anderen Stellen dieses Projekts stillschweigend ignoriert statt
+ * einer Fehlermeldung, das UI bietet ohnehin nur gültige Optionen an.
  */
 export async function castVote(formData: FormData): Promise<void> {
   const pollId = formData.get('pollId') as string
@@ -87,28 +95,27 @@ export async function castVote(formData: FormData): Promise<void> {
   const option = await prisma.pollOption.findUnique({ where: { id: optionId } })
   if (!option || option.pollId !== pollId) return
 
-  const voterToken = await getOrCreateVoterToken()
+  if (poll.requireRsvpVerification) {
+    const verifyToken = formData.get('verifyToken') as string
+    const identity = verifyRsvpToken(verifyToken, pollId)
+    if (!identity) return // Kein gültiger Token -> keine Stimme, kein anonymer Fallback.
 
-  await prisma.vote.upsert({
-    where: { pollId_voterToken: { pollId, voterToken } },
-    update: { optionId },
-    create: { pollId, optionId, voterToken }
-  })
+    await prisma.vote.upsert({
+      where: { pollId_verifiedEmail: { pollId, verifiedEmail: identity.email } },
+      update: { optionId },
+      create: { pollId, optionId, verifiedEmail: identity.email }
+    })
+  } else {
+    const voterToken = await getOrCreateVoterToken()
+
+    await prisma.vote.upsert({
+      where: { pollId_voterToken: { pollId, voterToken } },
+      update: { optionId },
+      create: { pollId, optionId, voterToken }
+    })
+  }
 
   revalidatePath(`/${pollId}`)
-}
-
-/**
- * Liefert die optionId, für die dieser Browser (voterToken) bereits gestimmt hat -
- * oder null, wenn noch keine Stimme abgegeben wurde. Liest das Cookie nur, legt
- * keins an (siehe getVoterToken vs. getOrCreateVoterToken).
- */
-export async function getMyVote(pollId: string): Promise<string | null> {
-  const voterToken = await getVoterToken()
-  if (!voterToken) return null
-
-  const vote = await prisma.vote.findUnique({ where: { pollId_voterToken: { pollId, voterToken } } })
-  return vote?.optionId ?? null
 }
 
 /**
