@@ -1,0 +1,22 @@
+# Abhängigkeiten
+node_modules
+npm-debug.log
+
+# Build-Ordner von Next.js
+.next
+out
+build
+
+# Git
+.git
+.gitignore
+
+# Datenbanken und Umgebungsvariablen (werden über Volumes/Compose geregelt)
+*.db
+*.db-journal
+data/
+.env
+.env.local
+
+# IDE-Dateien
+.vscode
