@@ -26,40 +26,44 @@ export default async function PollPage({
       options: {
         orderBy: { position: 'asc' },
         include: { _count: { select: { votes: true } } }
-      }
+      },
+      votes: { select: { voterToken: true, verifiedEmail: true } }
     }
   })
   if (!poll) notFound()
 
-  const totalVotes = poll.options.reduce((sum, o) => sum + o._count.votes, 0)
+  // Zähler für die Prozent-Basis in PollResults - siehe dort für die Begründung,
+  // warum das die Anzahl abstimmender PERSONEN ist, nicht die Summe der Options-Stimmen.
+  const distinctVoters = new Set(poll.votes.map(v => v.voterToken ?? v.verifiedEmail)).size
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
 
   // Identität auflösen - welcher der beiden Modi gilt, entscheidet ausschließlich
   // poll.requireRsvpVerification (siehe schema.prisma), niemals die bloße Anwesenheit
   // eines ?verify=-Parameters. Für eine normale (nicht so markierte) Abstimmung wird
   // ein mitgeschickter Token also einfach ignoriert.
-  let myVoteOptionId: string | null = null
+  let myVoteOptionIds: string[] = []
   let verifiedEmail: string | null = null
 
   if (poll.requireRsvpVerification) {
     verifiedEmail = verifyRsvpToken(verify, poll.id)?.email ?? null
     if (verifiedEmail) {
-      const vote = await prisma.vote.findUnique({
-        where: { pollId_verifiedEmail: { pollId: poll.id, verifiedEmail } }
+      const votes = await prisma.vote.findMany({
+        where: { pollId: poll.id, verifiedEmail }
       })
-      myVoteOptionId = vote?.optionId ?? null
+      myVoteOptionIds = votes.map(v => v.optionId)
     }
   } else {
     const voterToken = await getVoterToken()
     if (voterToken) {
-      const vote = await prisma.vote.findUnique({
-        where: { pollId_voterToken: { pollId: poll.id, voterToken } }
+      const votes = await prisma.vote.findMany({
+        where: { pollId: poll.id, voterToken }
       })
-      myVoteOptionId = vote?.optionId ?? null
+      myVoteOptionIds = votes.map(v => v.optionId)
     }
   }
 
   const canVote = !isClosed && (!poll.requireRsvpVerification || !!verifiedEmail)
+  const hasVoted = myVoteOptionIds.length > 0
 
   return (
     <main className="min-h-screen bg-gray-50 py-10 px-4">
@@ -89,12 +93,15 @@ export default async function PollPage({
             <input type="hidden" name="pollId" value={poll.id} />
             {verify && <input type="hidden" name="verifyToken" value={verify} />}
             <h2 className="font-bold text-gray-900 mb-2">
-              {myVoteOptionId ? 'Deine Stimme ändern' : 'Jetzt abstimmen'}
+              {hasVoted ? 'Deine Auswahl ändern' : 'Jetzt abstimmen'}
             </h2>
             {verifiedEmail && (
               <p className="text-xs text-gray-500">
                 Angemeldet als <strong>{verifiedEmail}</strong> (über rsvp-app verifiziert)
               </p>
+            )}
+            {poll.allowMultipleChoices && (
+              <p className="text-xs text-gray-500">Mehrere Optionen wählbar.</p>
             )}
             {poll.options.map(option => (
               <label
@@ -102,25 +109,25 @@ export default async function PollPage({
                 className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
               >
                 <input
-                  type="radio"
+                  type={poll.allowMultipleChoices ? 'checkbox' : 'radio'}
                   name="optionId"
                   value={option.id}
-                  defaultChecked={myVoteOptionId === option.id}
-                  required
+                  defaultChecked={myVoteOptionIds.includes(option.id)}
+                  required={!poll.allowMultipleChoices}
                   className="w-4 h-4"
                 />
                 <span className="text-gray-800">{option.label}</span>
               </label>
             ))}
-            <SubmitButton>{myVoteOptionId ? 'Stimme ändern' : 'Abstimmen'}</SubmitButton>
+            <SubmitButton>{hasVoted ? 'Auswahl speichern' : 'Abstimmen'}</SubmitButton>
           </form>
         )}
 
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="font-bold text-gray-900 mb-4">
-            Live-Ergebnis ({totalVotes} Stimme{totalVotes === 1 ? '' : 'n'})
+            Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
           </h2>
-          <PollResults options={poll.options} totalVotes={totalVotes} myVoteOptionId={myVoteOptionId} />
+          <PollResults options={poll.options} distinctVoters={distinctVoters} myVoteOptionIds={myVoteOptionIds} />
         </div>
 
         <p className="text-center text-xs text-gray-400">

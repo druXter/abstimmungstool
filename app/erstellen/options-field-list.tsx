@@ -6,11 +6,12 @@ import { useState } from 'react'
 const START_COUNT = 4
 
 /**
- * Erweiterbare Liste von Options-Eingabefeldern bis max (Standard 20) - leere
- * Felder werden beim Absenden serverseitig ignoriert (siehe createPoll), man muss
- * also nicht alle sichtbaren Felder ausfüllen.
+ * Erweiterbare Liste von Options-Eingabefeldern bis max (Standard 25 - muss mit
+ * MAX_OPTIONS in app/actions.ts übereinstimmen) - leere Felder werden beim Absenden
+ * serverseitig ignoriert (siehe createPoll), man muss also nicht alle sichtbaren
+ * Felder ausfüllen.
  */
-export default function OptionsFieldList({ max = 20 }: { max?: number }) {
+export default function OptionsFieldList({ max = 25 }: { max?: number }) {
   const [count, setCount] = useState(START_COUNT)
 
   return (

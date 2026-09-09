@@ -84,6 +84,11 @@ export default async function ErstellenPage({
             <input type="datetime-local" name="closesAt" className="w-full border border-gray-300 p-2 rounded" />
           </div>
 
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="allowMultipleChoices" className="w-4 h-4" />
+            <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
+          </label>
+
           <div className="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input type="checkbox" name="requireRsvpVerification" className="w-4 h-4" />

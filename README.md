@@ -1,23 +1,31 @@
 # Abstimmungstool
 
 Ein schlankes, eigenständiges Tool für anonyme Gruppen-Abstimmungen mit beliebig
-vielen Optionen (z.B. "Wohin gehen wir am Mittwoch?" mit 20 Restaurant-Vorschlägen).
+vielen Optionen (z.B. "Wohin gehen wir am Mittwoch?" mit 25 Restaurant-Vorschlägen).
 Kein Nutzer-Konto nötig - weder zum Anlegen noch zum Abstimmen.
 
 ## Funktionen
 
-* **Abstimmung anlegen:** Titel, optionale Beschreibung, 2-20 Optionen, optionales
+* **Abstimmung anlegen:** Titel, optionale Beschreibung, 2-25 Optionen, optionales
   automatisches Schließungsdatum. Das Anlegen kann per gemeinsamem Zugangscode
   (`CREATE_PIN`) geschützt werden - das Abstimmen selbst bleibt für jeden mit einem
   Link offen.
+* **Einzel- oder Mehrfachauswahl (pro Abstimmung einzeln gewählt):** Standardmäßig
+  eine Option pro Stimme (Radiobuttons); mit `allowMultipleChoices` können mehrere
+  Optionen gleichzeitig gewählt werden (Checkboxen) - z.B. "welche Restaurants
+  wären für dich alle okay?". Ändert nichts an der Identitätslogik, siehe unten.
 * **Anonyme Stimmabgabe (Standard):** Identifikation über ein zufälliges
-  Browser-Cookie (`voter_token`), kein Konto. Die eigene Stimme kann geändert
-  werden, solange die Abstimmung offen ist.
+  Browser-Cookie (`voter_token`), kein Konto. Die eigene Auswahl kann jederzeit
+  geändert werden, solange die Abstimmung offen ist.
 * **Verifizierte Stimmabgabe (optional, pro Abstimmung einzeln aktivierbar):**
   Statt des Cookies wird eine über `rsvp-app` verifizierte E-Mail als Identität
   genutzt - siehe "Verifizierte Abstimmungen" unten. Verhindert Mehrfachabstimmen
-  auch über verschiedene Geräte/Browser hinweg, nicht nur im selben Browser.
-* **Live-Ergebnis:** Stimmenanzahl und Prozentanteil pro Option, in Echtzeit.
+  auch über verschiedene Geräte/Browser hinweg, nicht nur im selben Browser. Lässt
+  sich mit der Mehrfachauswahl kombinieren.
+* **Live-Ergebnis:** Stimmenanzahl und Prozentanteil pro Option, in Echtzeit. Der
+  Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
+  Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
+  daher über 100% liegen, das ist beabsichtigt (siehe `app/[pollId]/poll-results.tsx`).
 * **Verwaltungs-Link:** Beim Erstellen bekommt man einen privaten Link
   (`/[pollId]/verwalten?token=...`), um die Abstimmung vorzeitig zu schließen oder
   unwiderruflich zu löschen - Besitz des Tokens ist die einzige Berechtigung dafür.
@@ -72,24 +80,27 @@ Payload (JSON): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools
   `app/impressum/page.tsx`, gleiches Platzhalter-Prinzip wie in rsvp-app). Vor
   echtem Live-Betrieb mit Externen sollte das ergänzt werden.
 
-## Geplante Erweiterung (teilweise umgesetzt)
+## Verknüpfung mit rsvp-app (umgesetzt)
 
-Dieses Tool ist so angelegt, dass es *optional* von anderen Tools (z.B. `rsvp-app`)
-eingebunden werden kann und dabei dessen Nutzer-Verifizierung übernimmt. Wichtig
-dabei bleibt: Diese Anbindung ist ein **AddOn**, keine Voraussetzung - das Tool
-funktioniert immer auch komplett eigenständig (ohne rsvp-app), und umgekehrt darf
-rsvp-app durch eine fehlende oder ungültige Verifizierung niemals blockiert werden.
+Dieses Tool ist so angelegt, dass es *optional* von `rsvp-app` (separates Projekt,
+eigenes Repo/Deployment) eingebunden werden kann und dabei dessen Nutzer-
+Verifizierung übernimmt. Diese Anbindung ist ein **AddOn**, keine Voraussetzung -
+beide Tools funktionieren immer auch komplett eigenständig voneinander, und eine
+fehlende oder ungültige Verifizierung blockiert rsvp-app nie.
 
-* ✅ **Token-ANNAHME (diese Seite):** umgesetzt, siehe "Verifizierte Abstimmungen"
-  oben. Per Playwright getestet: gültiger Token akzeptiert, gefälschter/abgelaufener/
-  für eine andere Abstimmung ausgestellter Token abgelehnt, dieselbe E-Mail über
-  zwei verschiedene Browser-Sessions zählt korrekt nur als eine Stimme.
-* ⬜ **Token-AUSSTELLUNG (rsvp-app-Seite):** noch nicht umgesetzt. rsvp-app müsste
-  beim Klick auf einen Abstimmungs-Link für eine eingeloggte, verifizierte
-  `GuestUser` einen Token nach obigem Format signieren (mit demselben
-  `RSVP_VERIFICATION_SECRET`) und als `?verify=...` anhängen.
-* ⬜ **Einbettung/Link von rsvp-app aus:** noch kein Feld an `Event`/`EventSeries`
-  für einen Abstimmungs-Link, keine grafische Einbettung (iframe).
+* **Token-ANNAHME (diese Seite):** siehe "Verifizierte Abstimmungen" oben -
+  `verifyRsvpToken()` in `app/lib/rsvp-verification.ts`.
+* **Token-AUSSTELLUNG (rsvp-app-Seite):** `Event.pollUrl`/`pollLabel` verlinken von
+  der Event-Seite auf `/api/poll-link/[eventId]` in rsvp-app, das für einen
+  eingeloggten, verifizierten `GuestUser` frisch bei jedem Klick einen Token
+  signiert (`app/lib/poll-verification.ts` dort) und als `?verify=...` anhängt.
+* Per Playwright über **beide echt laufenden Anwendungen gleichzeitig** verifiziert:
+  ein anonymer rsvp-app-Besucher landet ohne Token und kann auf einer entsprechend
+  markierten Abstimmung nicht abstimmen; ein eingeloggter, verifizierter rsvp-app-
+  Nutzer landet mit Token, kann abstimmen, und ein erneuter Aufruf über rsvp-app
+  ändert seine Auswahl statt eine zweite Identität anzulegen.
+* Beide Seiten brauchen dasselbe gemeinsame Secret (hier `RSVP_VERIFICATION_SECRET`,
+  in rsvp-app `POLL_VERIFICATION_SECRET`) - siehe "Token-Format" oben für den Vertrag.
 
 ## Setup
 

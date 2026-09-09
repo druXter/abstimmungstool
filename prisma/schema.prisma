@@ -26,12 +26,20 @@ datasource db {
 // app/[pollId]/page.tsx) - kein unverifizierter Fallback, sonst wäre die Garantie
 // wertlos. Rein additiv und pro Abstimmung einzeln gewählt, ändert nichts am
 // Standardverhalten aller anderen (nicht so markierten) Abstimmungen.
+//
+// allowMultipleChoices: erlaubt pro Stimmabgabe mehrere Optionen gleichzeitig
+// (Checkboxen statt Radiobuttons, siehe app/[pollId]/page.tsx) - unabhängig von
+// requireRsvpVerification wählbar, betrifft nur wie viele Optionen EINE Stimmabgabe
+// umfassen darf, nicht die Identität dahinter. Technisch ändert das nichts an
+// castVote's "Stimmen dieser Identität für diesen Poll ersetzen"-Logik (siehe dort) -
+// bei false wird dabei serverseitig auf höchstens eine Option gekappt.
 model Poll {
   id                      String       @id @default(cuid())
   title                   String
   description             String?
   creatorToken            String       @unique @default(uuid())
   requireRsvpVerification Boolean      @default(false)
+  allowMultipleChoices    Boolean      @default(false)
   closesAt                DateTime?
   closedAt                DateTime?
   createdAt               DateTime     @default(now())
@@ -48,17 +56,20 @@ model PollOption {
   votes    Vote[]
 }
 
-// Eine Stimme hängt entweder an einem zufälligen, im Browser gespeicherten
-// voterToken-Cookie (siehe app/lib/voter.ts) ODER, bei Poll.requireRsvpVerification,
-// an einer über rsvp-app verifizierten E-Mail (siehe app/lib/rsvp-verification.ts) -
-// pro Poll gilt immer nur genau eine der beiden Spalten, nie beide gleichzeitig
-// (welche, entscheidet Poll.requireRsvpVerification zum Zeitpunkt der Stimmabgabe,
-// siehe castVote in app/actions.ts). Beide @@unique-Constraints greifen unabhängig
-// voneinander - NULL-Werte kollidieren in SQLite nicht untereinander, daher stört
-// die jeweils ungenutzte Spalte (durchgehend NULL) die Eindeutigkeit der anderen nie.
-// Pro Identität darf ein Poll nur eine einzige Stimme haben (@@unique) - wird aber
-// überschrieben (nicht dupliziert), solange die Abstimmung noch offen ist, damit man
-// seine Wahl ändern kann.
+// Eine Stimme ist EIN (Identität, Option)-Paar - bei einer Mehrfachauswahl-Abstimmung
+// (Poll.allowMultipleChoices) entstehen für eine Stimmabgabe entsprechend mehrere
+// Vote-Zeilen, eine pro gewählter Option, alle mit derselben Identität. Die Identität
+// hängt entweder an einem zufälligen, im Browser gespeicherten voterToken-Cookie
+// (siehe app/lib/voter.ts) ODER, bei Poll.requireRsvpVerification, an einer über
+// rsvp-app verifizierten E-Mail (siehe app/lib/rsvp-verification.ts) - pro Poll gilt
+// immer nur genau eine der beiden Spalten, nie beide gleichzeitig. Beide
+// @@unique-Constraints greifen unabhängig voneinander - NULL-Werte kollidieren in
+// SQLite nicht untereinander, daher stört die jeweils ungenutzte Spalte (durchgehend
+// NULL) die Eindeutigkeit der anderen nie.
+// castVote (app/actions.ts) behandelt eine Stimmabgabe immer als "ersetze die
+// komplette Auswahl dieser Identität für diesen Poll" - überschreibt/löscht also
+// nicht mehr aktuelle Zeilen und legt die neu gewählten an, statt sie zu duplizieren,
+// damit man seine Wahl jederzeit ändern kann, solange die Abstimmung offen ist.
 // Bekannte, bewusst in Kauf genommene Grenze der Cookie-Variante: Wer Cookies löscht
 // oder ein anderes Gerät nutzt, kann erneut abstimmen - für den vorgesehenen Rahmen
 // (kleine, vertraute Gruppe) ein akzeptierter Kompromiss, kein Sicherheitsversprechen
@@ -74,6 +85,6 @@ model Vote {
   verifiedEmail String?
   createdAt     DateTime   @default(now())
 
-  @@unique([pollId, voterToken])
-  @@unique([pollId, verifiedEmail])
+  @@unique([pollId, voterToken, optionId])
+  @@unique([pollId, verifiedEmail, optionId])
 }

@@ -8,7 +8,7 @@ import { isCreateAllowed, unlockCreatePin } from './lib/create-pin'
 import { getOrCreateVoterToken } from './lib/voter'
 import { verifyRsvpToken } from './lib/rsvp-verification'
 
-const MAX_OPTIONS = 20
+const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
 
 /**
@@ -38,6 +38,7 @@ export async function createPoll(formData: FormData) {
   const closesAtInput = formData.get('closesAt') as string
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
+  const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
 
   const rawOptions = formData.getAll('option') as string[]
   const options = rawOptions
@@ -57,6 +58,7 @@ export async function createPoll(formData: FormData) {
       description,
       closesAt,
       requireRsvpVerification,
+      allowMultipleChoices,
       options: {
         create: uniqueOptions.map((label, position) => ({ label, position }))
       }
@@ -67,15 +69,47 @@ export async function createPoll(formData: FormData) {
 }
 
 /**
- * Gibt (oder ändert) die eigene Stimme ab. Zwei Identitäts-Modi, je nach
+ * Ersetzt die komplette Stimmen-Auswahl EINER Identität (voterToken ODER
+ * verifiedEmail - immer genau eine der beiden, nie beide, siehe schema.prisma) für
+ * einen Poll durch die übergebene Options-Liste: entfernt nicht mehr gewählte
+ * Optionen, legt neu gewählte an, lässt unveränderte unangetastet (kein Duplikat).
+ * Funktioniert identisch für Einzel- und Mehrfachauswahl-Abstimmungen - der einzige
+ * Unterschied ist, wie viele Einträge `optionIds` hat.
+ */
+async function replaceVotes(pollId: string, voterToken: string | null, verifiedEmail: string | null, optionIds: string[]) {
+  const identityWhere = voterToken ? { voterToken } : { verifiedEmail: verifiedEmail! }
+
+  await prisma.vote.deleteMany({
+    where: { pollId, ...identityWhere, optionId: { notIn: optionIds } }
+  })
+
+  for (const optionId of optionIds) {
+    if (voterToken) {
+      await prisma.vote.upsert({
+        where: { pollId_voterToken_optionId: { pollId, voterToken, optionId } },
+        update: {},
+        create: { pollId, optionId, voterToken }
+      })
+    } else {
+      await prisma.vote.upsert({
+        where: { pollId_verifiedEmail_optionId: { pollId, verifiedEmail: verifiedEmail!, optionId } },
+        update: {},
+        create: { pollId, optionId, verifiedEmail: verifiedEmail! }
+      })
+    }
+  }
+}
+
+/**
+ * Gibt (oder ändert) die eigene Stimme ab - bei Poll.allowMultipleChoices können
+ * mehrere Optionen gleichzeitig gewählt werden (das Formular schickt dann mehrere
+ * `optionId`-Werte, siehe `formData.getAll`). Zwei Identitäts-Modi, je nach
  * Poll.requireRsvpVerification (siehe schema.prisma für die Begründung):
  * - Standard: anonymes voterToken-Cookie (siehe app/lib/voter.ts), kein Konto nötig.
  * - Bei requireRsvpVerification: verifizierte E-Mail aus einem von rsvp-app
  *   signierten Token (siehe app/lib/rsvp-verification.ts) - fehlt ein gültiger
  *   Token, wird die Stimme abgelehnt (fail-closed), es gibt bewusst KEINEN
  *   anonymen Fallback, sonst wäre die "eine Stimme pro Person"-Garantie wertlos.
- * Ein Upsert statt Insert erlaubt in beiden Modi das Ändern der eigenen Wahl,
- * solange die Abstimmung offen ist.
  * Bewusst als reines Formular ohne Client-JS gebaut (kein onSubmit-Handler) - daher
  * `void` statt eines Rückgabewerts mit Fehlermeldung; ungültige/verspätete Anfragen
  * werden wie an anderen Stellen dieses Projekts stillschweigend ignoriert statt
@@ -83,36 +117,36 @@ export async function createPoll(formData: FormData) {
  */
 export async function castVote(formData: FormData): Promise<void> {
   const pollId = formData.get('pollId') as string
-  const optionId = formData.get('optionId') as string
-  if (!pollId || !optionId) return
+  const rawOptionIds = formData.getAll('optionId') as string[]
+  if (!pollId || rawOptionIds.length === 0) return
 
-  const poll = await prisma.poll.findUnique({ where: { id: pollId } })
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: true } })
   if (!poll) return
 
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
   if (isClosed) return
 
-  const option = await prisma.pollOption.findUnique({ where: { id: optionId } })
-  if (!option || option.pollId !== pollId) return
+  // Nur Optionen akzeptieren, die tatsächlich zu diesem Poll gehören - schützt gegen
+  // manipulierte optionId-Werte aus einem fremden Poll.
+  const validOptionIds = new Set(poll.options.map(o => o.id))
+  let selectedOptionIds = [...new Set(rawOptionIds)].filter(id => validOptionIds.has(id))
+  if (selectedOptionIds.length === 0) return
+
+  // Bei einer Einzelauswahl-Abstimmung serverseitig auf höchstens eine Option kappen,
+  // selbst wenn ein manipulierter Client mehrere optionId-Werte schickt.
+  if (!poll.allowMultipleChoices) {
+    selectedOptionIds = [selectedOptionIds[0]]
+  }
 
   if (poll.requireRsvpVerification) {
     const verifyToken = formData.get('verifyToken') as string
     const identity = verifyRsvpToken(verifyToken, pollId)
     if (!identity) return // Kein gültiger Token -> keine Stimme, kein anonymer Fallback.
 
-    await prisma.vote.upsert({
-      where: { pollId_verifiedEmail: { pollId, verifiedEmail: identity.email } },
-      update: { optionId },
-      create: { pollId, optionId, verifiedEmail: identity.email }
-    })
+    await replaceVotes(pollId, null, identity.email, selectedOptionIds)
   } else {
     const voterToken = await getOrCreateVoterToken()
-
-    await prisma.vote.upsert({
-      where: { pollId_voterToken: { pollId, voterToken } },
-      update: { optionId },
-      create: { pollId, optionId, voterToken }
-    })
+    await replaceVotes(pollId, voterToken, null, selectedOptionIds)
   }
 
   revalidatePath(`/${pollId}`)

@@ -29,12 +29,15 @@ export default async function VerwaltenPage({
       options: {
         orderBy: { position: 'asc' },
         include: { _count: { select: { votes: true } } }
-      }
+      },
+      votes: { select: { voterToken: true, verifiedEmail: true } }
     }
   })
   if (!poll || poll.creatorToken !== token) notFound()
 
-  const totalVotes = poll.options.reduce((sum, o) => sum + o._count.votes, 0)
+  // Siehe app/[pollId]/page.tsx für die Begründung, warum die Prozent-Basis in
+  // PollResults die Anzahl abstimmender Personen ist, nicht die Summe der Stimmen.
+  const distinctVoters = new Set(poll.votes.map(v => v.voterToken ?? v.verifiedEmail)).size
   const isClosed = !!poll.closedAt
   const publicLink = `${baseUrl()}/${poll.id}`
   const managementLink = `${baseUrl()}/${poll.id}/verwalten?token=${poll.creatorToken}`
@@ -76,9 +79,9 @@ export default async function VerwaltenPage({
 
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="font-bold text-gray-900 mb-4">
-            Ergebnis ({totalVotes} Stimme{totalVotes === 1 ? '' : 'n'})
+            Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
           </h2>
-          <PollResults options={poll.options} totalVotes={totalVotes} />
+          <PollResults options={poll.options} distinctVoters={distinctVoters} />
         </div>
 
         <p className="text-center text-xs text-gray-400">
