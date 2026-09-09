@@ -1,0 +1,59 @@
+// prisma/schema.prisma
+// Kein eigener migrations-Ordner - wie bei rsvp-app ausschließlich per
+// `npx prisma db push` synchronisiert (siehe README.md/Dockerfile).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// Eine Abstimmung mit beliebig vielen Optionen (siehe PollOption). Bewusst ohne
+// Nutzer-Konten: Anlegen ist nur mit der gemeinsamen CREATE_PIN möglich (siehe
+// app/lib/create-pin.ts), Stimmabgabe ist komplett anonym (siehe Vote.voterToken).
+// creatorToken ist der private Verwaltungslink (Abstimmung schließen/löschen) -
+// gleiches Prinzip wie Participant.editToken in rsvp-app: Besitz des Tokens ist die
+// einzige Berechtigung, es gibt keinen Login dafür.
+model Poll {
+  id           String       @id @default(cuid())
+  title        String
+  description  String?
+  creatorToken String       @unique @default(uuid())
+  closesAt     DateTime?
+  closedAt     DateTime?
+  createdAt    DateTime     @default(now())
+  options      PollOption[]
+  votes        Vote[]
+}
+
+model PollOption {
+  id       String @id @default(cuid())
+  pollId   String
+  poll     Poll   @relation(fields: [pollId], references: [id])
+  label    String
+  position Int
+  votes    Vote[]
+}
+
+// Eine Stimme hängt an einem zufälligen, im Browser gespeicherten voterToken-Cookie
+// (siehe app/lib/voter.ts) statt an einem Konto. Pro Poll darf ein voterToken nur
+// eine einzige Stimme haben (@@unique) - wird aber überschrieben (nicht dupliziert),
+// solange die Abstimmung noch offen ist, damit man seine Wahl ändern kann.
+// Bekannte, bewusst in Kauf genommene Grenze: Wer Cookies löscht oder ein anderes
+// Gerät nutzt, kann erneut abstimmen - für den vorgesehenen Rahmen (kleine,
+// vertraute Gruppe) ist das ein akzeptabler Kompromiss, kein Sicherheitsversprechen
+// für öffentliche Abstimmungen mit Fremden.
+model Vote {
+  id         String     @id @default(cuid())
+  pollId     String
+  poll       Poll       @relation(fields: [pollId], references: [id])
+  optionId   String
+  option     PollOption @relation(fields: [optionId], references: [id])
+  voterToken String
+  createdAt  DateTime   @default(now())
+
+  @@unique([pollId, voterToken])
+}

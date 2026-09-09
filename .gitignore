@@ -1,0 +1,55 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# Datenbank und sensible Daten
+data/
+*.db
+*.db-journal
+
+# KI-Assistenten & Editor-Workspaces
+.claude/
+.agents/
+# AGENTS.md/CLAUDE.md werden von `next dev` selbst automatisch erzeugt/aktualisiert
+# (Next.js 16.3+, siehe node_modules/next/dist/server/lib/generate-agent-files.js) und
+# sollen laut deren eigenem Hinweis mitversioniert werden, sonst entsteht bei jedem
+# Dev-Start ein untracked Diff. Anders als in rsvp-app also NICHT ignorieren.
+
+# Erlaube explizit die .env.example (wird sonst von ".env*" oben blockiert!)
+!.env.example

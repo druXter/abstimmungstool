@@ -1,0 +1,18 @@
+services:
+  abstimmungstool:
+    build: .
+    container_name: abstimmungstool
+    restart: unless-stopped
+    ports:
+      # Port 3006 gewählt, da 3000-3005 auf diesem Server bereits belegt sind
+      # (siehe andere Docker-Compose-Services) - bei Bedarf anpassen.
+      - "3006:3000"
+    volumes:
+      # Speichert die SQLite-Datenbank sicher außerhalb des Containers, damit
+      # Abstimmungen bei Updates nicht verloren gehen.
+      - ./data:/app/data
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=file:/app/data/prod.db
+      - TZ=Europe/Berlin
