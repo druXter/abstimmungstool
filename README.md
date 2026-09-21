@@ -145,9 +145,9 @@ Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
   lahmlegen. Fehlermeldung und Antwortzeit sind für bekannte und unbekannte Adressen
   gleich. Passwort-Reset-Anfragen sind ebenfalls gedrosselt (Mail-Flut) und antworten
   immer neutral. Gespeichert werden nur SHA-256-Hashes von IP/E-Mail.
-* **`TRUST_PROXY_HOPS`** muss zur Umgebung passen (siehe `.env.example`): Nur so ist die
-  IP für die Drosselung nicht durch einen selbst mitgeschickten `X-Forwarded-For`-Wert
-  fälschbar.
+* **`TRUST_PROXY_HOPS`** muss zur Umgebung passen (siehe `.env.example`, dort auch, wie man
+  es misst): Nur so ist die IP für die Drosselung nicht durch einen selbst mitgeschickten
+  `X-Forwarded-For`-Wert fälschbar. Beim Betreiber (Cloudflare → Nginx Proxy Manager) gemessen: `1`.
 * **Sessions:** zufälliger Token im Cookie `__Host-session` (HttpOnly, Secure, SameSite=Lax,
   ohne Domain-Attribut - keine andere Subdomain kann es überschreiben), in der Datenbank
   nur als SHA-256-Hash. Neue Session bei jedem Login (Session-Fixation), Passwortwechsel
