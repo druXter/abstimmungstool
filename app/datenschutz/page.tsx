@@ -157,6 +157,12 @@ export default function DatenschutzPage() {
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
             <li><code>invite_link</code> - nur kurz (2 Minuten), wenn ein Konto einen Einladungslink zum Weitergeben angezeigt bekommt</li>
           </ul>
+          <p className="mt-2">
+            <strong>Installation als App:</strong> Die Anwendung lässt sich auf dem Gerät als App installieren. Dafür
+            registriert dein Browser einen Service Worker. Er speichert ausschließlich eine statische Seite
+            (&quot;Du bist offline&quot;) zwischen - keine deiner Abstimmungen, keine Konto- oder Verwaltungsseiten und
+            keine personenbezogenen Daten.
+          </p>
         </div>
 
         <div>

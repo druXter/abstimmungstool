@@ -27,6 +27,18 @@ const nextConfig: NextConfig = {
         ],
       },
       {
+        // Der Service Worker darf NIE aus einem Cache kommen (Browser, Cloudflare, Proxy), sonst blieben
+        // Nutzer auf einer alten Version hängen und Korrekturen kämen nicht an. Eigene CSP: Er lädt
+        // ausschließlich Skripte und Ressourcen derselben Herkunft. Steht NACH der allgemeinen Regel und
+        // überschreibt deren CSP (dort nur frame-ancestors) - deshalb wird frame-ancestors hier wiederholt.
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'; frame-ancestors 'none'" },
+        ],
+      },
+      {
         // Die Föderations-Endpunkte tragen Einmal-Werte (Login-Bestätigung, state) in der
         // URL. Diese Regel steht NACH der allgemeinen und überschreibt deren Referrer-Policy:
         // ohne sie würde "strict-origin-when-cross-origin" das route-eigene "no-referrer" aushebeln.

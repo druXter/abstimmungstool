@@ -1,0 +1,11 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <title>Abstimmungstool</title>
+  <circle cx="256" cy="256" r="240" fill="#3B82F6"/>
+  <!-- Balken eines Umfrage-Ergebnisses -->
+  <rect x="128" y="150" width="236" height="46" rx="23" fill="#fff"/>
+  <rect x="128" y="226" width="176" height="46" rx="23" fill="#fff" fill-opacity=".85"/>
+  <rect x="128" y="302" width="112" height="46" rx="23" fill="#fff" fill-opacity=".7"/>
+  <!-- Häkchen-Plakette -->
+  <circle cx="366" cy="356" r="72" fill="#fff" stroke="#3B82F6" stroke-width="16"/>
+  <path d="M334 358l24 24 44-52" stroke="#2563EB" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

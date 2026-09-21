@@ -244,6 +244,23 @@ aufgerufen werden - gleiches Muster wie rsvp-apps `/api/cron/reminders`:
 
 `GET https://vote.deine-domain.de/api/cron/close-expired-polls?secret=DeinSehrGeheimesPasswort123`
 
+## Als App installieren (PWA)
+
+Das Tool ist eine Progressive Web App: Im Browser (Chrome/Edge/Android: "Installieren" bzw. Button "Als App installieren"
+auf der Startseite; iPhone/iPad: Safari → Teilen → "Zum Home-Bildschirm") lässt es sich mit eigenem Symbol und ohne
+Browserleiste starten. Das Abstimmen selbst braucht das nicht - jeder Abstimmungslink funktioniert weiter im Browser.
+
+* **Manifest** (`app/manifest.ts`): Name, Farben, Icons (auch maskierbar für Android), Shortcuts zu "Meine Abstimmungen" und
+  "Neue Abstimmung". Icons: `app/icon.svg`, `app/favicon.ico`, `app/apple-icon.png`, `public/icons/`.
+* **Service Worker** (`public/sw.js`) ist bewusst minimal: Er macht die App installierbar und zeigt ohne Verbindung eine
+  Offline-Seite (`public/offline.html`). **Es wird nichts Persönliches zwischengespeichert** - Navigationen gehen immer ans
+  Netz, Server Actions, `/api/*` und fremde Herkunft fasst er nicht an; im Cache liegt nur die statische Offline-Seite. So
+  bleibt nach dem Abmelden auf einem geteilten Gerät nichts lesbar zurück. Ändert sich `offline.html`, `VERSION` in `sw.js`
+  erhöhen.
+* `sw.js` wird nie zwischengespeichert (Header in `next.config.ts`), damit Änderungen sofort ankommen - das gilt auch für
+  Cloudflare/Proxys davor. Registriert wird der Worker nur in der Produktion (`app/ui/pwa-register.tsx`).
+* Es gibt bewusst **keine Push-Benachrichtigungen** und kein Offline-Abstimmen.
+
 ## Automatische Löschung (Löschfristen)
 
 Gleiche Fristen wie in rsvp-app (Speicherbegrenzung, Art. 5 Abs. 1 lit. e DSGVO; siehe auch

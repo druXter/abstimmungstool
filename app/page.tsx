@@ -1,5 +1,6 @@
 // app/page.tsx
 import Link from 'next/link'
+import InstallHint from './ui/install-hint'
 
 export default function Home() {
   return (
@@ -24,6 +25,7 @@ export default function Home() {
         <p className="text-sm text-gray-400">
           Zu einer Abstimmung eingeladen? Nutze einfach den Link, den du bekommen hast.
         </p>
+        <InstallHint />
       </div>
     </main>
   )
