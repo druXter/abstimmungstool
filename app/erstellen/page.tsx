@@ -1,47 +1,36 @@
 // app/erstellen/page.tsx
 import Link from 'next/link'
-import { isCreateAllowed } from '../lib/create-pin'
-import { createPoll, verifyCreatePin } from '../actions'
+import { requireUser } from '../lib/auth'
+import { canCreatePolls } from '../lib/permissions'
+import { createPoll } from '../actions'
 import SubmitButton from '../ui/submit-button'
+import Notice from '../ui/notice'
 import OptionsFieldList from './options-field-list'
 
 export const dynamic = 'force-dynamic'
 
-export default async function ErstellenPage({
-  searchParams
-}: {
-  searchParams: Promise<{ error?: string }>
-}) {
-  const { error } = await searchParams
-  const allowed = await isCreateAllowed()
+export default async function ErstellenPage() {
+  // Anlegen erfordert ein Konto: nicht eingeloggt -> Anmeldung, danach zurück hierher.
+  // Die eigentliche Berechtigung prüft createPoll erneut auf dem Server.
+  const user = await requireUser('/erstellen')
 
-  if (!allowed) {
+  if (!canCreatePolls(user)) {
     return (
-      <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+      <main className="bg-gray-50 flex items-center justify-center px-4 py-12">
         <div className="max-w-sm w-full bg-white p-8 rounded-lg shadow space-y-4 text-gray-900">
-          <h1 className="text-xl font-bold">Zugangscode</h1>
-          <p className="text-sm text-gray-600">
-            Zum Anlegen einer neuen Abstimmung brauchst du den gemeinsamen Zugangscode.
-          </p>
-          {error && <p className="text-sm text-red-600">Falscher Code, bitte erneut versuchen.</p>}
-          <form action={verifyCreatePin} className="space-y-3">
-            <input
-              type="password"
-              name="pin"
-              required
-              autoFocus
-              className="w-full border border-gray-300 p-2 rounded"
-              placeholder="Zugangscode"
-            />
-            <SubmitButton>Weiter</SubmitButton>
-          </form>
+          <h1 className="text-xl font-bold">Anlegen nicht möglich</h1>
+          <Notice tone="warning">
+            Dein Konto hat die Rolle &quot;Moderator&quot; und kann keine eigenen Abstimmungen anlegen - nur
+            Abstimmungen moderieren, die dir freigegeben wurden.
+          </Notice>
+          <Link href="/meine-abstimmungen" className="text-sm text-blue-700 hover:underline">Zu meinen Abstimmungen</Link>
         </div>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
+    <main className="bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow space-y-6 text-gray-900">
         <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-2xl font-bold">Neue Abstimmung</h1>
@@ -82,21 +71,6 @@ export default async function ErstellenPage({
           <div>
             <label className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
             <input type="datetime-local" name="closesAt" className="w-full border border-gray-300 p-2 rounded" />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">Deine E-Mail-Adresse (optional)</label>
-            <input
-              type="email"
-              name="creatorEmail"
-              maxLength={200}
-              className="w-full border border-gray-300 p-2 rounded"
-              placeholder="damit du den Verwaltungs-Link nicht selbst abspeichern musst"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Falls angegeben, schicken wir dir den Verwaltungs-Link direkt per Mail - nur als Backup,
-              falls du den auf der nächsten Seite angezeigten Link nicht selbst sicherst.
-            </p>
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer">

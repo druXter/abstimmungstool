@@ -1,7 +1,9 @@
 // app/[pollId]/verwalten/bearbeiten/page.tsx
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '../../../lib/prisma'
+import { getCurrentUser } from '../../../lib/auth'
+import { getPollLevel } from '../../../lib/permissions'
 import { updatePoll } from '../../../actions'
 import SubmitButton from '../../../ui/submit-button'
 import OptionsFieldList from '../../../erstellen/options-field-list'
@@ -20,9 +22,6 @@ export default async function BearbeitenPage({
   const { pollId } = await params
   const { token } = await searchParams
 
-  // Besitz des creatorToken ist die einzige Berechtigung für diese Seite - kein Login.
-  if (!token) notFound()
-
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
     include: {
@@ -32,7 +31,21 @@ export default async function BearbeitenPage({
       }
     }
   })
-  if (!poll || poll.creatorToken !== token) notFound()
+  if (!poll) notFound()
+
+  // Berechtigung: Konto (Owner/Admin/Freigabe) oder - nur bei Alt-Abstimmungen ohne
+  // Besitzer - der creatorToken. Siehe app/lib/permissions.ts. Moderator:innen dürfen
+  // bearbeiten, daher genügt jede Stufe.
+  const user = await getCurrentUser()
+  const level = await getPollLevel(poll, { user, token })
+  if (!level) {
+    if (!user && poll.ownerId) redirect(`/anmelden?next=${encodeURIComponent(`/${pollId}/verwalten/bearbeiten`)}`)
+    notFound()
+  }
+
+  // Nur Alt-Abstimmungen tragen den Token weiter (bei Abstimmungen mit Konto käme er nie aus der URL).
+  const legacyToken = !poll.ownerId && token ? token : ''
+  const backHref = `/${poll.id}/verwalten${legacyToken ? `?token=${encodeURIComponent(legacyToken)}` : ''}`
 
   const d = poll.closesAt ? new Date(poll.closesAt) : null
   const pad = (n: number) => n.toString().padStart(2, '0')
@@ -41,18 +54,18 @@ export default async function BearbeitenPage({
     : ''
 
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
+    <main className="bg-gray-50 py-8 px-4">
       <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow space-y-6 text-gray-900">
         <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-2xl font-bold">Abstimmung bearbeiten</h1>
-          <Link href={`/${poll.id}/verwalten?token=${token}`} className="text-gray-500 hover:text-gray-800 transition">
+          <Link href={backHref} className="text-gray-500 hover:text-gray-800 transition">
             Abbrechen
           </Link>
         </div>
 
         <form action={updatePoll} className="space-y-4">
           <input type="hidden" name="pollId" value={poll.id} />
-          <input type="hidden" name="creatorToken" value={token} />
+          {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
 
           <div>
             <label className="block text-sm font-medium mb-1">Frage / Titel</label>

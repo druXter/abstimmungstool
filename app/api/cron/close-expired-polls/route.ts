@@ -1,6 +1,7 @@
 // app/api/cron/close-expired-polls/route.ts
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
+import { safeEqual } from '../../../lib/permissions'
 import { notifyRsvpAppOfResult } from '../../../lib/rsvp-notify'
 
 /**
@@ -13,8 +14,11 @@ import { notifyRsvpAppOfResult } from '../../../lib/rsvp-notify'
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const secret = searchParams.get('secret')
+  const expected = process.env.CRON_SECRET
 
-  if (secret !== process.env.CRON_SECRET) {
+  // Ein leeres/fehlendes CRON_SECRET (z.B. der leere Platzhalter aus .env.example) darf den
+  // Endpunkt NICHT freischalten - sonst würde "?secret=" (ebenfalls leer) den Vergleich bestehen.
+  if (!expected || !secret || !safeEqual(secret, expected)) {
     return new NextResponse('Unauthorized', { status: 401 })
   }
 

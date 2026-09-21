@@ -3,14 +3,15 @@ import Link from 'next/link'
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
+    <main className="min-h-[70vh] bg-gray-50 flex items-center justify-center px-4">
       <div className="max-w-xl text-center space-y-6">
         <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
           Abstimmungstool
         </h1>
         <p className="text-lg text-gray-600">
           Einfache, anonyme Abstimmungen für die Gruppe - z.B. um gemeinsam ein Restaurant
-          für den nächsten Termin auszuwählen. Kein Konto nötig, weder zum Anlegen noch zum Abstimmen.
+          für den nächsten Termin auszuwählen. Zum Abstimmen brauchst du kein Konto, nur zum
+          Anlegen und Verwalten eigener Abstimmungen.
         </p>
         <div className="pt-4">
           <Link
@@ -21,7 +22,7 @@ export default function Home() {
           </Link>
         </div>
         <p className="text-sm text-gray-400">
-          Schon eine Abstimmung gestartet? Nutze den Link, den du beim Erstellen bekommen hast.
+          Zu einer Abstimmung eingeladen? Nutze einfach den Link, den du bekommen hast.
         </p>
       </div>
     </main>

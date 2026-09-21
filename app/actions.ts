@@ -3,38 +3,64 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
+import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
-import { isCreateAllowed, unlockCreatePin } from './lib/create-pin'
 import { getOrCreateVoterToken } from './lib/voter'
 import { verifyRsvpToken } from './lib/rsvp-verification'
 import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
-import { sendManagementLinkEmail } from './lib/mail'
-import { baseUrl } from './lib/base-url'
+import { getCurrentUser, requireUser } from './lib/auth'
+import { canCreatePolls, getPollLevel, isAtLeast, safeEqual, type PollLevel } from './lib/permissions'
+import { formString, normalizeEmail } from './lib/form'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
 
 /**
- * Prüft die gemeinsame Anlege-PIN und setzt bei Erfolg das Freischalt-Cookie
- * (siehe app/lib/create-pin.ts). Server-seitig entscheidend - die Client-Anzeige
- * des Formulars ist nur UX, kein Sicherheitsmechanismus.
+ * Adresse der Verwaltungsseite. Bei Alt-Abstimmungen ohne Besitzer-Konto hängt daran
+ * weiterhin der creatorToken (das ist dort die Berechtigung), bei Abstimmungen mit Konto
+ * bewusst nicht - die Berechtigung kommt dort aus der Sitzung, nie aus der URL.
  */
-export async function verifyCreatePin(formData: FormData) {
-  const pin = formData.get('pin') as string
-  const ok = await unlockCreatePin(pin)
-  if (!ok) {
-    redirect('/erstellen?error=1')
-  }
-  redirect('/erstellen')
+function manageUrl(pollId: string, token: string, flag?: string): string {
+  const params = new URLSearchParams()
+  if (token) params.set('token', token)
+  if (flag) params.set(flag, '1')
+  const query = params.toString()
+  return `/${pollId}/verwalten${query ? `?${query}` : ''}`
 }
 
 /**
- * Legt eine neue Abstimmung an. Prüft die Anlege-Berechtigung server-seitig erneut
- * (siehe isCreateAllowed) statt sich auf die Formular-Sichtbarkeit zu verlassen -
- * ein direkter POST ohne gültiges Cookie darf niemals etwas anlegen.
+ * Lädt eine Abstimmung und prüft serverseitig, ob die aktuelle Anfrage sie mindestens auf
+ * der geforderten Stufe verwalten darf (siehe app/lib/permissions.ts). Gibt null zurück,
+ * wenn nicht - die Aufrufer ignorieren die Anfrage dann stillschweigend, wie im ganzen
+ * Projekt. Jede verwaltende Server Action MUSS hierüber laufen: Eine Prüfung nur auf der
+ * Seite schützt nicht vor einem direkt abgeschickten Formular.
+ */
+async function loadManageablePoll(formData: FormData, required: PollLevel) {
+  const pollId = formString(formData, 'pollId', 50)
+  const token = formString(formData, 'creatorToken', 100)
+  if (!pollId) return null
+
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    include: { options: { include: { _count: { select: { votes: true } } } } }
+  })
+  if (!poll) return null
+
+  const level = await getPollLevel(poll, { user: await getCurrentUser(), token })
+  if (!isAtLeast(level, required)) return null
+
+  // Nur bei Alt-Abstimmungen wird der Token weitergereicht (siehe manageUrl).
+  return { poll, token: poll.ownerId ? '' : token }
+}
+
+/**
+ * Legt eine neue Abstimmung an - nur für eingeloggte Konten mit Creator- oder Admin-
+ * Rolle. Die Prüfung passiert hier auf dem Server; ein direkter POST ohne gültige
+ * Sitzung darf niemals etwas anlegen (die Seite /erstellen blendet das Formular nur aus).
  */
 export async function createPoll(formData: FormData) {
-  if (!(await isCreateAllowed())) return
+  const user = await requireUser('/erstellen')
+  if (!canCreatePolls(user)) return
 
   const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
@@ -43,7 +69,6 @@ export async function createPoll(formData: FormData) {
   const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
   const showVoterNames = formData.get('showVoterNames') === 'on'
   const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
-  const creatorEmail = (formData.get('creatorEmail') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
 
   const rawOptions = formData.getAll('option') as string[]
   const options = rawOptions
@@ -65,38 +90,30 @@ export async function createPoll(formData: FormData) {
       requireRsvpVerification,
       showVoterNames,
       allowMultipleChoices,
-      creatorEmail,
+      ownerId: user.id,
       options: {
         create: uniqueOptions.map((label, position) => ({ label, position }))
       }
     }
   })
 
-  const managementLink = `${baseUrl()}/${poll.id}/verwalten?token=${poll.creatorToken}`
-  if (creatorEmail) {
-    await sendManagementLinkEmail(creatorEmail, poll.title, managementLink, `${baseUrl()}/${poll.id}`).catch(() => {})
-  }
-
-  redirect(`/${poll.id}/verwalten?token=${poll.creatorToken}&created=1`)
+  redirect(manageUrl(poll.id, '', 'created'))
 }
 
 /**
- * Bearbeitet eine bestehende Abstimmung - nur mit dem privaten creatorToken möglich
- * (gleiches Prinzip wie überall sonst in diesem Projekt). Optionen mit bereits
+ * Bearbeitet eine bestehende Abstimmung - für Owner, Admin und per Freigabe hinzugefügte
+ * Moderator:innen (bei Alt-Abstimmungen weiterhin mit dem privaten creatorToken).
+ * Optionen mit bereits
  * abgegebenen Stimmen können umbenannt, aber NICHT gelöscht werden (ein entsprechender
  * Löschwunsch wird stillschweigend ignoriert) - das verhindert, versehentlich bereits
  * abgegebene Stimmen zu verwaisen/verlieren. Optionen ohne Stimmen dürfen frei entfernt
  * werden, neue können jederzeit ergänzt werden (bis MAX_OPTIONS insgesamt).
  */
 export async function updatePoll(formData: FormData) {
-  const pollId = formData.get('pollId') as string
-  const token = formData.get('creatorToken') as string
-
-  const poll = await prisma.poll.findUnique({
-    where: { id: pollId },
-    include: { options: { include: { _count: { select: { votes: true } } } } }
-  })
-  if (!poll || poll.creatorToken !== token) return
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const { poll, token } = ctx
+  const pollId = poll.id
 
   const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
   if (title === '') return
@@ -155,7 +172,7 @@ export async function updatePoll(formData: FormData) {
   })
 
   revalidatePath(`/${pollId}`)
-  redirect(`/${pollId}/verwalten?token=${token}&saved=1`)
+  redirect(manageUrl(pollId, token, 'saved'))
 }
 
 /**
@@ -244,38 +261,102 @@ export async function castVote(formData: FormData): Promise<void> {
 }
 
 /**
- * Schließt eine Abstimmung vorzeitig - nur mit dem privaten creatorToken möglich
- * (gleiches Prinzip wie Participant.editToken in rsvp-app: Besitz des Tokens ist
- * die einzige Berechtigung).
+ * Schließt eine Abstimmung vorzeitig - für Owner, Admin und Moderator:innen mit Freigabe
+ * (bei Alt-Abstimmungen mit dem creatorToken).
  */
 export async function closePoll(formData: FormData) {
-  const pollId = formData.get('pollId') as string
-  const token = formData.get('creatorToken') as string
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const { poll, token } = ctx
 
-  const poll = await prisma.poll.findUnique({ where: { id: pollId } })
-  if (!poll || poll.creatorToken !== token) return
-
-  await prisma.poll.update({ where: { id: pollId }, data: { closedAt: new Date() } })
-  await notifyRsvpAppOfResult(pollId).catch(() => {})
-  revalidatePath(`/${pollId}`)
-  redirect(`/${pollId}/verwalten?token=${token}`)
+  await prisma.poll.update({ where: { id: poll.id }, data: { closedAt: new Date() } })
+  await notifyRsvpAppOfResult(poll.id).catch(() => {})
+  revalidatePath(`/${poll.id}`)
+  redirect(manageUrl(poll.id, token))
 }
 
 /**
- * Löscht eine Abstimmung unwiderruflich inkl. aller Stimmen und Optionen - nur mit
- * dem privaten creatorToken. Manuelle Löschreihenfolge wegen Fremdschlüsseln
- * (Vote → PollOption → Poll), gleiche Konvention wie in rsvp-app.
+ * Löscht eine Abstimmung unwiderruflich inkl. aller Stimmen und Optionen - nur Owner und
+ * Admin (bei Alt-Abstimmungen mit dem creatorToken), NICHT Moderator:innen mit Freigabe.
+ * Manuelle Löschreihenfolge wegen Fremdschlüsseln (Vote → PollOption → Poll), gleiche
+ * Konvention wie in rsvp-app; Freigaben verschwinden per Cascade mit der Abstimmung.
  */
 export async function deletePoll(formData: FormData) {
-  const pollId = formData.get('pollId') as string
-  const token = formData.get('creatorToken') as string
-
-  const poll = await prisma.poll.findUnique({ where: { id: pollId } })
-  if (!poll || poll.creatorToken !== token) return
+  const ctx = await loadManageablePoll(formData, 'owner')
+  if (!ctx) return
+  const pollId = ctx.poll.id
 
   await prisma.vote.deleteMany({ where: { pollId } })
   await prisma.pollOption.deleteMany({ where: { pollId } })
   await prisma.poll.delete({ where: { id: pollId } })
 
-  redirect('/')
+  redirect('/meine-abstimmungen')
+}
+
+/**
+ * Gibt einer Abstimmung ein weiteres BESTEHENDES Konto (per E-Mail) zum gemeinsamen
+ * Moderieren frei. Nur Owner und Admin. Legt nie ein Konto an - wer noch keins hat, muss
+ * erst eingeladen werden oder sich einmal über ein verbundenes Tool anmelden. Die
+ * Fehlermeldung "nicht gefunden" verrät nur eingeloggten Owner:innen, ob eine Adresse
+ * ein Konto hat - das ist beabsichtigt, sonst wäre Teilen kaum bedienbar.
+ */
+export async function sharePoll(formData: FormData) {
+  const ctx = await loadManageablePoll(formData, 'owner')
+  // Alt-Abstimmungen ohne Besitzer-Konto lassen sich nicht teilen - erst mit einem Konto übernehmen.
+  if (!ctx || !ctx.poll.ownerId) return
+  const { poll } = ctx
+
+  const email = normalizeEmail(formString(formData, 'email', 254))
+  const target = email ? await prisma.user.findUnique({ where: { email }, select: { id: true } }) : null
+  if (!target) redirect(`${manageUrl(poll.id, '')}?shareError=notfound`)
+  if (target.id === poll.ownerId) redirect(`${manageUrl(poll.id, '')}?shareError=owner`)
+
+  await prisma.pollAccess.upsert({
+    where: { pollId_userId: { pollId: poll.id, userId: target.id } },
+    update: {},
+    create: { pollId: poll.id, userId: target.id }
+  })
+
+  revalidatePath(`/${poll.id}/verwalten`)
+  redirect(manageUrl(poll.id, '', 'shared'))
+}
+
+/** Nimmt eine Freigabe wieder zurück. Nur Owner und Admin der betroffenen Abstimmung. */
+export async function unsharePoll(formData: FormData) {
+  const access = await prisma.pollAccess.findUnique({
+    where: { id: formString(formData, 'accessId', 50) },
+    include: { poll: true }
+  })
+  if (!access) return
+
+  const level = await getPollLevel(access.poll, { user: await getCurrentUser() })
+  if (!isAtLeast(level, 'owner')) return
+
+  await prisma.pollAccess.delete({ where: { id: access.id } })
+  revalidatePath(`/${access.pollId}/verwalten`)
+}
+
+/**
+ * Ordnet eine Alt-Abstimmung (angelegt vor Einführung der Konten, nur per creatorToken
+ * verwaltbar) dem eingeloggten Konto zu. Der Token wird dabei ERNEUERT, damit jeder
+ * früher weitergegebene oder per Mail verschickte Verwaltungs-Link wertlos wird - ab
+ * jetzt gilt allein die Kontoberechtigung. Nur Konten, die Abstimmungen besitzen dürfen.
+ */
+export async function claimPoll(formData: FormData) {
+  const pollId = formString(formData, 'pollId', 50)
+  const token = formString(formData, 'creatorToken', 100)
+  const user = await requireUser(`/${pollId}/verwalten?token=${encodeURIComponent(token)}`)
+  if (!canCreatePolls(user)) return
+
+  const poll = await prisma.poll.findUnique({ where: { id: pollId } })
+  if (!poll || poll.ownerId || !safeEqual(token, poll.creatorToken)) return
+
+  // Bedingung im WHERE: zwei gleichzeitige Übernahmen dürfen nicht beide "gewinnen".
+  const claimed = await prisma.poll.updateMany({
+    where: { id: pollId, ownerId: null },
+    data: { ownerId: user.id, creatorToken: randomUUID(), creatorEmail: null }
+  })
+  if (claimed.count === 0) return
+
+  redirect(manageUrl(pollId, '', 'claimed'))
 }

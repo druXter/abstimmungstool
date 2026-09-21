@@ -11,12 +11,104 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Eine Abstimmung mit beliebig vielen Optionen (siehe PollOption). Bewusst ohne
-// Nutzer-Konten: Anlegen ist nur mit der gemeinsamen CREATE_PIN möglich (siehe
-// app/lib/create-pin.ts), Stimmabgabe ist standardmäßig komplett anonym (siehe
-// Vote.voterToken). creatorToken ist der private Verwaltungslink (Abstimmung
-// schließen/löschen) - gleiches Prinzip wie Participant.editToken in rsvp-app:
-// Besitz des Tokens ist die einzige Berechtigung, es gibt keinen Login dafür.
+// ADMIN sieht/verwaltet alle Abstimmungen und Konten. CREATOR legt eigene Abstimmungen
+// an, verwaltet sie und teilt sie mit anderen Konten. MODERATOR legt keine eigenen
+// Abstimmungen an, sondern bearbeitet/schließt ausschließlich per PollAccess geteilte.
+// Gleiche Rollen wie in rsvp-app, aber bewusst eigenständig vergeben - siehe README
+// "Konten" und suite-kit für die optionale Anmeldung mit Konten anderer Tools.
+enum Role {
+  ADMIN
+  CREATOR
+  MODERATOR
+}
+
+// Ein lokales Konto dieses Tools. Registrierung ist nicht öffentlich: Konten legt ein
+// eingeloggter Nutzer an (Einladungslink, siehe resetTokenHash) oder sie entstehen beim
+// ersten Login über ein verbundenes Tool (ExternalIdentity, nur wenn SUITE_IDPS das
+// erlaubt). passwordHash ist null bei rein föderierten Konten und bei noch nicht
+// angenommenen Einladungen - beides kann sich nur nicht per Passwort anmelden.
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String?
+  role         Role     @default(CREATOR)
+  createdAt    DateTime @default(now())
+
+  // Einladung UND Passwort-Reset teilen sich denselben Mechanismus: ein einmaliger,
+  // befristeter Link. Gespeichert wird nur der SHA-256-Hash des Tokens, damit ein
+  // Datenbank-Leak keine gültigen Links preisgibt (siehe app/lib/auth.ts hashToken).
+  resetTokenHash      String?   @unique
+  resetTokenExpiresAt DateTime?
+
+  sessions   Session[]
+  identities ExternalIdentity[]
+  ownedPolls Poll[]             @relation("PollOwner")
+  pollAccess PollAccess[]
+}
+
+// Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
+// liegt ausschließlich dessen SHA-256-Hash - ein Leak der Datenbank ergibt also keine
+// übernehmbaren Sitzungen.
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// Verknüpfung eines lokalen Kontos mit einem Konto in einem anderen Tool der Suite
+// (siehe suite-kit). Identität ist (issuer, subject) - NIE die E-Mail, die sich beim
+// Anbieter ändern lässt. issuer = Origin des Anbieter-Tools, subject = dessen Konto-ID.
+model ExternalIdentity {
+  id        String   @id @default(cuid())
+  issuer    String
+  subject   String
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([issuer, subject])
+  @@index([userId])
+}
+
+// Gemeinsames Moderieren: gibt einem Konto Zugriff auf eine fremde Abstimmung
+// (bearbeiten, schließen - NICHT löschen oder weiter teilen, das bleibt beim Owner/Admin).
+model PollAccess {
+  id        String   @id @default(cuid())
+  pollId    String
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([pollId, userId])
+  @@index([userId])
+}
+
+// Zähler gegen Passwort-Raten und Mail-Flut (siehe app/lib/throttle.ts). `key` ist ein
+// SHA-256-Hash aus Bereich + Kennung (E-Mail bzw. IP-Adresse) - es werden also weder
+// Adressen noch IPs im Klartext gespeichert. Zeilen werden nach Ablauf des Zeitfensters
+// bei Gelegenheit wieder gelöscht.
+model LoginThrottle {
+  key         String   @id
+  count       Int
+  windowStart DateTime
+}
+
+// Eine Abstimmung mit beliebig vielen Optionen (siehe PollOption). Angelegt wird sie
+// von einem eingeloggten Konto (ownerId), Stimmabgabe ist standardmäßig komplett
+// anonym (siehe Vote.voterToken) - dafür braucht niemand ein Konto.
+//
+// creatorToken/creatorEmail sind der ältere, kontolose Verwaltungslink: Er gilt NUR
+// noch für Abstimmungen ohne ownerId (vor Einführung der Konten angelegt) und wird
+// ignoriert, sobald ein Konto die Abstimmung besitzt (siehe app/lib/permissions.ts).
+// Ein Konto kann eine solche Alt-Abstimmung mit dem Token übernehmen (claimPoll), dabei
+// wird der Token erneuert, sodass alte Links wertlos werden.
 //
 // requireRsvpVerification: schaltet für GENAU DIESE Abstimmung von der anonymen
 // Cookie-Identität auf eine über rsvp-app verifizierte E-Mail um (siehe
@@ -37,12 +129,15 @@ model Poll {
   id                      String       @id @default(cuid())
   title                   String
   description             String?
+  // Besitzendes Konto. null nur bei Alt-Abstimmungen aus der Zeit ohne Konten (dort
+  // gilt weiter creatorToken). Wird beim Löschen eines Kontos vorher umgehängt (siehe
+  // deleteUser), die SetNull-Regel ist nur das Sicherheitsnetz.
+  ownerId                 String?
+  owner                   User?        @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  access                  PollAccess[]
   creatorToken            String       @unique @default(uuid())
-  // Optional beim Anlegen angegeben - falls gesetzt, wird der Verwaltungs-Link direkt
-  // per Mail zugeschickt (siehe sendManagementLinkEmail in app/lib/mail.ts), damit der
-  // Ersteller ihn nicht nur einmalig auf dem Bildschirm kopieren muss. Rein optional,
-  // ändert nichts an der eigentlichen Berechtigung (die bleibt bei creatorToken) - ein
-  // fehlendes SMTP_HOST lässt dieses Feld einfach ungenutzt, kein Pflichtfeld.
+  // Nur noch bei Alt-Abstimmungen befüllt (früher: Verwaltungs-Link per Mail). Neue
+  // Abstimmungen schreiben dieses Feld nicht mehr - die E-Mail des Kontos genügt.
   creatorEmail            String?
   requireRsvpVerification Boolean      @default(false)
   // Zeigt auf der Ergebnisseite zusätzlich, WER für welche Option gestimmt hat (E-Mail
@@ -64,6 +159,8 @@ model Poll {
   createdAt               DateTime     @default(now())
   options                 PollOption[]
   votes                   Vote[]
+
+  @@index([ownerId])
 }
 
 model PollOption {

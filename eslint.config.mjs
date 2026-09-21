@@ -10,6 +10,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Eigenständiges Node-Skript (CommonJS, läuft ohne Build) - kein App-Code.
+    "create-user.js",
   ]),
 ]);
 

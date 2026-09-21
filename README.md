@@ -2,14 +2,14 @@
 
 Ein schlankes, eigenständiges Tool für anonyme Gruppen-Abstimmungen mit beliebig
 vielen Optionen (z.B. "Wohin gehen wir am Mittwoch?" mit 25 Restaurant-Vorschlägen).
-Kein Nutzer-Konto nötig - weder zum Anlegen noch zum Abstimmen.
+**Zum Abstimmen braucht niemand ein Konto** - ein Konto braucht nur, wer Abstimmungen
+anlegt und verwaltet (siehe "Konten" unten).
 
 ## Funktionen
 
-* **Abstimmung anlegen:** Titel, optionale Beschreibung, 2-25 Optionen, optionales
-  automatisches Schließungsdatum. Das Anlegen kann per gemeinsamem Zugangscode
-  (`CREATE_PIN`) geschützt werden - das Abstimmen selbst bleibt für jeden mit einem
-  Link offen.
+* **Abstimmung anlegen (mit Konto):** Titel, optionale Beschreibung, 2-25 Optionen,
+  optionales automatisches Schließungsdatum. Das Abstimmen selbst bleibt für jeden mit
+  einem Link offen.
 * **Einzel- oder Mehrfachauswahl (pro Abstimmung einzeln gewählt):** Standardmäßig
   eine Option pro Stimme (Radiobuttons); mit `allowMultipleChoices` können mehrere
   Optionen gleichzeitig gewählt werden (Checkboxen) - z.B. "welche Restaurants
@@ -26,16 +26,11 @@ Kein Nutzer-Konto nötig - weder zum Anlegen noch zum Abstimmen.
   Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
   daher über 100% liegen, das ist beabsichtigt (siehe `app/[pollId]/poll-results.tsx`).
-* **Verwaltungs-Link:** Beim Erstellen bekommt man einen privaten Link
-  (`/[pollId]/verwalten?token=...`), um die Abstimmung nachträglich zu bearbeiten
-  (Titel/Beschreibung/Optionen/Einstellungen), vorzeitig zu schließen oder
-  unwiderruflich zu löschen - Besitz des Tokens ist die einzige Berechtigung dafür,
-  es gibt bewusst kein Konto-System dafür (siehe "Bearbeiten ohne Konto" unten).
-* **Verwaltungs-Link per Mail (optional):** Beim Anlegen kann eine E-Mail-Adresse
-  angegeben werden, an die der Verwaltungs-Link zusätzlich geschickt wird (siehe
-  `app/lib/mail.ts`) - reines Backup, falls man den auf dem Bildschirm angezeigten
-  Link nicht selbst sichert. Ohne konfiguriertes `SMTP_HOST` bleibt das Feld einfach
-  wirkungslos, kein Pflichtfeld.
+* **Verwalten mit Konto:** Unter "Meine Abstimmungen" (`/meine-abstimmungen`) stehen
+  eigene und mit einem geteilte Abstimmungen. Bearbeiten (Titel/Beschreibung/Optionen/
+  Einstellungen), vorzeitig Schließen, Löschen und Teilen - siehe "Konten".
+* **Gemeinsam moderieren:** Eine Abstimmung lässt sich mit anderen Konten teilen; diese
+  können sie bearbeiten und schließen.
 
 ## Verifizierte Abstimmungen (Mehrfachabstimmen bei Einbindung ausschließen)
 
@@ -89,24 +84,101 @@ Zwei Varianten teilen sich dieses Format (siehe `app/lib/rsvp-verification.ts`):
   lokalen Testen ohne rsvp-app: `signRsvpTokenForTesting()` in derselben Datei -
   bewusst nicht produktiv verlinkt, nur für Entwicklung/Tests.
 
-## Bearbeiten ohne Konto
+## Konten
 
-Eine Abstimmung lässt sich über `/[pollId]/verwalten/bearbeiten?token=...` (Link auf
-der Verwaltungsseite) nachträglich anpassen: Titel, Beschreibung, automatisches
-Schließungsdatum, beide Schalter (Mehrfachauswahl, RSVP-Verifizierung) sowie die
-Optionen selbst - bestehende Optionen können umbenannt werden, neue hinzugefügt
-werden (bis `MAX_OPTIONS`), und Optionen OHNE bereits abgegebene Stimmen gelöscht
-werden. Optionen MIT Stimmen können umbenannt, aber nicht gelöscht werden (die
-Löschung wird serverseitig stillschweigend ignoriert) - das verhindert, versehentlich
-bereits abgegebene Stimmen zu verwaisen.
+Jedes Tool der Suite (rsvp-app, dieses Tool, künftig weitere) hat **eigene, lokale
+Konten** und ist damit vollständig allein nutzbar. Optional lassen sich Tools verbinden,
+sodass man dasselbe Konto in mehreren nutzen kann - siehe "Konten-Verbund" unten.
 
-Bewusst **kein** Konto-System dafür, obwohl das naheliegend erscheinen könnte (siehe
-z.B. rsvp-app) - der `creatorToken` ist bereits exakt die Berechtigung, die ein
-Konto auch bräuchte, nur ohne Login/Passwort/Session-Infrastruktur. Ein echtes
-Konto-System würde genau die Komplexität zurückbringen, die dieses Tool bewusst
-vermeidet. Die einzige reale Schwäche des Ansatzes - man kann den Verwaltungs-Link
-verlieren - wird durch die optionale Mail-Zustellung beim Anlegen abgefedert (siehe
-oben), nicht durch ein Konto-System ersetzt.
+### Rollen
+
+| Rolle | Darf |
+| --- | --- |
+| **ADMIN** | alles: alle Abstimmungen (auch Alt-Abstimmungen ohne Konto) ansehen/verwalten, Konten anlegen/löschen, Rollen vergeben |
+| **CREATOR** | eigene Abstimmungen anlegen und verwalten, mit anderen teilen, Moderator-Konten einladen |
+| **MODERATOR** | legt nichts selbst an, bearbeitet und schließt nur ihm freigegebene Abstimmungen |
+
+Pro Abstimmung gibt es zwei Stufen (`app/lib/permissions.ts`, `getPollLevel` - die eine
+zentrale Prüfung für jede Seite und jede Server Action):
+
+* **owner** (Ersteller:in oder Admin): bearbeiten, schließen, **löschen, teilen**.
+* **moderator** (per Freigabe): bearbeiten und schließen, **nicht** löschen oder weiter teilen.
+
+Geteilt wird per E-Mail-Adresse mit einem **bestehenden** Konto (`PollAccess`); wer noch
+keins hat, wird zuerst unter `/nutzer` eingeladen oder meldet sich einmal über ein
+verbundenes Tool an.
+
+### Erstes Konto und weitere Konten
+
+Es gibt keine öffentliche Registrierung. Das allererste Konto entsteht auf dem Server:
+
+```bash
+node create-user.js deine-email@domain.de ADMIN                 # lokal
+docker compose run --rm abstimmungstool node create-user.js deine-email@domain.de ADMIN
+```
+
+Das Passwort wird verdeckt abgefragt (mind. 10 Zeichen). Weitere Konten lädt man unter
+`/nutzer` ein: Die Person bekommt einen Einmal-Link (7 Tage gültig) und legt ihr Passwort
+**selbst** fest - kein Admin vergibt je ein Passwort für jemand anderen. Ohne `SMTP_HOST`
+zeigt die Seite den Link dem Einladenden einmalig zum Weitergeben an. Nur Admins vergeben
+die Rollen CREATOR/ADMIN; alle anderen laden ausschließlich Moderatoren ein.
+Admin-Konten lassen sich in der Oberfläche bewusst weder ändern noch löschen (Schutz vor
+Aussperren) und haben keinen Passwort-Reset per Mail - das geht nur per `create-user.js`.
+
+### Alt-Abstimmungen (vor Einführung der Konten)
+
+Abstimmungen ohne Besitzer (`Poll.ownerId = null`) bleiben mit dem alten Verwaltungs-Link
+(`/[pollId]/verwalten?token=...`) erreichbar. Ein eingeloggtes Konto kann sie auf der
+Verwaltungsseite **übernehmen** ("Meinem Konto zuordnen"); dabei wird der Token erneuert,
+sodass jeder früher weitergegebene Link wertlos wird. Bei Abstimmungen **mit** Besitzer wird
+der `creatorToken` bewusst ignoriert - sonst würde ein weiter gültiger Geheim-Link jede
+Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
+
+### Sicherheit
+
+* **Passwörter:** scrypt (`node:crypto`, N=2^15, r=8, p=3) mit eingebetteten Parametern
+  (später erhöhbar, alte Hashes werden beim nächsten Login aktualisiert). Mind. 10 Zeichen,
+  keine Zeichenklassen-Regeln, Abgleich gegen naheliegende Fälle.
+* **Passwort-Raten:** Drosselung pro IP **und** pro Ziel-E-Mail (`app/lib/throttle.ts`).
+  10 Fehlversuche pro E-Mail bzw. 20 pro IP in 15 Minuten, danach Sperre bis zum Ende des
+  Zeitfensters - bewusst **keine** dauerhafte Kontosperre, sonst könnte jeder fremde Konten
+  lahmlegen. Fehlermeldung und Antwortzeit sind für bekannte und unbekannte Adressen
+  gleich. Passwort-Reset-Anfragen sind ebenfalls gedrosselt (Mail-Flut) und antworten
+  immer neutral. Gespeichert werden nur SHA-256-Hashes von IP/E-Mail.
+* **`TRUST_PROXY_HOPS`** muss zur Umgebung passen (siehe `.env.example`): Nur so ist die
+  IP für die Drosselung nicht durch einen selbst mitgeschickten `X-Forwarded-For`-Wert
+  fälschbar.
+* **Sessions:** zufälliger Token im Cookie `__Host-session` (HttpOnly, Secure, SameSite=Lax,
+  ohne Domain-Attribut - keine andere Subdomain kann es überschreiben), in der Datenbank
+  nur als SHA-256-Hash. Neue Session bei jedem Login (Session-Fixation), Passwortwechsel
+  beendet alle anderen Sitzungen. Einladungs-/Reset-Links: einmalig, befristet, nur als Hash.
+* **Berechtigungen** werden serverseitig in jeder Server Action geprüft, nie nur in der
+  Oberfläche. Server Actions prüfen zusätzlich den Origin (CSRF, Next.js-Standard).
+* **Header:** `X-Frame-Options`/`frame-ancestors 'none'` (kein Einbetten), `nosniff`,
+  `Referrer-Policy`, HSTS (siehe `next.config.ts`).
+
+### Konten-Verbund mit anderen Tools (optional)
+
+Über das gemeinsame Paket [`suite-kit`](https://github.com/druXter/suite-kit) (Protokoll,
+Sicherheitsregeln und Format dort im README) kann man sich in diesem Tool mit einem Konto
+eines anderen Tools anmelden - und umgekehrt. Es gibt **keinen zentralen Anbieter**: Jedes
+Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nimmt sie an).
+
+* **Konfiguration:** `SUITE_SIGNING_KEY` + `SUITE_TRUSTED_APPS` (Anbieter),
+  `SUITE_IDPS` (Empfänger), siehe `.env.example`. Ohne sie keine Föderation, kein Button.
+* **Kein Passwort-Austausch, kein gemeinsames Secret:** Bestätigungen sind mit Ed25519
+  signiert, der öffentliche Schlüssel steht unter `/.well-known/suite-identity`.
+* **Identität** ist (Anbieter, Konto-ID) - nie die E-Mail. Es gibt **kein automatisches
+  Zusammenführen** über die E-Mail: Gibt es hier schon ein lokales Konto mit derselben
+  Adresse, wird der Verbund-Login abgelehnt; man verknüpft bewusst unter `/konto` aus einer
+  bestehenden Sitzung heraus.
+* **Rollen** gibt der Empfänger, nie der Anbieter, und nur beim ersten Login: Admin des
+  anderen Tools wird nur bei `mapAdminRole` hier Admin (sonst Creator), Moderatoren bleiben
+  Moderatoren. Danach vergeben nur lokale Admins Rollen.
+* **Keine Ketten:** Ein Tool bestätigt nur Konten mit lokalem Passwort, nie rein
+  föderierte.
+* Der Login-Ablauf läuft über `/api/suite/login` → Anbieter → `/api/suite/authorize` →
+  `/api/suite/callback` (`app/api/suite/`).
 
 ## Bewusste Grenzen (kein Missverständnis)
 
@@ -114,11 +186,16 @@ oben), nicht durch ein Konto-System ersetzt.
   basierte `voter_token` verhindert nur, im selben Browser mehrmals abzustimmen.
   Für eine kleine, vertraute Gruppe ist das ein bewusst akzeptierter Kompromiss,
   kein Sicherheitsversprechen für öffentliche Abstimmungen mit Fremden.
-* **Kein Rate-Limiting** gegen automatisiertes Anlegen/Abstimmen ist bisher
-  eingebaut - bei Bedarf (z.B. bei Erreichbarkeit übers offene Internet) nachrüsten.
-* **Datenschutzerklärung fehlt noch** - nur ein Impressum ist vorhanden (siehe
-  `app/impressum/page.tsx`, gleiches Platzhalter-Prinzip wie in rsvp-app). Vor
-  echtem Live-Betrieb mit Externen sollte das ergänzt werden.
+* **Kein Rate-Limiting beim Abstimmen** - nur Anmeldung und Passwort-Reset sind
+  gedrosselt. Das Anlegen erfordert ein Konto, das Abstimmen selbst bleibt offen; bei
+  Erreichbarkeit übers offene Internet ggf. nachrüsten.
+* **Datenschutzerklärung ist ein Entwurf** (`app/datenschutz/page.tsx`): Sie beschreibt,
+  was das Tool tatsächlich speichert, ersetzt aber keine juristische Prüfung - vor dem
+  Einsatz mit Externen prüfen lassen und bei Änderungen der Datenverarbeitung mitpflegen.
+  Impressum und Verantwortlicher kommen aus den `IMPRESSUM_*`-Variablen.
+* **Keine automatische Löschung** alter Abstimmungen und Konten (anders als in rsvp-app):
+  Sie bleiben bis zur Löschung durch Owner/Admin bestehen. Bei Bedarf einen Cronjob nach dem
+  Muster von `/api/cron/close-expired-polls` ergänzen.
 
 ## Verknüpfung mit rsvp-app (umgesetzt)
 
@@ -148,8 +225,8 @@ fehlende oder ungültige Verifizierung blockiert rsvp-app nie.
 Bearbeiten, nur mit `requireRsvpVerification` sinnvoll) zeigt auf der öffentlichen
 Ergebnisseite zusätzlich zu den aggregierten Zahlen die E-Mails der Personen, die für
 welche Option gestimmt haben (`app/[pollId]/poll-results.tsx`). Standardmäßig aus.
-Der Ersteller/die Erstellerin sieht diese E-Mails auf der eigenen (per `creatorToken`
-geschützten) Verwaltungsseite immer, unabhängig von diesem Schalter.
+Der Ersteller/die Erstellerin und alle Konten mit Verwaltungs-Berechtigung (Freigabe) sehen
+diese E-Mails auf der Verwaltungsseite immer, unabhängig von diesem Schalter.
 
 ## Ergebnis-Meldung an rsvp-app
 
@@ -177,6 +254,7 @@ npm install
 cp .env.example .env   # Werte eintragen, siehe Kommentare in der Datei
 npx prisma generate
 npx prisma db push
+node create-user.js deine-email@domain.de ADMIN   # erstes Konto, siehe "Konten"
 npm run dev             # Port 3600, siehe package.json
 ```
 
@@ -191,6 +269,7 @@ Docker Compose, gleiches Prinzip wie rsvp-app:
 docker compose up -d --build
 ```
 
-`./data` wird für die SQLite-Datenbank gemountet. Port 3006 ist in
+Beim Bauen holt `npm` das gemeinsame Paket `suite-kit` direkt von GitHub - das Dockerfile
+installiert dafür `git`. `./data` wird für die SQLite-Datenbank gemountet. Port 3006 ist in
 `docker-compose.yml` voreingestellt (3000-3005 sind auf diesem Server bereits von
 anderen Diensten belegt) - bei Bedarf anpassen.

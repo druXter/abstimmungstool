@@ -4,9 +4,10 @@ import nodemailer from 'nodemailer'
 // Gleicher Transporter-Aufbau wie in rsvp-app - falls beide Tools auf demselben
 // Mailbox.org-Postfach laufen, deckt der dort bereits abgeschlossene AVV auch diesen
 // zweiten, unabhängigen Versand ab (gleicher Auftragsverarbeiter, kein neuer Vertrag
-// nötig). SMTP_HOST bewusst nicht vorausgesetzt: bleibt es leer, bricht sendMail()
-// unten früh ab statt einen kaputten Transporter zu nutzen - das Feature ist rein
-// optional (siehe Poll.creatorEmail).
+// nötig). SMTP_HOST bewusst nicht vorausgesetzt: bleibt es leer, bricht der Versand
+// unten früh ab statt einen kaputten Transporter zu nutzen. Die Konto-Funktionen
+// funktionieren dann trotzdem - Einladungs-/Reset-Links werden dem einladenden Konto
+// direkt auf dem Bildschirm angezeigt (siehe app/nutzer/page.tsx).
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST,
   port: parseInt(process.env.SMTP_PORT || '587'),
@@ -17,58 +18,91 @@ const transporter = nodemailer.createTransport({
   },
 })
 
-/**
- * Schickt dem Ersteller einer Abstimmung (Poll.creatorEmail) den privaten
- * Verwaltungs-Link zu - gleiches Prinzip wie bei vergleichbaren Umfrage-Tools:
- * kein Konto nötig, aber der Link geht nicht verloren, wenn man ihn nicht selbst
- * abspeichert. Wird einmalig direkt nach dem Anlegen aufgerufen (siehe createPoll
- * in app/actions.ts), nicht bei jeder späteren Bearbeitung erneut.
- */
-export async function sendManagementLinkEmail(
-  toEmail: string,
-  pollTitle: string,
-  managementLink: string,
-  publicLink: string
-): Promise<boolean> {
-  if (!process.env.SMTP_HOST) return false // Kein Mailversand konfiguriert - Feature bleibt inaktiv
+export function isMailConfigured(): boolean {
+  return !!process.env.SMTP_HOST
+}
 
-  const mailOptions = {
-    from: process.env.SMTP_FROM,
-    to: toEmail,
-    subject: `Verwaltungs-Link für deine Abstimmung "${pollTitle}"`,
-    text: `Hallo,
+/** Maskiert Text für die Verwendung in HTML (Mail-Inhalte enthalten u.a. frei wählbare Namen/Titel). */
+function esc(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
-du hast gerade die Abstimmung "${pollTitle}" angelegt.
-
-Mit diesem Link kannst du sie jederzeit bearbeiten, schließen oder löschen - bewahre ihn gut auf, er ist deine einzige Zugriffsmöglichkeit dafür:
-${managementLink}
-
-Link zum Teilen (zum Abstimmen):
-${publicLink}
-
-Viele Grüße`,
-    html: `
+function layout(heading: string, body: string, buttonLabel: string, link: string, footer: string): string {
+  return `
       <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-        <h2>Verwaltungs-Link für "${pollTitle}"</h2>
-        <p>Du hast gerade diese Abstimmung angelegt. Mit dem folgenden Link kannst du sie jederzeit bearbeiten, schließen oder löschen - bewahre ihn gut auf, er ist deine einzige Zugriffsmöglichkeit dafür.</p>
+        <h2>${esc(heading)}</h2>
+        <p>${esc(body)}</p>
         <p style="text-align: center; margin: 30px 0;">
-          <a href="${managementLink}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Abstimmung verwalten</a>
+          <a href="${esc(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">${esc(buttonLabel)}</a>
         </p>
-        <p style="font-size: 12px; color: #666;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${managementLink}</p>
-        <p>Link zum Teilen (zum Abstimmen):<br><a href="${publicLink}">${publicLink}</a></p>
+        <p style="font-size: 12px; color: #666;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${esc(link)}</p>
+        <p style="font-size: 12px; color: #666;">${esc(footer)}</p>
       </div>
-    `,
-    envelope: {
-      from: process.env.SMTP_USER,
-      to: toEmail
-    }
-  }
+    `
+}
+
+async function send(toEmail: string, subject: string, text: string, html: string): Promise<boolean> {
+  if (!isMailConfigured()) return false
 
   try {
-    await transporter.sendMail(mailOptions)
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM,
+      to: toEmail,
+      subject,
+      text,
+      html,
+      envelope: { from: process.env.SMTP_USER, to: toEmail }
+    })
     return true
   } catch (error) {
-    console.error(`Fehler beim Senden des Verwaltungs-Links an ${toEmail}:`, error)
+    console.error(`Fehler beim Senden einer Mail an ${toEmail}:`, error)
     return false
   }
+}
+
+/** Einladung zu einem neu angelegten Konto - der Link legt das erste Passwort fest. */
+export async function sendInviteEmail(toEmail: string, link: string, validDays: number): Promise<boolean> {
+  return send(
+    toEmail,
+    'Einladung zum Abstimmungstool',
+    `Hallo,
+
+für dich wurde ein Konto im Abstimmungstool angelegt. Lege mit diesem Link dein Passwort fest (${validDays} Tage gültig, nur einmal nutzbar):
+${link}
+
+Falls du damit nicht gerechnet hast, ignoriere diese Mail einfach.`,
+    layout(
+      'Einladung zum Abstimmungstool',
+      `Für dich wurde ein Konto angelegt. Lege jetzt dein Passwort fest - der Link ist ${validDays} Tage gültig und nur einmal nutzbar.`,
+      'Passwort festlegen',
+      link,
+      'Falls du damit nicht gerechnet hast, ignoriere diese Mail einfach.'
+    )
+  )
+}
+
+/** Passwort-Reset auf Wunsch des Kontoinhabers. */
+export async function sendPasswordResetEmail(toEmail: string, link: string): Promise<boolean> {
+  return send(
+    toEmail,
+    'Passwort zurücksetzen - Abstimmungstool',
+    `Hallo,
+
+für dein Konto im Abstimmungstool wurde ein neues Passwort angefordert. Mit diesem Link kannst du es festlegen (1 Stunde gültig, nur einmal nutzbar):
+${link}
+
+Falls du das nicht warst, ignoriere diese Mail - dein Passwort bleibt unverändert.`,
+    layout(
+      'Passwort zurücksetzen',
+      'Für dein Konto wurde ein neues Passwort angefordert. Der Link ist 1 Stunde gültig und nur einmal nutzbar.',
+      'Neues Passwort festlegen',
+      link,
+      'Falls du das nicht warst, ignoriere diese Mail - dein Passwort bleibt unverändert.'
+    )
+  )
 }
