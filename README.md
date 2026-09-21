@@ -53,6 +53,17 @@ Beim Anlegen kann eine Abstimmung mit "Nur über rsvp-app abstimmbar" markiert w
   falsch signiert, abgelaufen, oder für eine andere Abstimmung ausgestellt), kann
   auf dieser Abstimmung schlicht nicht abgestimmt werden - auch nicht anonym. Sonst
   wäre die "eine Stimme pro Person"-Garantie wertlos.
+* **Nur Zusagende können abstimmen, Absagen werden direkt blockiert:** Der Token
+  trägt neben der E-Mail auch den aktuellen RSVP-Status (`attending`), frisch bei
+  jedem Linkklick aus rsvp-app ermittelt - hat die Person für den verknüpften Termin
+  abgesagt, wird das ebenfalls wie ein fehlender Token behandelt (kein Abstimmen).
+  Sagt sie später wieder zu, schaltet sich das von selbst wieder frei, sobald sie den
+  Link erneut aufruft.
+* **Eine bereits abgegebene Stimme verschwindet bei nachträglicher Absage:** Zusätzlich
+  zum Klick-Token schickt rsvp-app bei JEDER Zu-/Absage-Änderung aktiv einen
+  signierten Webhook (`POST /api/rsvp-webhook`, siehe unten) - so verschwindet eine
+  bereits gezählte Stimme auch dann, wenn die Person die Abstimmung selbst nie wieder
+  aufruft.
 * Alle **anderen** (nicht so markierten) Abstimmungen sind davon komplett
   unberührt und funktionieren weiterhin rein anonym per Cookie wie zuvor.
 
@@ -62,7 +73,10 @@ Beim Anlegen kann eine Abstimmung mit "Nur über rsvp-app abstimmbar" markiert w
 <base64url(JSON-Payload)>.<base64url(HMAC-SHA256(payloadPart, RSVP_VERIFICATION_SECRET))>
 ```
 
-Payload (JSON): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools>", "exp": <Unix-Timestamp Sekunden> }`
+Zwei Varianten teilen sich dieses Format (siehe `app/lib/rsvp-verification.ts`):
+
+* **Klick-Token** (`?verify=...` am Abstimmungs-Link): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools>", "attending": true, "exp": <Unix-Timestamp Sekunden> }`
+* **Webhook-Nachricht** (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): zusätzlich `"eventId": "<Event.id in rsvp-app>"` - daraus lernt dieses Tool beiläufig `Poll.rsvpEventId`, um beim Schließen zu wissen, wohin das Ergebnis gemeldet werden soll (siehe "Ergebnis-Meldung" unten).
 
 * `RSVP_VERIFICATION_SECRET` muss auf beiden Seiten identisch sein (gemeinsames
   HMAC-Secret, z.B. `openssl rand -hex 32`) - niemals das Secret selbst übertragen,
@@ -127,6 +141,34 @@ fehlende oder ungültige Verifizierung blockiert rsvp-app nie.
   ändert seine Auswahl statt eine zweite Identität anzulegen.
 * Beide Seiten brauchen dasselbe gemeinsame Secret (hier `RSVP_VERIFICATION_SECRET`,
   in rsvp-app `POLL_VERIFICATION_SECRET`) - siehe "Token-Format" oben für den Vertrag.
+
+## Namentliche Ergebnis-Anzeige (optional)
+
+`Poll.showVoterNames` (Checkbox "Abstimmende namentlich anzeigen" beim Anlegen/
+Bearbeiten, nur mit `requireRsvpVerification` sinnvoll) zeigt auf der öffentlichen
+Ergebnisseite zusätzlich zu den aggregierten Zahlen die E-Mails der Personen, die für
+welche Option gestimmt haben (`app/[pollId]/poll-results.tsx`). Standardmäßig aus.
+Der Ersteller/die Erstellerin sieht diese E-Mails auf der eigenen (per `creatorToken`
+geschützten) Verwaltungsseite immer, unabhängig von diesem Schalter.
+
+## Ergebnis-Meldung an rsvp-app
+
+Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
+rsvp-webhook, siehe "Token-Format" oben), wird das Ergebnis aktiv an rsvp-app
+gemeldet (`app/lib/rsvp-notify.ts`, `notifyRsvpAppOfResult`) - sowohl beim manuellen
+Schließen (`closePoll`) als auch beim automatischen Schließen-Cronjob (siehe unten).
+Gewinner = alle Optionen mit der höchsten Stimmenzahl (kann mehrere bei Gleichstand
+sein, oder keine bei 0 Stimmen). Best-effort mit 5s-Timeout - ein nicht erreichbares
+rsvp-app verhindert nie das Schließen der Abstimmung selbst.
+
+## Automatisches Schließen (Cronjob / Uptime Kuma)
+
+Damit eine Abstimmung mit gesetztem `closesAt` auch dann geschlossen wird (und damit
+die Ergebnis-Meldung oben auslöst), wenn niemand manuell "Schließen" klickt, muss der
+folgende Endpoint regelmäßig (z.B. alle 15 Minuten) über einen Dienst wie Uptime Kuma
+aufgerufen werden - gleiches Muster wie rsvp-apps `/api/cron/reminders`:
+
+`GET https://vote.deine-domain.de/api/cron/close-expired-polls?secret=DeinSehrGeheimesPasswort123`
 
 ## Setup
 

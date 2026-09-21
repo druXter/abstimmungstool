@@ -7,6 +7,7 @@ import { prisma } from './lib/prisma'
 import { isCreateAllowed, unlockCreatePin } from './lib/create-pin'
 import { getOrCreateVoterToken } from './lib/voter'
 import { verifyRsvpToken } from './lib/rsvp-verification'
+import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
 import { sendManagementLinkEmail } from './lib/mail'
 import { baseUrl } from './lib/base-url'
 
@@ -40,6 +41,7 @@ export async function createPoll(formData: FormData) {
   const closesAtInput = formData.get('closesAt') as string
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
+  const showVoterNames = formData.get('showVoterNames') === 'on'
   const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
   const creatorEmail = (formData.get('creatorEmail') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
 
@@ -61,6 +63,7 @@ export async function createPoll(formData: FormData) {
       description,
       closesAt,
       requireRsvpVerification,
+      showVoterNames,
       allowMultipleChoices,
       creatorEmail,
       options: {
@@ -102,6 +105,7 @@ export async function updatePoll(formData: FormData) {
   const closesAtInput = formData.get('closesAt') as string
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const requireRsvpVerification = formData.get('requireRsvpVerification') === 'on'
+  const showVoterNames = formData.get('showVoterNames') === 'on'
   const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
 
   const existingIds = formData.getAll('existingOptionId') as string[]
@@ -132,7 +136,7 @@ export async function updatePoll(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.poll.update({
       where: { id: pollId },
-      data: { title, description, closesAt, requireRsvpVerification, allowMultipleChoices }
+      data: { title, description, closesAt, requireRsvpVerification, showVoterNames, allowMultipleChoices }
     })
 
     const keptIds = new Set(keptOptions.map(o => o.id))
@@ -228,6 +232,7 @@ export async function castVote(formData: FormData): Promise<void> {
     const verifyToken = formData.get('verifyToken') as string
     const identity = verifyRsvpToken(verifyToken, pollId)
     if (!identity) return // Kein gültiger Token -> keine Stimme, kein anonymer Fallback.
+    if (!identity.attending) return // Aktuell abgesagt -> keine Stimme, siehe [pollId]/page.tsx für die UI-Meldung.
 
     await replaceVotes(pollId, null, identity.email, selectedOptionIds)
   } else {
@@ -251,6 +256,7 @@ export async function closePoll(formData: FormData) {
   if (!poll || poll.creatorToken !== token) return
 
   await prisma.poll.update({ where: { id: pollId }, data: { closedAt: new Date() } })
+  await notifyRsvpAppOfResult(pollId).catch(() => {})
   revalidatePath(`/${pollId}`)
   redirect(`/${pollId}/verwalten?token=${token}`)
 }

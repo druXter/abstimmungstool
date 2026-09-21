@@ -25,7 +25,10 @@ export default async function PollPage({
     include: {
       options: {
         orderBy: { position: 'asc' },
-        include: { _count: { select: { votes: true } } }
+        include: {
+          _count: { select: { votes: true } },
+          votes: { select: { verifiedEmail: true } }
+        }
       },
       votes: { select: { voterToken: true, verifiedEmail: true } }
     }
@@ -43,9 +46,12 @@ export default async function PollPage({
   // ein mitgeschickter Token also einfach ignoriert.
   let myVoteOptionIds: string[] = []
   let verifiedEmail: string | null = null
+  let currentlyAttending = false
 
   if (poll.requireRsvpVerification) {
-    verifiedEmail = verifyRsvpToken(verify, poll.id)?.email ?? null
+    const identity = verifyRsvpToken(verify, poll.id)
+    verifiedEmail = identity?.email ?? null
+    currentlyAttending = identity?.attending ?? false
     if (verifiedEmail) {
       const votes = await prisma.vote.findMany({
         where: { pollId: poll.id, verifiedEmail }
@@ -62,7 +68,7 @@ export default async function PollPage({
     }
   }
 
-  const canVote = !isClosed && (!poll.requireRsvpVerification || !!verifiedEmail)
+  const canVote = !isClosed && (!poll.requireRsvpVerification || (!!verifiedEmail && currentlyAttending))
   const hasVoted = myVoteOptionIds.length > 0
 
   return (
@@ -85,6 +91,13 @@ export default async function PollPage({
             Diese Abstimmung ist nur über den entsprechenden Link/Button in rsvp-app erreichbar,
             damit jede Person nur einmal abstimmen kann. Ein direkter, anonymer Aufruf dieser Seite
             kann hier bewusst nicht abstimmen.
+          </div>
+        )}
+
+        {poll.requireRsvpVerification && !isClosed && verifiedEmail && !currentlyAttending && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm">
+            Du hast für den zugehörigen Termin abgesagt und kannst daher hier nicht (mehr) abstimmen.
+            Sag erneut zu, um wieder abstimmen zu können.
           </div>
         )}
 
@@ -127,7 +140,12 @@ export default async function PollPage({
           <h2 className="font-bold text-gray-900 mb-4">
             Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
           </h2>
-          <PollResults options={poll.options} distinctVoters={distinctVoters} myVoteOptionIds={myVoteOptionIds} />
+          <PollResults
+            options={poll.options}
+            distinctVoters={distinctVoters}
+            myVoteOptionIds={myVoteOptionIds}
+            showVoterNames={poll.showVoterNames && poll.requireRsvpVerification}
+          />
         </div>
 
         <p className="text-center text-xs text-gray-400">

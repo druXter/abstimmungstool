@@ -28,7 +28,10 @@ export default async function VerwaltenPage({
     include: {
       options: {
         orderBy: { position: 'asc' },
-        include: { _count: { select: { votes: true } } }
+        include: {
+          _count: { select: { votes: true } },
+          votes: { select: { verifiedEmail: true } }
+        }
       },
       votes: { select: { voterToken: true, verifiedEmail: true } }
     }
@@ -93,7 +96,17 @@ export default async function VerwaltenPage({
           <h2 className="font-bold text-gray-900 mb-4">
             Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
           </h2>
-          <PollResults options={poll.options} distinctVoters={distinctVoters} />
+          <PollResults
+            options={poll.options}
+            distinctVoters={distinctVoters}
+            showVoterNames={poll.requireRsvpVerification}
+          />
+          {poll.requireRsvpVerification && !poll.showVoterNames && (
+            <p className="text-xs text-gray-400 mt-3">
+              Die E-Mails oben siehst nur du als Ersteller:in. Auf der öffentlichen Seite sind sie
+              aktuell verborgen - &quot;Abstimmende namentlich anzeigen&quot; ist aus (siehe Bearbeiten).
+            </p>
+          )}
         </div>
 
         <p className="text-center text-xs text-gray-400">

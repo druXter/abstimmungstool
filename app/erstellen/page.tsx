@@ -117,6 +117,17 @@ export default async function ErstellenPage({
               aufgerufen werden. Direkter, anonymer Zugriff auf diese Seite kann dann nicht abstimmen.
               Nur sinnvoll, sobald diese Verknüpfung eingerichtet ist (siehe README).
             </p>
+            <label className="flex items-center gap-2 cursor-pointer pt-1">
+              <input type="checkbox" name="showVoterNames" className="w-4 h-4" />
+              <span className="text-sm font-medium text-amber-900">
+                Abstimmende namentlich anzeigen (auf der öffentlichen Ergebnisseite)
+              </span>
+            </label>
+            <p className="text-xs text-amber-700">
+              Zeigt bei jeder Option zusätzlich die E-Mails der Personen, die dafür gestimmt haben -
+              nur mit &quot;Nur über rsvp-app abstimmbar&quot; oben nutzbar, da nur dort überhaupt eine echte
+              Identität statt eines anonymen Cookies vorliegt.
+            </p>
           </div>
 
           <SubmitButton>Abstimmung erstellen</SubmitButton>

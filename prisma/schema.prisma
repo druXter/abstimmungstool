@@ -45,6 +45,19 @@ model Poll {
   // fehlendes SMTP_HOST lässt dieses Feld einfach ungenutzt, kein Pflichtfeld.
   creatorEmail            String?
   requireRsvpVerification Boolean      @default(false)
+  // Zeigt auf der Ergebnisseite zusätzlich, WER für welche Option gestimmt hat (E-Mail
+  // je Stimme), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat nur eine
+  // sichtbare Wirkung, wenn requireRsvpVerification ebenfalls an ist (sonst gibt es keine
+  // verifiedEmail zu zeigen); unabhängig davon einzeln wählbar, damit ein späteres
+  // Anschalten von requireRsvpVerification nicht überraschend rückwirkend Namen offenlegt.
+  showVoterNames          Boolean      @default(false)
+  // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
+  // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
+  // rsvp-app für diese Abstimmung antwortet - siehe dort. Nötig, um bei Schließung zu
+  // wissen, welchem rsvp-app-Event das Ergebnis gemeldet werden soll (siehe
+  // app/lib/rsvp-notify.ts). Bleibt null, solange rsvp-app nie einen Webhook für diese
+  // Abstimmung geschickt hat (z.B. weil requireRsvpVerification nie genutzt wurde).
+  rsvpEventId             String?
   allowMultipleChoices    Boolean      @default(false)
   closesAt                DateTime?
   closedAt                DateTime?
