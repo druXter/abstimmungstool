@@ -34,6 +34,10 @@ model User {
   passwordHash String?
   role         Role     @default(CREATOR)
   createdAt    DateTime @default(now())
+  // Zuletzt bei einer Anmeldung gesetzt (Passwort UND Verbund-Login, siehe issueSession in
+  // app/lib/auth.ts). Grundlage für die automatische Löschung inaktiver Konten (siehe
+  // app/api/cron/cleanup/route.ts) - Admin-Konten sind davon ausgenommen.
+  lastLoginAt  DateTime @default(now())
 
   // Einladung UND Passwort-Reset teilen sich denselben Mechanismus: ein einmaliger,
   // befristeter Link. Gespeichert wird nur der SHA-256-Hash des Tokens, damit ein

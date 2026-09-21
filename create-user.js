@@ -7,10 +7,15 @@
 // Das Passwort wird verdeckt abgefragt, damit es weder im Shell-Verlauf noch in der
 // Prozessliste landet. (Nicht-interaktiv geht auch: PASSWORD=... node create-user.js ...)
 //
-// Lokal:  node create-user.js deine-email@domain.de [ADMIN|CREATOR|MODERATOR]
-// Docker: docker compose run --rm abstimmungstool node create-user.js deine-email@domain.de ADMIN
+// Mit --invite wird KEIN Passwort vergeben: Das Konto entsteht ohne Passwort und die Person
+// bekommt einen Einmal-Link (7 Tage), über den sie es selbst festlegt - per Mail, falls
+// SMTP_HOST gesetzt ist, sonst wird der Link ausgegeben. So muss nie ein Passwort
+// weitergegeben werden (auch nicht für das allererste Admin-Konto).
+//
+// Lokal:  node create-user.js deine-email@domain.de [ADMIN|CREATOR|MODERATOR] [--invite]
+// Docker: docker compose run --rm abstimmungstool node create-user.js deine-email@domain.de ADMIN --invite
 const readline = require('node:readline');
-const { randomBytes, scrypt } = require('node:crypto');
+const { createHash, randomBytes, scrypt } = require('node:crypto');
 const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
@@ -46,14 +51,64 @@ function askHidden(question) {
   });
 }
 
+const INVITE_VALID_DAYS = 7;
+
+// Gleicher Ablauf wie issueInvite in app/auth-actions.ts: Nur der SHA-256-Hash des Tokens
+// landet in der Datenbank, der Klartext-Link geht ausschließlich an die Person.
+async function invite(email, role) {
+  const existing = await prisma.user.findUnique({ where: { email } });
+  if (existing && existing.passwordHash) {
+    console.error('Zu dieser Adresse gibt es bereits ein Konto mit Passwort. Ohne --invite lässt sich das Passwort neu setzen.');
+    process.exit(1);
+  }
+
+  const token = randomBytes(32).toString('base64url');
+  const data = {
+    resetTokenHash: createHash('sha256').update(token).digest('hex'),
+    resetTokenExpiresAt: new Date(Date.now() + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000),
+  };
+  const user = existing
+    ? await prisma.user.update({ where: { email }, data: { ...data, role } })
+    : await prisma.user.create({ data: { email, role, ...data } });
+
+  const base = (process.env.BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const link = `${base}/passwort-zuruecksetzen?token=${token}&invite=1`;
+
+  if (!process.env.SMTP_HOST) {
+    console.log(`Konto bereit: ${user.email} (${user.role}) - noch ohne Passwort.`);
+    console.log(`Einladungslink (${INVITE_VALID_DAYS} Tage gültig, einmalig, NICHT weitergeben außer an die Person selbst):\n${link}`);
+    return;
+  }
+
+  const nodemailer = require('nodemailer');
+  const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT || '587'),
+    secure: process.env.SMTP_PORT === '465',
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  await transporter.sendMail({
+    from: process.env.SMTP_FROM,
+    to: user.email,
+    subject: 'Einladung zum Abstimmungstool',
+    text: `Hallo,\n\nfür dich wurde ein Konto im Abstimmungstool angelegt. Lege mit diesem Link dein Passwort fest (${INVITE_VALID_DAYS} Tage gültig, nur einmal nutzbar):\n${link}\n\nFalls du damit nicht gerechnet hast, ignoriere diese Mail einfach.`,
+    envelope: { from: process.env.SMTP_USER, to: user.email },
+  });
+  console.log(`Konto bereit: ${user.email} (${user.role}) - Einladung per E-Mail verschickt.`);
+}
+
 async function main() {
-  const [, , emailArg, roleArg] = process.argv;
+  const args = process.argv.slice(2);
+  const inviteMode = args.includes('--invite');
+  const [emailArg, roleArg] = args.filter((a) => !a.startsWith('--'));
   const role = roleArg || 'CREATOR';
   if (!emailArg || !ROLES.includes(role)) {
-    console.error(`Verwendung: node create-user.js <email> [${ROLES.join('|')}]`);
+    console.error(`Verwendung: node create-user.js <email> [${ROLES.join('|')}] [--invite]`);
     process.exit(1);
   }
   const email = emailArg.trim().toLowerCase();
+
+  if (inviteMode) return invite(email, role);
 
   const password = process.env.PASSWORD || (await askHidden('Passwort: '));
   if (password.length < MIN_PASSWORD_LENGTH) {

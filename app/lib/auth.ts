@@ -74,6 +74,9 @@ export async function issueSession(userId: string): Promise<string> {
   await prisma.session.create({
     data: { tokenHash: hashToken(token), userId, expiresAt: new Date(Date.now() + SESSION_DURATION_MS) }
   })
+  // Hält lastLoginAt aktuell, damit die automatische Löschung inaktiver Konten nur wirklich
+  // ungenutzte trifft (siehe app/api/cron/cleanup/route.ts).
+  await prisma.user.update({ where: { id: userId }, data: { lastLoginAt: new Date() } })
   return token
 }
 

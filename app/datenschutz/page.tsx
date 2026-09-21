@@ -180,11 +180,22 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">11. Speicherdauer</h2>
           <p className="mt-2">
-            Abstimmungen samt Stimmen bleiben gespeichert, bis die Ersteller:in (oder ein Administrator) sie löscht.
-            Konten bleiben bestehen, bis sie ein Administrator löscht; ihre Abstimmungen gehen dann an den löschenden
-            Administrator über. Du kannst jederzeit unter der oben genannten Adresse um Löschung deines Kontos bitten.
-            Sitzungen laufen nach 30 Tagen ab, Einladungs- und Reset-Links nach 7 Tagen bzw. 1 Stunde. Drossel-Zähler
-            siehe Punkt 7.
+            Abstimmungen samt Optionen, Stimmen und Freigaben werden spätestens{' '}
+            <strong>18 Monate, nachdem sie zu Ende gegangen sind</strong>, automatisch vollständig gelöscht
+            (maßgeblich ist der Zeitpunkt des Schließens; eine nie geschlossene Abstimmung ohne Frist zählt ab ihrer
+            Anlage). Die Ersteller:in kann sie jederzeit früher selbst löschen.
+          </p>
+          <p className="mt-2">
+            Ein Konto wird automatisch gelöscht, wenn du dich <strong>2 Jahre</strong> lang nicht mehr angemeldet
+            hast und dir keine Abstimmung mehr gehört - inklusive Sitzungen, Verknüpfungen zu anderen Tools und
+            Freigaben. Administrator-Konten sind von dieser automatischen Löschung ausgenommen. Unabhängig davon kannst
+            du jederzeit unter der oben genannten Adresse um frühere Löschung deines Kontos bitten; seine Abstimmungen
+            gehen dann an einen Administrator über, damit die Stimmen anderer Personen nicht stillschweigend ohne
+            Besitzer bleiben.
+          </p>
+          <p className="mt-2">
+            Sitzungen laufen nach 30 Tagen ab, Einladungs- und Reset-Links nach 7 Tagen bzw. 1 Stunde und werden dann
+            entfernt. Drossel-Zähler siehe Punkt 7.
           </p>
         </div>
 

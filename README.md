@@ -193,9 +193,6 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   was das Tool tatsächlich speichert, ersetzt aber keine juristische Prüfung - vor dem
   Einsatz mit Externen prüfen lassen und bei Änderungen der Datenverarbeitung mitpflegen.
   Impressum und Verantwortlicher kommen aus den `IMPRESSUM_*`-Variablen.
-* **Keine automatische Löschung** alter Abstimmungen und Konten (anders als in rsvp-app):
-  Sie bleiben bis zur Löschung durch Owner/Admin bestehen. Bei Bedarf einen Cronjob nach dem
-  Muster von `/api/cron/close-expired-polls` ergänzen.
 
 ## Verknüpfung mit rsvp-app (umgesetzt)
 
@@ -246,6 +243,22 @@ folgende Endpoint regelmäßig (z.B. alle 15 Minuten) über einen Dienst wie Upt
 aufgerufen werden - gleiches Muster wie rsvp-apps `/api/cron/reminders`:
 
 `GET https://vote.deine-domain.de/api/cron/close-expired-polls?secret=DeinSehrGeheimesPasswort123`
+
+## Automatische Löschung (Löschfristen)
+
+Gleiche Fristen wie in rsvp-app (Speicherbegrenzung, Art. 5 Abs. 1 lit. e DSGVO; siehe auch
+die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime Kuma
+**einmal täglich** aufrufen muss - ohne diesen Monitor wird nichts gelöscht:
+
+`GET https://vote.deine-domain.de/api/cron/cleanup?secret=DeinSehrGeheimesPasswort123`
+
+* **Abstimmungen** samt Optionen, Stimmen und Freigaben: 18 Monate nachdem sie zu Ende
+  gingen (Schließzeitpunkt; sonst das automatische Schließdatum; eine nie geschlossene
+  Abstimmung ohne Frist zählt ab Anlage).
+* **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
+  über ein verbundenes Tool). **Admin-Konten sind ausgenommen**, ebenso Konten, denen noch
+  eine Abstimmung gehört.
+* Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links und veraltete Drossel-Zähler.
 
 ## Setup
 
