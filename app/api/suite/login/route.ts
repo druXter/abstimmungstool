@@ -22,16 +22,19 @@ export async function GET(request: NextRequest) {
   const mode: SuiteFlow['mode'] = params.get('mode') === 'link' ? 'link' : 'login'
   const next = sanitizeNextPath(params.get('next'), mode === 'link' ? '/konto' : '/meine-abstimmungen')
 
+  // Beim Verknüpfen ist man eingeloggt - /anmelden würde sofort weiterleiten und die Meldung verschlucken.
+  const errorPage = mode === 'link' ? '/konto' : '/anmelden'
+
   const issuer = normalizeOrigin(params.get('idp') ?? '')
   const idp = getIdps().find(i => i.issuer === issuer)
-  if (!origin || !idp) return redirectResponse('/anmelden?error=sso', request.nextUrl.origin)
+  if (!origin || !idp) return redirectResponse(`${errorPage}?error=sso`, request.nextUrl.origin)
 
   if (mode === 'link' && !(await getCurrentUser())) {
     return redirectResponse(`/anmelden?next=${encodeURIComponent('/konto')}`, origin)
   }
 
   const discovery = await fetchDiscovery(idp.issuer)
-  if (!discovery) return redirectResponse('/anmelden?error=idp-unreachable', origin)
+  if (!discovery) return redirectResponse(`${errorPage}?error=idp-unreachable`, origin)
 
   const state = randomState()
   const response = redirectResponse(buildAuthorizeRequestUrl(discovery.authorizeUrl, { app: origin, state }), origin)

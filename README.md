@@ -179,6 +179,9 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   föderierte.
 * Der Login-Ablauf läuft über `/api/suite/login` → Anbieter → `/api/suite/authorize` →
   `/api/suite/callback` (`app/api/suite/`).
+* **Fehlermeldungen:** Beim Login landen sie auf `/anmelden?error=…`, beim Verknüpfen aus
+  `/konto` dagegen auf `/konto?error=…` - dort ist man eingeloggt, die Login-Seite würde
+  sofort weiterleiten und die Meldung verschlucken.
 
 ## Bewusste Grenzen (kein Missverständnis)
 
@@ -290,6 +293,22 @@ npm run dev             # Port 3600, siehe package.json
 
 Es gibt keinen `migrations`-Ordner - wie bei rsvp-app ausschließlich per
 `npx prisma db push` synchronisiert.
+
+## Tests
+
+End-to-End-Tests mit Playwright (`tests/e2e/`), derzeit für den Konten-Verbund:
+
+```bash
+npx playwright install chromium   # einmalig
+npm run test:e2e
+```
+
+Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
+eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die
+Entwicklungs- oder Produktivdatenbank. Werte aus einer lokalen `.env`, die den Lauf
+beeinflussen könnten (Mailversand, Verbund, rsvp-app), setzt `playwright.config.ts` leer.
+Die anderen Tools der Suite spielen kleine Test-Doppel (`tests/e2e/suite-server.ts`, Ports
+2628/2629 auf `localhost`).
 
 ## Deployment
 

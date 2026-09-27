@@ -20,8 +20,13 @@ const ERRORS: Record<string, string> = {
   nopassword: 'Für dieses Konto ist kein Passwort hinterlegt - die Anmeldung läuft über ein anderes Tool.',
   lastlogin: 'Das ist deine einzige Anmeldemöglichkeit. Lege erst ein Passwort fest, bevor du sie entfernst.',
   nochain: 'Dieses Konto wird über ein anderes Tool angemeldet und kann hier keine Anmeldung für weitere Tools bestätigen.',
-  'linked-other': 'Dieses Konto ist bereits mit einem anderen Konto hier verknüpft.'
+  // Vom Verknüpfen mit einem anderen Tool (app/api/suite/login und callback im Modus link).
+  'linked-other': 'Dieses Konto des anderen Tools ist bereits mit einem anderen Konto hier verknüpft.',
+  'idp-unreachable': 'Das andere Tool ist gerade nicht erreichbar. Bitte versuche es später erneut.',
+  sso: 'Die Verknüpfung mit dem anderen Tool ist fehlgeschlagen. Bitte versuche es erneut.'
 }
+// Unbekannte Codes: allgemeine Meldung, nie der Code selbst (sonst ließe sich per Link Text einschleusen).
+const FALLBACK_ERROR = 'Das hat nicht geklappt. Bitte versuche es erneut.'
 
 export default async function KontoPage({
   searchParams
@@ -45,7 +50,7 @@ export default async function KontoPage({
           {passwordChanged === '1' && <Notice tone="success">Passwort geändert. Andere Geräte wurden abgemeldet.</Notice>}
           {linked === '1' && <Notice tone="success">Konto verknüpft.</Notice>}
           {unlinked === '1' && <Notice tone="success">Verknüpfung entfernt.</Notice>}
-          {error && ERRORS[error] && <Notice tone="error">{ERRORS[error]}</Notice>}
+          {error && <Notice tone="error">{Object.hasOwn(ERRORS, error) ? ERRORS[error] : FALLBACK_ERROR}</Notice>}
 
           <dl className="text-sm grid grid-cols-[8rem_1fr] gap-y-1">
             <dt className="text-gray-500">E-Mail</dt>

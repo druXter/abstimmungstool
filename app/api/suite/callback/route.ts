@@ -40,12 +40,13 @@ export async function GET(request: NextRequest) {
     response.cookies.set(SUITE_STATE_COOKIE, '', { ...cookieOptions(0), maxAge: 0 })
     return response
   }
+  const flow = parseFlow(request.cookies.get(SUITE_STATE_COOKIE)?.value)
+  // Beim Verknüpfen ist man eingeloggt - /anmelden würde sofort weiterleiten und die Meldung verschlucken.
   const fail = (code: string, detail?: string): NextResponse => {
     if (detail) console.warn(`[suite] Anmeldung abgelehnt (${code}): ${detail}`)
-    return finish(redirectResponse(`/anmelden?error=${code}`, requestOrigin))
+    return finish(redirectResponse(flow?.mode === 'link' ? `/konto?error=${code}` : `/anmelden?error=${code}`, requestOrigin))
   }
 
-  const flow = parseFlow(request.cookies.get(SUITE_STATE_COOKIE)?.value)
   const assertion = request.nextUrl.searchParams.get('assertion')
   const stateParam = request.nextUrl.searchParams.get('state')
   if (!origin || !flow || !assertion || !stateParam || !safeEqual(stateParam, flow.state)) {

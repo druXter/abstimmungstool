@@ -6,7 +6,8 @@
     "dev": "TZ=Europe/Berlin next dev -p 3600",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
@@ -17,6 +18,7 @@
     "suite-kit": "github:druXter/suite-kit#v0.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
