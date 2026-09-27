@@ -181,7 +181,9 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   `/api/suite/callback` (`app/api/suite/`).
 * **Fehlermeldungen:** Beim Login landen sie auf `/anmelden?error=…`, beim Verknüpfen aus
   `/konto` dagegen auf `/konto?error=…` - dort ist man eingeloggt, die Login-Seite würde
-  sofort weiterleiten und die Meldung verschlucken.
+  sofort weiterleiten und die Meldung verschlucken. Ist die Sitzung inzwischen weg
+  (abgelaufen, anderswo abgemeldet), geht auch ein Verknüpfen-Fehler auf `/anmelden`, weil
+  `/konto` sonst selbst zum Login weiterleiten und den Code verlieren würde.
 
 ## Bewusste Grenzen (kein Missverständnis)
 

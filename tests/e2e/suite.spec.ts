@@ -7,6 +7,7 @@ import { setIdentity, SUITE_TOOLS, type TestIdentity } from './suite-server'
 //
 // Schwerpunkt: Wohin Fehler führen. Beim Verknüpfen ist man eingeloggt - eine Meldung auf
 // /anmelden ginge verloren, weil die Login-Seite eingeloggte Personen sofort weiterleitet.
+// Ist die Sitzung inzwischen weg, gilt das Umgekehrte: /konto leitet selbst zum Login weiter.
 
 const APP = new URL(BASE_URL).origin
 
@@ -36,6 +37,29 @@ test.afterEach(() => {
   setIdentity('a', null)
   setIdentity('b', null)
 })
+
+// Name des state-Cookies im Produktionsbetrieb (next start), siehe app/lib/suite-flow.ts.
+const STATE_COOKIE = '__Host-suite-state'
+
+/**
+ * Ruft den Callback mit einem state-Cookie wie von /api/suite/login auf (unsigniertes JSON,
+ * URL-kodiert wie von Next geschrieben), aber mit einem ANDEREN state in der URL - das löst
+ * fail('sso') aus, ohne dass ein Anbieter beteiligt ist. Direkt als Anfrage, weil Chromium ein
+ * __Host-Cookie nicht per addCookies annimmt; die Sitzung des Browsers geht mit. Dem Ziel der
+ * Weiterleitung folgt dann der Browser, damit auch weitere Weiterleitungen der Seite greifen.
+ */
+async function callbackWithWrongState(page: Page, mode: 'login' | 'link') {
+  const flow = { state: `richtig-${unique()}`, issuer: SUITE_TOOLS.a.origin, next: mode === 'link' ? '/konto' : '/meine-abstimmungen', mode }
+  const cookies = (await page.context().cookies()).map(c => `${c.name}=${c.value}`)
+  cookies.push(`${STATE_COOKIE}=${encodeURIComponent(JSON.stringify(flow))}`)
+  const response = await page.request.get(`/api/suite/callback?assertion=x&state=falsch-${unique()}`, {
+    headers: { cookie: cookies.join('; ') },
+    maxRedirects: 0
+  })
+  expect(response.status()).toBe(303)
+  await page.goto(response.headers().location)
+  return new URL(page.url())
+}
 
 test.describe('Verknüpfen aus "Mein Konto": Fehler landen auf /konto', () => {
   test('Identität hängt schon an einem anderen Konto -> linked-other auf /konto', async ({ page, browser }) => {
@@ -94,6 +118,31 @@ test.describe('Verknüpfen aus "Mein Konto": Fehler landen auf /konto', () => {
     // Auch geerbte Eigenschaften des Meldungs-Objekts gelten als unbekannt.
     await page.goto('/konto?error=constructor')
     await expect(pageAlert(page)).toHaveText('Das hat nicht geklappt. Bitte versuche es erneut.')
+  })
+})
+
+test.describe('Fehlerziel hängt beim Verknüpfen an der Sitzung', () => {
+  test('Modus link, eingeloggt -> /konto?error=sso (zugleich Kontrolle, dass das Cookie gelesen wird)', async ({ page }) => {
+    const user = await createAccount()
+    await login(page, user.email)
+    const url = await callbackWithWrongState(page, 'link')
+    expect(url.pathname).toBe('/konto')
+    expect(url.searchParams.get('error')).toBe('sso')
+    await expect(pageAlert(page)).toHaveText('Die Verknüpfung mit dem anderen Tool ist fehlgeschlagen. Bitte versuche es erneut.')
+  })
+
+  test('Modus link, ohne Sitzung -> /anmelden?error=sso statt verlorener Meldung', async ({ page }) => {
+    const url = await callbackWithWrongState(page, 'link')
+    expect(url.pathname).toBe('/anmelden')
+    expect(url.searchParams.get('error')).toBe('sso')
+    await expect(pageAlert(page)).toContainText('Die Anmeldung über das andere Tool ist fehlgeschlagen.')
+  })
+
+  test('Modus login -> /anmelden?error=sso', async ({ page }) => {
+    const url = await callbackWithWrongState(page, 'login')
+    expect(url.pathname).toBe('/anmelden')
+    expect(url.searchParams.get('error')).toBe('sso')
+    await expect(pageAlert(page)).toContainText('Die Anmeldung über das andere Tool ist fehlgeschlagen.')
   })
 })
 
