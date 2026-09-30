@@ -3,7 +3,7 @@ import { prisma } from './prisma'
 import { baseUrl } from './base-url'
 import { isMailConfigured, sendPollResultEmail } from './mail'
 import { notifyRsvpAppOfResult } from './rsvp-notify'
-import { loadResult, type PollResult } from './results'
+import { formatScore, loadResult, type PollResult } from './results'
 
 /** Eine Zeile Zusammenfassung für Mail und Seiten: Gewinner, Gleichstand oder nicht beschlussfähig. */
 export function resultSummary(result: PollResult): string {
@@ -42,7 +42,7 @@ async function notifyOwnerOfResult(pollId: string): Promise<void> {
       title: result.poll.title,
       summary: resultSummary(result),
       lines: [
-        ...result.options.map(o => `${o.label}: ${o.votes} Stimme${o.votes === 1 ? '' : 'n'}`),
+        ...result.options.map(o => `${o.label}: ${formatScore(result.pollType, o)}`),
         `Teilnehmende: ${result.voters}`
       ]
     },

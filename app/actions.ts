@@ -14,6 +14,7 @@ import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPen
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
 import { afterPollClosed } from './lib/poll-closed'
 import { choiceLimits } from './lib/results'
+import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
@@ -62,6 +63,11 @@ function parsePollSettings(formData: FormData) {
 
 type OptionInput = { label: string; startsAt: Date | null }
 
+function parsePointsBudget(formData: FormData): number {
+  const budget = Number.parseInt(formString(formData, 'pointsBudget', 5), 10)
+  return Number.isInteger(budget) && budget >= 1 ? Math.min(budget, MAX_POINTS_BUDGET) : DEFAULT_POINTS_BUDGET
+}
+
 /**
  * Liest eine Option aus dem Formular - Freitext oder (bei Terminabstimmungen) ein Datum,
  * aus dem das Label formatiert wird (app/lib/date-options.ts). Leer/ungültig -> null.
@@ -95,6 +101,7 @@ export async function createPoll(formData: FormData) {
   const secretBallot = voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
   const settings = parsePollSettings(formData)
   const optionKind = parseOptionKind(formData.get('optionKind'))
+  const pollType = parsePollType(formData.get('pollType'))
 
   const options = formData.getAll('option')
     .map(raw => readOption(raw, optionKind))
@@ -114,6 +121,8 @@ export async function createPoll(formData: FormData) {
       voterIdentity,
       secretBallot,
       optionKind,
+      pollType,
+      pointsBudget: pollType === 'POINTS' ? parsePointsBudget(formData) : null,
       ...settings,
       ownerId: user.id,
       options: {
@@ -161,6 +170,10 @@ export async function updatePoll(formData: FormData) {
   const voterIdentity = locked ? poll.voterIdentity : parseVoterIdentity(formData.get('voterIdentity'))
   // Geheime Wahl ebenso: Ein Umschalten würde bestehende Stimmen unauffindbar bzw. zuordenbar machen.
   const secretBallot = locked ? poll.secretBallot : voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
+  // Die Art ebenfalls: Vote.value bedeutet je Art etwas anderes. Das Punktebudget auch - sonst
+  // hätten frühere Stimmen mehr (oder weniger) Punkte verteilt, als jetzt erlaubt ist.
+  const pollType = locked ? poll.pollType : parsePollType(formData.get('pollType'))
+  const pointsBudget = locked ? poll.pointsBudget : pollType === 'POINTS' ? parsePointsBudget(formData) : null
 
   // Die Optionsart steht seit dem Anlegen fest (sonst passten Labels und startsAt nicht zusammen).
   const keptOptions: (OptionInput & { id: string })[] = []
@@ -185,7 +198,7 @@ export async function updatePoll(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.poll.update({
       where: { id: pollId },
-      data: { title, description, voterIdentity, secretBallot, ...settings }
+      data: { title, description, voterIdentity, secretBallot, pollType, pointsBudget, ...settings }
     })
 
     const keptIds = new Set(keptOptions.map(o => o.id))
@@ -215,7 +228,8 @@ export async function updatePoll(formData: FormData) {
  * Mischung beider Auswahlen, und die Höchstzahl (Poll.maxVoters) wird in derselben
  * Transaktion geprüft, in der die neue Person dazukommt. Gibt false zurück, wenn sie voll ist.
  */
-async function replaceVotes(pollId: string, voter: Voter, optionIds: string[], maxVoters: number | null): Promise<boolean> {
+async function replaceVotes(pollId: string, voter: Voter, entries: BallotEntry[], maxVoters: number | null): Promise<boolean> {
+  const optionIds = entries.map(e => e.optionId)
   return prisma.$transaction(async (tx) => {
     if (maxVoters !== null && (await tx.vote.count({ where: { pollId, voterKey: voter.key } })) === 0) {
       const voters = await tx.vote.groupBy({ by: ['voterKey'], where: { pollId } })
@@ -225,12 +239,12 @@ async function replaceVotes(pollId: string, voter: Voter, optionIds: string[], m
     await tx.vote.deleteMany({
       where: { pollId, voterKey: voter.key, optionId: { notIn: optionIds } }
     })
-    for (const optionId of optionIds) {
+    for (const { optionId, value } of entries) {
       await tx.vote.upsert({
         where: { pollId_voterKey_optionId: { pollId, voterKey: voter.key, optionId } },
-        update: { voterName: voter.name },
+        update: { voterName: voter.name, value },
         create: {
-          pollId, optionId, identityKind: voter.kind, voterKey: voter.key, voterName: voter.name,
+          pollId, optionId, identityKind: voter.kind, voterKey: voter.key, voterName: voter.name, value,
           // Geheime Wahl: weder Zeitstempel noch zeitlich sortierbare cuid, sonst ließe sich die
           // Stimme über den Zeitpunkt doch wieder einem Link zuordnen (siehe app/lib/voter-links.ts).
           ...(voter.secret ? { id: randomUUID(), createdAt: new Date(0) } : {})
@@ -245,23 +259,22 @@ async function replaceVotes(pollId: string, voter: Voter, optionIds: string[], m
 }
 
 /**
- * Gibt (oder ändert) die eigene Stimme ab - bei Poll.allowMultipleChoices können
- * mehrere Optionen gleichzeitig gewählt werden (das Formular schickt dann mehrere
- * `optionId`-Werte, siehe `formData.getAll`). Wer abstimmt, entscheidet allein
+ * Gibt (oder ändert) die eigene Stimme ab - je nach Poll.pollType eine Auswahl, Antworten
+ * pro Option, eine Rangfolge oder verteilte Punkte (siehe parseBallot in
+ * app/lib/poll-types.ts). Wer abstimmt, entscheidet allein
  * resolveVoter (app/lib/voter-identity.ts) anhand von Poll.voterIdentity - blockiert es
  * (z.B. Modus RSVP ohne gültigen Token), wird die Stimme abgelehnt (fail-closed), es gibt
  * bewusst KEINEN anonymen Fallback, sonst wäre die "eine Stimme pro Person"-Garantie wertlos.
  *
- * Reihenfolge der Prüfungen: offen -> Zugangscode -> gültige Optionen -> Identität ->
+ * Reihenfolge der Prüfungen: offen -> Zugangscode -> Stimmzettel -> Identität ->
  * ggf. Pflichtname -> für NEUE Personen Drosselung (nur Cookie-Modus) und Höchstzahl.
  * Was die Oberfläche ohnehin verhindert (geschlossen, kein Code, falsche Option), wird
- * still ignoriert; Drosselung und Höchstzahl kann man nicht vorher sehen, daher dort ein
- * Hinweis per Weiterleitung. Bewusst als reines Formular ohne Client-JS gebaut.
+ * still ignoriert; was sie ohne JavaScript nicht verhindern kann (Anzahl, doppelte Plätze,
+ * zu viele Punkte) und Drosselung/Höchstzahl melden sich per Hinweis-Weiterleitung. Bewusst als reines Formular ohne Client-JS gebaut.
  */
 export async function castVote(formData: FormData): Promise<void> {
   const pollId = formString(formData, 'pollId', 50)
-  const rawOptionIds = formData.getAll('optionId').filter((v): v is string => typeof v === 'string')
-  if (!pollId || rawOptionIds.length === 0) return
+  if (!pollId) return
 
   // Nur freigegebene Optionen - ein noch offener Vorschlag ist keine wählbare Option.
   const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: { where: { approved: true } } } })
@@ -271,22 +284,15 @@ export async function castVote(formData: FormData): Promise<void> {
   if (isClosed) return
   if (!(await hasPollAccess(poll))) return
 
-  // Nur Optionen akzeptieren, die tatsächlich zu diesem Poll gehören - schützt gegen
-  // manipulierte optionId-Werte aus einem fremden Poll.
-  const validOptionIds = new Set(poll.options.map(o => o.id))
-  let selectedOptionIds = [...new Set(rawOptionIds)].filter(id => validOptionIds.has(id))
-  if (selectedOptionIds.length === 0) return
-
   const identity = identityFromForm(formData)
 
-  // Bei einer Einzelauswahl-Abstimmung serverseitig auf höchstens eine Option kappen,
-  // selbst wenn ein manipulierter Client mehrere optionId-Werte schickt. Bei Mehrfachauswahl
-  // die Grenzen prüfen (ohne JavaScript kann die Seite sie nicht erzwingen, daher ein Hinweis).
-  if (!poll.allowMultipleChoices) {
-    selectedOptionIds = [selectedOptionIds[0]]
-  } else {
-    const { min, max } = choiceLimits(poll)
-    if (selectedOptionIds.length < min || selectedOptionIds.length > max) redirect(pollUrl(pollId, identity, 'auswahl'))
+  // Stimmzettel je Art lesen (app/lib/poll-types.ts) - nur Optionen dieser Abstimmung, bei
+  // Einzelauswahl auf eine gekappt, Grenzen/Rangfolge/Punktebudget geprüft. Was die Seite
+  // ohne JavaScript nicht erzwingen kann, meldet sich als Hinweis.
+  const ballot = parseBallot(poll, formData, choiceLimits(poll))
+  if (!ballot.ok) {
+    if (ballot.notice) redirect(pollUrl(pollId, identity, ballot.notice))
+    return
   }
 
   const { voter, block } = await resolveVoter(poll, identity, { create: true })
@@ -308,7 +314,7 @@ export async function castVote(formData: FormData): Promise<void> {
     }
   }
 
-  if (!(await replaceVotes(pollId, voter, selectedOptionIds, poll.maxVoters))) {
+  if (!(await replaceVotes(pollId, voter, ballot.entries, poll.maxVoters))) {
     redirect(pollUrl(pollId, identity, 'voll'))
   }
   revalidatePath(`/${pollId}`)
@@ -481,6 +487,8 @@ export async function duplicatePoll(formData: FormData) {
       minChoices: source.minChoices,
       maxChoices: source.maxChoices,
       optionKind: source.optionKind,
+      pollType: source.pollType,
+      pointsBudget: source.pointsBudget,
       options: {
         create: source.options.filter(o => o.approved).sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, startsAt: o.startsAt, position }))
       }

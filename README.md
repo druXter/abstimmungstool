@@ -10,6 +10,8 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Abstimmung anlegen (mit Konto):** Titel, optionale Beschreibung, 2-25 Optionen,
   optionales automatisches Schließungsdatum. Das Abstimmen selbst bleibt für jeden mit
   einem Link offen.
+* **Abstimmungsarten** (`Poll.pollType`) - siehe "Abstimmungsarten" unten: Auswahl
+  (Standard), Ja/Vielleicht/Nein (Doodle-Stil), Rangfolge (Borda) und Punkte verteilen.
 * **Einzel- oder Mehrfachauswahl (pro Abstimmung einzeln gewählt):** Standardmäßig
   eine Option pro Stimme (Radiobuttons); mit `allowMultipleChoices` können mehrere
   Optionen gleichzeitig gewählt werden (Checkboxen) - z.B. "welche Restaurants
@@ -65,6 +67,34 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Komfort auf der Verwaltungsseite:** CSV-Export, QR-Code zum Abstimmungslink,
   Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
   optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
+
+## Abstimmungsarten
+
+`Poll.pollType` legt fest, was eine Stimmabgabe ist; `Vote.value` speichert die Angabe pro
+Option. Eingabe: `parseBallot` in `app/lib/poll-types.ts` (Formularfelder:
+`app/[pollId]/ballot-inputs.tsx`), Auswertung: `evaluate` in `app/lib/results.ts`.
+
+| Art | Eingabe | `Vote.value` | Gewinner |
+| --- | --- | --- | --- |
+| `CHOICE` | eine oder mehrere Optionen (Mehrfachauswahl, min/max) | 1 | meiste Stimmen |
+| `YES_MAYBE_NO` | pro Option Ja / Vielleicht / Nein | 2 / 1 / 0 | höchste Wertung 2 x Ja + Vielleicht |
+| `RANKING` | Platz je Option (Auswahlfeld, ohne JS bedienbar) | Platz, 1 = Favorit | Borda: Platz p von n Optionen bringt n - p Punkte |
+| `POINTS` | Punkte je Option, höchstens `Poll.pointsBudget` (Standard 10) | Punkte | meiste Punkte |
+
+* Bei Ja/Vielleicht/Nein wird auch "Nein" gespeichert, damit sichtbar ist, wer geantwortet
+  hat. Nicht beantwortete Optionen bleiben leer.
+* Rangfolge: Lücken werden geschlossen (Plätze 1 und 3 zählen als 1 und 2), doppelte Plätze
+  lehnt `castVote` mit Hinweis ab. Nicht eingeordnete Optionen bekommen keine Punkte. `n` ist
+  die Zahl der Optionen bei der Auswertung - kommen später Optionen dazu, steigen alle Punkte,
+  die Reihenfolge bleibt. (Instant-Runoff wäre die Alternative; Borda ist leichter zu
+  erklären und belohnt Kompromiss-Optionen.)
+* Punkte: Ein überzogenes Budget lehnt `castVote` mit Hinweis ab (ohne JS kann die Seite die
+  Summe nicht prüfen).
+* **Art und Punktebudget sind gesperrt, sobald abgestimmt wurde** - `Vote.value` bedeutet je
+  Art etwas anderes.
+* Ergebnis, CSV-Export (Spalten je Art, bei Namen zusätzlich die Angabe wie "ja" oder
+  "Platz 2") und Ergebnis-Mail zeigen die passende Wertung. An rsvp-app geht als `votes` die
+  Wertung (score) - dort steht dazu "Stimmen", eine bekannte Unschärfe (`TODO.md`).
 
 ## Identität der Abstimmenden
 

@@ -7,6 +7,7 @@ import { canCreatePolls, getPollLevel } from '../../lib/permissions'
 import { claimPoll, closePoll, duplicatePoll, reviewSuggestion, sharePoll, unsharePoll } from '../../actions'
 import { baseUrl } from '../../lib/base-url'
 import PollResults from '../poll-results'
+import { loadResult, loadVoterNames } from '../../lib/results'
 import CopyableField from '../../ui/copyable-field'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
@@ -35,15 +36,6 @@ export default async function VerwaltenPage({
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
     include: {
-      options: {
-        orderBy: { position: 'asc' },
-        where: { approved: true },
-        include: {
-          _count: { select: { votes: true } },
-          votes: { select: { voterName: true } }
-        }
-      },
-      votes: { select: { voterKey: true, voterName: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
       owner: { select: { email: true, name: true } },
       _count: { select: { options: { where: { approved: false } } } },
@@ -68,10 +60,12 @@ export default async function VerwaltenPage({
 
   // Siehe app/[pollId]/page.tsx für die Begründung, warum die Prozent-Basis in
   // PollResults die Anzahl abstimmender Personen ist, nicht die Summe der Stimmen.
-  const distinctVoters = new Set(poll.votes.map(v => v.voterKey)).size
+  const result = (await loadResult(poll.id))!
+  const distinctVoters = result.voters
   // Wer verwaltet, sieht Namen immer (sofern die Art der Stimmabgabe welche liefert) -
   // öffentlich nur mit showVoterNames.
-  const hasVoterNames = poll.votes.some(v => v.voterName)
+  const voterNames = await loadVoterNames(poll.id)
+  const hasVoterNames = Object.keys(voterNames).length > 0
   const isClosed = !!poll.closedAt
   // Für die Ergebnis-Anzeige zählt auch ein abgelaufenes Schließdatum, das der Cron noch nicht
   // verarbeitet hat (der Schließen-Knopf bleibt dann bewusst da - er löst die Meldungen aus).
@@ -233,10 +227,9 @@ export default async function VerwaltenPage({
             Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'}{poll.maxVoters !== null ? ` von höchstens ${poll.maxVoters}` : ''})
           </h2>
           <PollResults
-            options={poll.options}
-            distinctVoters={distinctVoters}
+            result={result}
+            names={voterNames}
             showVoterNames
-            quorum={poll.quorum}
             closed={ended}
           />
           {hasVoterNames && !poll.showVoterNames && (

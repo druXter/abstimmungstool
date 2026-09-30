@@ -192,6 +192,11 @@ model Poll {
   maxChoices               Int?
   // Art der Optionen: Freitext oder Termine (siehe OptionKind). Steht nach dem Anlegen fest.
   optionKind               OptionKind        @default(TEXT)
+  // Art der Abstimmung (siehe PollType). Gesperrt, sobald abgestimmt wurde - die
+  // gespeicherten Vote.value-Werte bedeuten je Art etwas anderes.
+  pollType                 PollType          @default(CHOICE)
+  // Nur bei POINTS: so viele Punkte verteilt jede Person (höchstens).
+  pointsBudget             Int?
   // Teilnehmende dürfen Optionen vorschlagen (app/actions.ts suggestOption); bei
   // voterOptionsNeedApproval erst sichtbar, wenn die Verwaltung sie freigibt (PollOption.approved).
   allowVoterOptions        Boolean           @default(false)
@@ -272,6 +277,19 @@ model PollOption {
 // Bei Terminen trägt jede Option zusätzlich startsAt (Grundlage für die Sortierung und die
 // geplante Übergabe des Gewinner-Termins an rsvp-app); label ist daraus formatiert, siehe
 // app/lib/date-options.ts.
+// Art der Abstimmung (Poll.pollType) und was Vote.value dabei bedeutet (siehe
+// app/lib/poll-types.ts für Eingabe und app/lib/results.ts für die Auswertung):
+// - CHOICE:       Auswahl (Einzel- oder Mehrfach, allowMultipleChoices), value = 1
+// - YES_MAYBE_NO: pro Option Ja (2) / Vielleicht (1) / Nein (0), Doodle-Stil
+// - RANKING:      Rangfolge, value = Platz (1 = am liebsten), Auswertung nach Borda
+// - POINTS:       Punkte verteilen (höchstens Poll.pointsBudget), value = Punkte
+enum PollType {
+  CHOICE
+  YES_MAYBE_NO
+  RANKING
+  POINTS
+}
+
 enum OptionKind {
   TEXT
   DATE
@@ -327,6 +345,8 @@ model Vote {
   identityKind VoterIdentity
   voterKey     String
   voterName    String?
+  // Bedeutung je Poll.pollType (siehe PollType): 1 bei CHOICE, sonst Antwort, Platz oder Punkte.
+  value        Int           @default(1)
   createdAt    DateTime      @default(now())
 
   @@unique([pollId, voterKey, optionId])

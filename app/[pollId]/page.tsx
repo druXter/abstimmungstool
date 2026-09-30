@@ -9,7 +9,9 @@ import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
 import PollResults from './poll-results'
-import { choiceLimits, resultsVisible } from '../lib/results'
+import { choiceLimits, loadResult, loadVoterNames, resultsVisible } from '../lib/results'
+import BallotInputs from './ballot-inputs'
+import { POLL_TYPE_LABELS } from '../lib/poll-types'
 
 export const dynamic = 'force-dynamic'
 
@@ -21,6 +23,8 @@ const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: str
   'code-falsch': { tone: 'error', text: 'Der Zugangscode stimmt nicht.' },
   'code-gesperrt': { tone: 'error', text: 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.' },
   auswahl: { tone: 'error', text: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Auswahl wurde nicht gespeichert.' },
+  rangfolge: { tone: 'error', text: 'Jeder Platz darf nur einmal vergeben werden - deine Rangfolge wurde nicht gespeichert.' },
+  punkte: { tone: 'error', text: 'Du hast mehr Punkte verteilt als erlaubt - deine Stimme wurde nicht gespeichert.' },
   'vorschlag-wartet': { tone: 'success', text: 'Danke für deinen Vorschlag! Er erscheint, sobald die Verwaltung ihn freigegeben hat.' },
   'vorschlag-da': { tone: 'success', text: 'Deine Option steht jetzt zur Wahl.' },
   'vorschlag-ungueltig': { tone: 'error', text: 'Bitte gib eine Option ein.' },
@@ -60,17 +64,7 @@ export default async function PollPage({
 
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
-    include: {
-      options: {
-        where: { approved: true },
-        orderBy: { position: 'asc' },
-        include: {
-          _count: { select: { votes: true } },
-          votes: { select: { voterName: true } }
-        }
-      },
-      votes: { select: { voterKey: true } }
-    }
+    include: { options: { where: { approved: true }, orderBy: { position: 'asc' }, select: { id: true, label: true } } }
   })
   if (!poll) notFound()
 
@@ -100,19 +94,19 @@ export default async function PollPage({
     )
   }
 
-  // Zähler für die Prozent-Basis in PollResults - siehe dort für die Begründung,
-  // warum das die Anzahl abstimmender PERSONEN ist, nicht die Summe der Options-Stimmen.
-  const distinctVoters = new Set(poll.votes.map(v => v.voterKey)).size
+  // Auswertung je Art (app/lib/results.ts); Teilnehmende = verschiedene Personen.
+  const result = (await loadResult(poll.id))!
+  const distinctVoters = result.voters
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
 
   // Wer hier abstimmt (und ob überhaupt), entscheidet allein resolveVoter anhand von
   // poll.voterIdentity - siehe app/lib/voter-identity.ts.
   const { voter, block } = await resolveVoter(poll, { verifyToken: verify, linkToken: k }, { create: false })
-  const myVotes = voter
-    ? await prisma.vote.findMany({ where: { pollId: poll.id, voterKey: voter.key }, select: { optionId: true, voterName: true } })
+  const myVoteRows = voter
+    ? await prisma.vote.findMany({ where: { pollId: poll.id, voterKey: voter.key }, select: { optionId: true, voterName: true, value: true } })
     : []
-  const myVoteOptionIds = myVotes.map(v => v.optionId)
-  const hasVoted = myVoteOptionIds.length > 0
+  const myVotes = Object.fromEntries(myVoteRows.map(v => [v.optionId, v.value]))
+  const hasVoted = myVoteRows.length > 0
 
   // Wer schon abgestimmt hat, darf trotz erreichter Höchstzahl weiter ändern.
   const isFull = poll.maxVoters !== null && distinctVoters >= poll.maxVoters && !hasVoted
@@ -256,30 +250,24 @@ export default async function PollPage({
                 <label htmlFor="voter-name" className="block text-sm font-medium text-gray-800 mb-1">Dein Name</label>
                 <input
                   id="voter-name" name="voterName" required maxLength={60} autoComplete="name"
-                  defaultValue={myVotes[0]?.voterName ?? ''}
+                  defaultValue={myVoteRows[0]?.voterName ?? ''}
                   className="w-full border border-gray-300 p-2 rounded text-gray-900"
                 />
               </div>
             )}
-            {poll.allowMultipleChoices && (
+            {poll.pollType === 'CHOICE' && poll.allowMultipleChoices && (
               <p className="text-xs text-gray-500">{choiceHint(limits, poll.options.length)}</p>
             )}
-            {poll.options.map(option => (
-              <label
-                key={option.id}
-                className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer"
-              >
-                <input
-                  type={poll.allowMultipleChoices ? 'checkbox' : 'radio'}
-                  name="optionId"
-                  value={option.id}
-                  defaultChecked={myVoteOptionIds.includes(option.id)}
-                  required={!poll.allowMultipleChoices}
-                  className="w-4 h-4"
-                />
-                <span className="text-gray-800">{option.label}</span>
-              </label>
-            ))}
+            {poll.pollType !== 'CHOICE' && (
+              <p className="text-xs text-gray-500">{POLL_TYPE_LABELS[poll.pollType].title}: {POLL_TYPE_LABELS[poll.pollType].text}</p>
+            )}
+            <BallotInputs
+              pollType={poll.pollType}
+              allowMultipleChoices={poll.allowMultipleChoices}
+              pointsBudget={poll.pointsBudget}
+              options={poll.options}
+              myVotes={myVotes}
+            />
             <SubmitButton>{hasVoted ? 'Auswahl speichern' : 'Abstimmen'}</SubmitButton>
           </form>
         )}
@@ -320,11 +308,10 @@ export default async function PollPage({
               Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
             </h2>
             <PollResults
-              options={poll.options}
-              distinctVoters={distinctVoters}
-              myVoteOptionIds={myVoteOptionIds}
+              result={result}
+              names={poll.showVoterNames ? await loadVoterNames(poll.id) : undefined}
+              myVotes={myVotes}
               showVoterNames={poll.showVoterNames}
-              quorum={poll.quorum}
               closed={isClosed}
             />
           </div>

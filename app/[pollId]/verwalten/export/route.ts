@@ -2,7 +2,8 @@
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { getPollLevel } from '../../../lib/permissions'
-import { loadResult } from '../../../lib/results'
+import { loadResult, type PollResult } from '../../../lib/results'
+import { formatVoteValue } from '../../../lib/poll-types'
 import { resultSummary } from '../../../lib/poll-closed'
 
 /**
@@ -32,17 +33,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ poll
     ...(result.quorum !== null ? [['Mindestbeteiligung', String(result.quorum)]] : []),
     ['Ergebnis', resultSummary(result)],
     [],
-    ['Option', 'Stimmen', 'Anteil der Teilnehmenden'],
-    ...result.options.map(o => [o.label, String(o.votes), result.voters > 0 ? `${Math.round((o.votes / result.voters) * 100)} %` : '0 %'])
+    ...optionTable(result)
   ]
 
   const named = await prisma.vote.findMany({
     where: { pollId: poll.id, voterName: { not: null } },
-    select: { voterName: true, option: { select: { label: true, position: true } } },
+    select: { voterName: true, value: true, option: { select: { label: true, position: true } } },
     orderBy: [{ voterName: 'asc' }, { option: { position: 'asc' } }]
   })
   if (named.length > 0) {
-    rows.push([], ['Name', 'Option'], ...named.map(v => [v.voterName ?? '', v.option.label]))
+    rows.push([], ['Name', 'Option', 'Angabe'], ...named.map(v => [v.voterName ?? '', v.option.label, formatVoteValue(result.pollType, v.value)]))
   }
 
   const csv = '﻿' + rows.map(row => row.map(csvCell).join(';')).join('\r\n') + '\r\n'
@@ -54,6 +54,22 @@ export async function GET(request: Request, { params }: { params: Promise<{ poll
       'Cache-Control': 'no-store'
     }
   })
+}
+
+/** Tabelle je Option, Spalten passend zur Art (siehe evaluate in app/lib/results.ts). */
+function optionTable(result: PollResult): string[][] {
+  const share = (n: number) => (result.voters > 0 ? `${Math.round((n / result.voters) * 100)} %` : '0 %')
+  switch (result.pollType) {
+    case 'CHOICE':
+      return [['Option', 'Stimmen', 'Anteil der Teilnehmenden'], ...result.options.map(o => [o.label, String(o.votes), share(o.votes)])]
+    case 'YES_MAYBE_NO':
+      return [['Option', 'Ja', 'Vielleicht', 'Nein', 'Wertung (2 x Ja + Vielleicht)'],
+        ...result.options.map(o => [o.label, String(o.answers!.yes), String(o.answers!.maybe), String(o.answers!.no), String(o.score)])]
+    case 'RANKING':
+      return [['Option', 'Borda-Punkte', 'Eingeordnet von'], ...result.options.map(o => [o.label, String(o.score), String(o.votes)])]
+    case 'POINTS':
+      return [['Option', 'Punkte', 'Punkte von'], ...result.options.map(o => [o.label, String(o.score), String(o.votes)])]
+  }
 }
 
 /**

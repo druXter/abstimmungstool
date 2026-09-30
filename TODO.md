@@ -53,11 +53,13 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [x] **Sichtbarkeit der Ergebnisse:** immer live (heute) / erst nach eigener Stimme / erst nach Schließung /
       nur Verwaltung. Betrifft `app/[pollId]/page.tsx`, `poll-results.tsx`.
 - [x] **Grenzen bei der Mehrfachauswahl:** `minChoices`/`maxChoices` ("wähle 1 bis 3").
-- [ ] **Neue Abstimmungsarten** (größter Umbau: `Vote` braucht Wert/Gewicht, `PollResults` je Art eigene
+- [x] **Neue Abstimmungsarten** (größter Umbau: `Vote` braucht Wert/Gewicht, `PollResults` je Art eigene
       Auswertung):
-  - [ ] Ja / Vielleicht / Nein pro Option (Doodle-Stil)
-  - [ ] Rangfolge (Borda oder Instant-Runoff)
-  - [ ] Punkte verteilen (z.B. 10 Punkte auf beliebige Optionen)
+  - [x] Ja / Vielleicht / Nein pro Option (Doodle-Stil)
+  - [x] Rangfolge (Borda oder Instant-Runoff)
+  - [x] Punkte verteilen (z.B. 10 Punkte auf beliebige Optionen)
+  - [ ] **[rsvp-app]** Folgepunkt: Die Ergebnis-Meldung schickt bei anderen Arten die Wertung als `votes`, rsvp-app
+        schreibt dazu "Stimmen". Vertrag um die Art/Einheit erweitern (z.B. `unit: "votes" | "points"`).
 - [x] **Terminoptionen:** Optionen als Datum/Uhrzeit mit Kalender-Eingabe statt Freitext.
 - [ ] **Terminabstimmung → rsvp-app** **[rsvp-app]**: Das Endergebnis legt in rsvp-app ein Event an bzw. gibt
       einem bestehenden Event sein endgültiges Datum.

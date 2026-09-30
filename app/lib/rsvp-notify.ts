@@ -35,7 +35,10 @@ export async function notifyRsvpAppOfResult(pollId: string): Promise<void> {
 
   const result = await loadResult(poll.id)
   if (!result || !result.quorumMet) return
-  const winners = result.winners.map(o => ({ label: o.label, votes: o.votes }))
+  // "votes" ist im Vertrag mit rsvp-app die Zahl hinter dem Gewinner. Bei anderen Arten als
+  // Auswahl ist das der score (Ja-gewichtet, Borda- bzw. verteilte Punkte) - rsvp-app zeigt
+  // dazu "Stimmen", das ist dort eine bekannte Unschärfe (siehe TODO.md).
+  const winners = result.winners.map(o => ({ label: o.label, votes: o.score }))
 
   const signed = signResultWebhookPayload({
     eventId: poll.rsvpEventId,

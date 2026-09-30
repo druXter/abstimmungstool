@@ -4,6 +4,7 @@ import { offeredIdentities } from '../lib/voter-identity'
 import { MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import { isMailConfigured } from '../lib/mail'
 import { toInputValue } from '../lib/date-options'
+import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, POLL_TYPE_LABELS, POLL_TYPES } from '../lib/poll-types'
 
 const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = {
   COOKIE: {
@@ -28,7 +29,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices' | 'allowVoterOptions' | 'voterOptionsNeedApproval'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices' | 'allowVoterOptions' | 'voterOptionsNeedApproval' | 'pollType' | 'pointsBudget'>
 
 /**
  * Die Einstellungen einer Abstimmung, gemeinsam für Anlegen und Bearbeiten (Gegenstück:
@@ -43,6 +44,31 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
 
   return (
     <>
+      <fieldset className="rounded-md border border-gray-200 p-4 space-y-2">
+        <legend className="text-sm font-medium px-1">Art der Abstimmung</legend>
+        {locked && <p className="text-xs text-gray-600">Es wurde schon abgestimmt - die Art lässt sich nicht mehr ändern.</p>}
+        {POLL_TYPES.map(type => (
+          <label key={type} className={`flex items-start gap-2 ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
+            <input
+              type="radio" name="pollType" value={type} defaultChecked={type === (poll?.pollType ?? 'CHOICE')} disabled={locked}
+              className="w-4 h-4 mt-0.5"
+            />
+            <span>
+              <span className="block text-sm font-medium">{POLL_TYPE_LABELS[type].title}</span>
+              <span className="block text-xs text-gray-500">{POLL_TYPE_LABELS[type].text}</span>
+            </span>
+          </label>
+        ))}
+        <div className="ml-6 flex items-center gap-2 text-sm">
+          <label htmlFor="poll-points-budget">Punkte pro Person (nur bei &quot;Punkte verteilen&quot;)</label>
+          <input
+            id="poll-points-budget" type="number" name="pointsBudget" min={1} max={MAX_POINTS_BUDGET} disabled={locked}
+            defaultValue={poll?.pointsBudget ?? DEFAULT_POINTS_BUDGET}
+            className="w-20 border border-gray-300 p-1.5 rounded"
+          />
+        </div>
+      </fieldset>
+
       <div>
         <label htmlFor="poll-closes-at" className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
         <input
@@ -54,7 +80,7 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
       <div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll?.allowMultipleChoices} className="w-4 h-4" />
-          <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
+          <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar, nur bei &quot;Auswahl&quot;)</span>
         </label>
         <div className="ml-6 mt-2 flex flex-wrap items-center gap-2 text-sm">
           <label htmlFor="poll-min-choices">mindestens</label>
