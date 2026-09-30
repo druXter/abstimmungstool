@@ -50,9 +50,9 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 
 ## B. Mehr Möglichkeiten beim Abstimmen
 
-- [ ] **Sichtbarkeit der Ergebnisse:** immer live (heute) / erst nach eigener Stimme / erst nach Schließung /
+- [x] **Sichtbarkeit der Ergebnisse:** immer live (heute) / erst nach eigener Stimme / erst nach Schließung /
       nur Verwaltung. Betrifft `app/[pollId]/page.tsx`, `poll-results.tsx`.
-- [ ] **Grenzen bei der Mehrfachauswahl:** `minChoices`/`maxChoices` ("wähle 1 bis 3").
+- [x] **Grenzen bei der Mehrfachauswahl:** `minChoices`/`maxChoices` ("wähle 1 bis 3").
 - [ ] **Neue Abstimmungsarten** (größter Umbau: `Vote` braucht Wert/Gewicht, `PollResults` je Art eigene
       Auswertung):
   - [ ] Ja / Vielleicht / Nein pro Option (Doodle-Stil)

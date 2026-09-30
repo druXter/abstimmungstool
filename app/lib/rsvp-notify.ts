@@ -20,13 +20,15 @@ function rsvpAppBaseUrl(): string | null {
  * genutzt wurde) oder ohne konfiguriertes RSVP_APP_BASE_URL/
  * RSVP_VERIFICATION_SECRET. Gewinner siehe app/lib/results.ts. Ebenfalls no-op, wenn
  * die Mindestbeteiligung (Poll.quorum) verfehlt ist: rsvp-app kennt "nicht beschlussfähig"
- * noch nicht und würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen. Bewusst
+ * noch nicht und würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen - und
+ * bei Poll.resultsVisibility = MANAGERS, weil das Ergebnis dann nicht öffentlich ist. Bewusst
  * best-effort mit kurzem Timeout, wie das Gegenstück in rsvp-app - ein nicht
  * erreichbares rsvp-app darf das Schließen der Abstimmung selbst nie verhindern.
  */
 export async function notifyRsvpAppOfResult(pollId: string): Promise<void> {
-  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, title: true, rsvpEventId: true, closedAt: true } })
-  if (!poll || !poll.rsvpEventId || !poll.closedAt) return
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, title: true, rsvpEventId: true, closedAt: true, resultsVisibility: true } })
+  // "Nur Verwaltung": Auf der Event-Seite in rsvp-app stünde das Ergebnis sonst öffentlich.
+  if (!poll || !poll.rsvpEventId || !poll.closedAt || poll.resultsVisibility === 'MANAGERS') return
 
   const base = rsvpAppBaseUrl()
   if (!base) return

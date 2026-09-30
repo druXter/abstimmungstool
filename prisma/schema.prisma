@@ -130,24 +130,24 @@ model LoginThrottle {
 // castVote's "Stimmen dieser Identität für diesen Poll ersetzen"-Logik (siehe dort) -
 // bei false wird dabei serverseitig auf höchstens eine Option gekappt.
 model Poll {
-  id                   String        @id @default(cuid())
+  id                   String            @id @default(cuid())
   title                String
   description          String?
   // Besitzendes Konto. null nur bei Alt-Abstimmungen aus der Zeit ohne Konten (dort
   // gilt weiter creatorToken). Wird beim Löschen eines Kontos vorher umgehängt (siehe
   // deleteUser), die SetNull-Regel ist nur das Sicherheitsnetz.
   ownerId              String?
-  owner                User?         @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner                User?             @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   access               PollAccess[]
-  creatorToken         String        @unique @default(uuid())
+  creatorToken         String            @unique @default(uuid())
   // Nur noch bei Alt-Abstimmungen befüllt (früher: Verwaltungs-Link per Mail). Neue
   // Abstimmungen schreiben dieses Feld nicht mehr - die E-Mail des Kontos genügt.
   creatorEmail         String?
-  voterIdentity        VoterIdentity @default(COOKIE)
+  voterIdentity        VoterIdentity     @default(COOKIE)
   // Zeigt auf der öffentlichen Ergebnisseite zusätzlich, WER für welche Option gestimmt
   // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
   // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus nur mit requireVoterName).
-  showVoterNames       Boolean       @default(false)
+  showVoterNames       Boolean           @default(false)
   // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
   // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
   // rsvp-app für diese Abstimmung antwortet - siehe dort. Nötig, um bei Schließung zu
@@ -155,10 +155,10 @@ model Poll {
   // app/lib/rsvp-notify.ts). Bleibt null, solange rsvp-app nie einen Webhook für diese
   // Abstimmung geschickt hat (z.B. weil der Modus RSVP nie genutzt wurde).
   rsvpEventId          String?
-  allowMultipleChoices Boolean       @default(false)
+  allowMultipleChoices Boolean           @default(false)
   // Nur im Modus COOKIE: Wer abstimmt, muss einen Namen angeben (Vote.voterName). Keine
   // echte Identität - nur soziale Kontrolle, zusammen mit showVoterNames sichtbar.
-  requireVoterName     Boolean       @default(false)
+  requireVoterName     Boolean           @default(false)
   // Höchstzahl an Teilnehmenden (verschiedene voterKeys). Wer schon abgestimmt hat, kann
   // seine Auswahl weiter ändern; neue Personen werden abgewiesen. null = unbegrenzt.
   maxVoters            Int?
@@ -172,7 +172,7 @@ model Poll {
   // Die Stimme hängt dann an einem Schlüssel, der sich nur aus dem Link-Token ableiten lässt
   // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
   // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
-  secretBallot         Boolean       @default(false)
+  secretBallot         Boolean           @default(false)
   // Nur im Modus EMAIL: wer sich bestätigen darf, eine Angabe pro Zeile - "@verein.de" für
   // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
   // app/lib/email-voters.ts; wird auch beim Abstimmen erneut geprüft.
@@ -182,10 +182,17 @@ model Poll {
   quorum               Int?
   // Beim Schließen (manuell oder per Cron) das Ergebnis an das besitzende Konto mailen
   // (app/lib/poll-closed.ts). Nur mit SMTP_HOST wirksam.
-  notifyOwnerOnClose   Boolean       @default(false)
+  notifyOwnerOnClose   Boolean           @default(false)
+  // Wann die öffentliche Seite das Ergebnis zeigt (siehe ResultsVisibility). Die Verwaltung
+  // sieht es immer.
+  resultsVisibility    ResultsVisibility @default(ALWAYS)
+  // Nur bei allowMultipleChoices: wie viele Optionen eine Stimmabgabe mindestens/höchstens
+  // umfassen muss ("wähle 1 bis 3"). null = keine Grenze. Geprüft in castVote.
+  minChoices           Int?
+  maxChoices           Int?
   closesAt             DateTime?
   closedAt             DateTime?
-  createdAt            DateTime      @default(now())
+  createdAt            DateTime          @default(now())
   options              PollOption[]
   votes                Vote[]
   voterLinks           VoterLink[]
@@ -243,6 +250,17 @@ model PollOption {
   label    String
   position Int
   votes    Vote[]
+}
+
+// Wann die öffentliche Abstimmungsseite das Ergebnis zeigt (Poll.resultsVisibility):
+// ALWAYS live, AFTER_VOTE erst nach der eigenen Stimme (oder nach dem Ende), AFTER_CLOSE erst
+// nach dem Ende, MANAGERS nie öffentlich - dann geht es auch nicht an rsvp-app (siehe
+// app/lib/rsvp-notify.ts), dort stünde es sonst auf der Event-Seite.
+enum ResultsVisibility {
+  ALWAYS
+  AFTER_VOTE
+  AFTER_CLOSE
+  MANAGERS
 }
 
 // Wie eine Stimme einer Person zugeordnet wird (Poll.voterIdentity, Vote.identityKind).

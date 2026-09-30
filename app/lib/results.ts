@@ -46,3 +46,22 @@ export async function loadResult(pollId: string): Promise<(PollResult & { poll: 
   const options = poll.options.map(o => ({ id: o.id, label: o.label, votes: o._count.votes }))
   return { ...summarize(options, voters, poll.quorum), poll: { id: poll.id, title: poll.title } }
 }
+
+/**
+ * Wirksame Grenzen einer Mehrfachauswahl. Gelöschte Optionen könnten ein gespeichertes
+ * Minimum unerfüllbar machen - deshalb nie mehr verlangen, als es Optionen gibt.
+ */
+export function choiceLimits(poll: { minChoices: number | null; maxChoices: number | null; options: unknown[] }): { min: number; max: number } {
+  const count = poll.options.length
+  return { min: Math.min(poll.minChoices ?? 1, count), max: Math.min(poll.maxChoices ?? count, count) }
+}
+
+/** Darf die öffentliche Seite das Ergebnis gerade zeigen? (Poll.resultsVisibility) */
+export function resultsVisible(visibility: 'ALWAYS' | 'AFTER_VOTE' | 'AFTER_CLOSE' | 'MANAGERS', state: { hasVoted: boolean; closed: boolean }): boolean {
+  switch (visibility) {
+    case 'ALWAYS': return true
+    case 'AFTER_VOTE': return state.hasVoted || state.closed
+    case 'AFTER_CLOSE': return state.closed
+    case 'MANAGERS': return false
+  }
+}

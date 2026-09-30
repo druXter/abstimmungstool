@@ -8,6 +8,7 @@ import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
 import PollResults from './poll-results'
+import { choiceLimits, resultsVisible } from '../lib/results'
 
 export const dynamic = 'force-dynamic'
 
@@ -18,6 +19,7 @@ const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: str
   voll: { tone: 'warning', text: 'Die Höchstzahl an Teilnehmenden ist inzwischen erreicht - deine Stimme wurde nicht gezählt.' },
   'code-falsch': { tone: 'error', text: 'Der Zugangscode stimmt nicht.' },
   'code-gesperrt': { tone: 'error', text: 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.' },
+  auswahl: { tone: 'error', text: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Auswahl wurde nicht gespeichert.' },
   'mail-gesendet': { tone: 'success', text: 'Wir haben dir einen Bestätigungslink geschickt. Öffne ihn in diesem Browser, um abzustimmen - er ist 24 Stunden gültig.' },
   'mail-bestaetigt': { tone: 'success', text: 'Deine Adresse ist bestätigt. Du kannst jetzt abstimmen.' },
   'mail-ungueltig': { tone: 'error', text: 'Bitte gib eine gültige E-Mail-Adresse ein.' },
@@ -108,6 +110,8 @@ export default async function PollPage({
   const isFull = poll.maxVoters !== null && distinctVoters >= poll.maxVoters && !hasVoted
   const canVote = !isClosed && !block && !isFull
   const asksForName = poll.voterIdentity === 'COOKIE' && poll.requireVoterName
+  const showResults = resultsVisible(poll.resultsVisibility, { hasVoted, closed: isClosed })
+  const limits = choiceLimits(poll)
   const secretLinks = poll.voterIdentity === 'LINK' && poll.secretBallot
   const namesVisible = (poll.voterIdentity !== 'COOKIE' && !secretLinks) || asksForName
 
@@ -231,7 +235,7 @@ export default async function PollPage({
             {namesVisible && (
               // Die Datenschutzerklärung (Punkt 4) verweist auf diesen Hinweis.
               <p className="text-xs text-gray-500">
-                {poll.showVoterNames
+                {poll.showVoterNames && poll.resultsVisibility !== 'MANAGERS'
                   ? 'Hinweis: Wer abstimmt, wird auf dieser Seite namentlich bei der gewählten Option angezeigt.'
                   : 'Hinweis: Wer die Abstimmung verwaltet, sieht, wofür du gestimmt hast. Öffentlich bleibt das Ergebnis anonym.'}
               </p>
@@ -250,7 +254,7 @@ export default async function PollPage({
               </div>
             )}
             {poll.allowMultipleChoices && (
-              <p className="text-xs text-gray-500">Mehrere Optionen wählbar.</p>
+              <p className="text-xs text-gray-500">{choiceHint(limits, poll.options.length)}</p>
             )}
             {poll.options.map(option => (
               <label
@@ -280,19 +284,31 @@ export default async function PollPage({
           </form>
         )}
 
-        <div className="bg-white p-6 rounded-lg shadow">
-          <h2 className="font-bold text-gray-900 mb-4">
-            Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
-          </h2>
-          <PollResults
-            options={poll.options}
-            distinctVoters={distinctVoters}
-            myVoteOptionIds={myVoteOptionIds}
-            showVoterNames={poll.showVoterNames}
-            quorum={poll.quorum}
-            closed={isClosed}
-          />
-        </div>
+        {showResults ? (
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="font-bold text-gray-900 mb-4">
+              Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
+            </h2>
+            <PollResults
+              options={poll.options}
+              distinctVoters={distinctVoters}
+              myVoteOptionIds={myVoteOptionIds}
+              showVoterNames={poll.showVoterNames}
+              quorum={poll.quorum}
+              closed={isClosed}
+            />
+          </div>
+        ) : (
+          <div className="bg-white p-6 rounded-lg shadow text-sm text-gray-600">
+            <h2 className="font-bold text-gray-900 mb-2">Ergebnis</h2>
+            <p>
+              {poll.resultsVisibility === 'AFTER_VOTE' && 'Das Ergebnis siehst du, sobald du abgestimmt hast.'}
+              {poll.resultsVisibility === 'AFTER_CLOSE' && 'Das Ergebnis wird nach dem Ende der Abstimmung angezeigt.'}
+              {poll.resultsVisibility === 'MANAGERS' && 'Das Ergebnis sieht nur, wer die Abstimmung verwaltet.'}
+              {' '}Bisher {distinctVoters === 1 ? 'hat 1 Person' : `haben ${distinctVoters} Personen`} abgestimmt.
+            </p>
+          </div>
+        )}
 
         <p className="text-center text-xs text-gray-400">
           <Link href="/" className="hover:underline">Zur Startseite</Link>
@@ -300,4 +316,13 @@ export default async function PollPage({
       </div>
     </main>
   )
+}
+
+/** "Wähle 1 bis 3 Optionen." - Hinweis zur Mehrfachauswahl passend zu den Grenzen (siehe choiceLimits). */
+function choiceHint({ min, max }: { min: number; max: number }, count: number): string {
+  if (min <= 1 && max >= count) return 'Mehrere Optionen wählbar.'
+  if (min === max) return `Wähle genau ${min} Option${min === 1 ? '' : 'en'}.`
+  if (min <= 1) return `Wähle bis zu ${max} Optionen.`
+  if (max >= count) return `Wähle mindestens ${min} Optionen.`
+  return `Wähle ${min} bis ${max} Optionen.`
 }

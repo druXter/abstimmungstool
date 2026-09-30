@@ -27,7 +27,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices'>
 
 /** Wert für <input type="datetime-local"> in der Zeitzone des Servers (TZ, siehe package.json/docker-compose.yml). */
 function toDateTimeLocal(date: Date | null): string {
@@ -57,10 +57,35 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
         />
       </div>
 
-      <label className="flex items-center gap-2 cursor-pointer">
-        <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll?.allowMultipleChoices} className="w-4 h-4" />
-        <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
-      </label>
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll?.allowMultipleChoices} className="w-4 h-4" />
+          <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
+        </label>
+        <div className="ml-6 mt-2 flex flex-wrap items-center gap-2 text-sm">
+          <label htmlFor="poll-min-choices">mindestens</label>
+          <input id="poll-min-choices" type="number" name="minChoices" min={1} max={25} defaultValue={poll?.minChoices ?? ''} placeholder="1" className="w-20 border border-gray-300 p-1.5 rounded" />
+          <label htmlFor="poll-max-choices">höchstens</label>
+          <input id="poll-max-choices" type="number" name="maxChoices" min={1} max={25} defaultValue={poll?.maxChoices ?? ''} placeholder="alle" className="w-20 border border-gray-300 p-1.5 rounded" />
+          <span className="text-xs text-gray-500">Optionen pro Stimme (optional, nur bei Mehrfachauswahl)</span>
+        </div>
+      </div>
+
+      <div>
+        <label htmlFor="poll-results-visibility" className="block text-sm font-medium mb-1">Ergebnis öffentlich zeigen</label>
+        <select
+          id="poll-results-visibility" name="resultsVisibility" defaultValue={poll?.resultsVisibility ?? 'ALWAYS'}
+          className="w-full border border-gray-300 p-2 rounded bg-white"
+        >
+          <option value="ALWAYS">immer (live)</option>
+          <option value="AFTER_VOTE">erst nach der eigenen Stimme</option>
+          <option value="AFTER_CLOSE">erst nach dem Ende der Abstimmung</option>
+          <option value="MANAGERS">nie - nur für die Verwaltung</option>
+        </select>
+        <p className="text-xs text-gray-500 mt-1">
+          Wer die Abstimmung verwaltet, sieht das Ergebnis immer. Bei &quot;nur Verwaltung&quot; wird es auch nicht an rsvp-app gemeldet.
+        </p>
+      </div>
 
       <fieldset className="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-3">
         <legend className="text-sm font-medium text-amber-900 px-1">Wer darf abstimmen?</legend>

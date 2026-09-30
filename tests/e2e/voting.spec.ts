@@ -213,3 +213,65 @@ test.describe('Bearbeiten', () => {
     await expect(page.getByText('Die Namen oben siehst nur du')).toBeVisible()
   })
 })
+
+test.describe('Ergebnis-Sichtbarkeit und Auswahlgrenzen', () => {
+  test('erst nach der eigenen Stimme', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { resultsVisibility: 'AFTER_VOTE' })
+    await prisma.vote.create({ data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'COOKIE', voterKey: `cookie:vis-${poll.id}` } })
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByText('Das Ergebnis siehst du, sobald du abgestimmt hast. Bisher hat 1 Person abgestimmt.')).toBeVisible()
+    await expect(page.getByText('Live-Ergebnis')).toHaveCount(0)
+    await page.getByRole('radio', { name: 'Sushi' }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(page.getByText('Live-Ergebnis (2 Personen)')).toBeVisible()
+  })
+
+  test('erst nach dem Ende / nur Verwaltung - die Verwaltung sieht es immer', async ({ page }) => {
+    const owner = await createAccount()
+    const afterClose = await createPoll(owner.id, { resultsVisibility: 'AFTER_CLOSE' })
+    const managers = await createPoll(owner.id, { resultsVisibility: 'MANAGERS', closedAt: new Date() })
+
+    await page.goto(`/${afterClose.id}`)
+    await expect(page.getByText('Das Ergebnis wird nach dem Ende der Abstimmung angezeigt.')).toBeVisible()
+    await prisma.poll.update({ where: { id: afterClose.id }, data: { closedAt: new Date() } })
+    await page.reload()
+    await expect(page.getByText('Live-Ergebnis (0 Personen)')).toBeVisible()
+
+    await page.goto(`/${managers.id}`)
+    await expect(page.getByText('Das Ergebnis sieht nur, wer die Abstimmung verwaltet.')).toBeVisible()
+    await login(page, owner.email)
+    await page.goto(`/${managers.id}/verwalten`)
+    await expect(page.getByText('Ergebnis (0 Personen)')).toBeVisible()
+  })
+
+  test('Mehrfachauswahl 2 bis 2: Hinweis und serverseitige Prüfung', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { allowMultipleChoices: true, minChoices: 2, maxChoices: 2 }, ['A', 'B', 'C'])
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByText('Wähle genau 2 Optionen.')).toBeVisible()
+
+    await page.getByRole('checkbox', { name: 'A' }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await page.waitForURL(/hinweis=auswahl/)
+    await expect(page.getByText('Bitte halte dich an die angegebene Anzahl von Optionen')).toBeVisible()
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+
+    for (const label of ['A', 'B', 'C']) await page.getByRole('checkbox', { name: label }).check()
+    // Die Meldung steht noch von eben da - daher auf die Antwort der Action warten, nicht auf sie.
+    const rejected = page.waitForResponse(response => response.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await rejected
+    await page.waitForLoadState('networkidle')
+    await expect(page.getByRole('checkbox', { name: 'C' })).not.toBeChecked()
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+
+    // Nach der Ablehnung ist die Seite neu geladen, die Auswahl also leer.
+    for (const label of ['A', 'B']) await page.getByRole('checkbox', { name: label }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(page.getByText('A ✓')).toBeVisible()
+    await expect(page.getByText('Bitte halte dich an die angegebene Anzahl von Optionen')).toHaveCount(0)
+    expect(new URL(page.url()).searchParams.has('hinweis')).toBe(false)
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(2)
+  })
+})

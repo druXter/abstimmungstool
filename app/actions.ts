@@ -2,6 +2,7 @@
 'use server'
 
 import { redirect } from 'next/navigation'
+import type { ResultsVisibility } from '@prisma/client'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
@@ -11,6 +12,7 @@ import { accessCodeRule, clientIp, newVoterRule, reserve, voteEmailRules } from 
 import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
 import { afterPollClosed } from './lib/poll-closed'
+import { choiceLimits } from './lib/results'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
@@ -20,6 +22,7 @@ const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-fi
 const MAX_TEXT_LENGTH = 200
 const MAX_VOTER_NAME_LENGTH = 60
 const MAX_VOTERS_LIMIT = 10_000
+const RESULTS_VISIBILITIES: readonly ResultsVisibility[] = ['ALWAYS', 'AFTER_VOTE', 'AFTER_CLOSE', 'MANAGERS']
 
 /**
  * Die Einstellungen, die Anlegen und Bearbeiten gemeinsam haben (alles außer Titel,
@@ -30,10 +33,20 @@ function parsePollSettings(formData: FormData) {
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const maxVoters = Number.parseInt(formString(formData, 'maxVoters', 10), 10)
   const quorum = Number.parseInt(formString(formData, 'quorum', 10), 10)
+  const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
+  // Grenzen nur bei Mehrfachauswahl, und nur wenn sie zusammenpassen (min <= max).
+  const minChoices = Number.parseInt(formString(formData, 'minChoices', 3), 10)
+  const maxChoices = Number.parseInt(formString(formData, 'maxChoices', 3), 10)
+  const min = allowMultipleChoices && Number.isInteger(minChoices) && minChoices >= 1 ? Math.min(minChoices, MAX_OPTIONS) : null
+  const max = allowMultipleChoices && Number.isInteger(maxChoices) && maxChoices >= 1 ? Math.min(maxChoices, MAX_OPTIONS) : null
+  const visibility = RESULTS_VISIBILITIES.find(v => v === formData.get('resultsVisibility')) ?? 'ALWAYS'
   return {
     closesAt: closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null,
     showVoterNames: formData.get('showVoterNames') === 'on',
-    allowMultipleChoices: formData.get('allowMultipleChoices') === 'on',
+    allowMultipleChoices,
+    minChoices: min !== null && max !== null && min > max ? null : min,
+    maxChoices: max,
+    resultsVisibility: visibility,
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
     accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
@@ -237,13 +250,18 @@ export async function castVote(formData: FormData): Promise<void> {
   let selectedOptionIds = [...new Set(rawOptionIds)].filter(id => validOptionIds.has(id))
   if (selectedOptionIds.length === 0) return
 
+  const identity = identityFromForm(formData)
+
   // Bei einer Einzelauswahl-Abstimmung serverseitig auf höchstens eine Option kappen,
-  // selbst wenn ein manipulierter Client mehrere optionId-Werte schickt.
+  // selbst wenn ein manipulierter Client mehrere optionId-Werte schickt. Bei Mehrfachauswahl
+  // die Grenzen prüfen (ohne JavaScript kann die Seite sie nicht erzwingen, daher ein Hinweis).
   if (!poll.allowMultipleChoices) {
     selectedOptionIds = [selectedOptionIds[0]]
+  } else {
+    const { min, max } = choiceLimits(poll)
+    if (selectedOptionIds.length < min || selectedOptionIds.length > max) redirect(pollUrl(pollId, identity, 'auswahl'))
   }
 
-  const identity = identityFromForm(formData)
   const { voter, block } = await resolveVoter(poll, identity, { create: true })
   if (block || !voter) return
 
@@ -267,6 +285,9 @@ export async function castVote(formData: FormData): Promise<void> {
     redirect(pollUrl(pollId, identity, 'voll'))
   }
   revalidatePath(`/${pollId}`)
+  // Auf die Seite ohne ?hinweis= - sonst stünde eine frühere Ablehnung (z.B. falsche Anzahl)
+  // auch nach der erfolgreichen Stimme noch da. Identitäts-Parameter bleiben erhalten.
+  redirect(pollUrl(pollId, identity))
 }
 
 /**
@@ -372,6 +393,9 @@ export async function duplicatePoll(formData: FormData) {
       allowedEmails: source.allowedEmails,
       quorum: source.quorum,
       notifyOwnerOnClose: source.notifyOwnerOnClose,
+      resultsVisibility: source.resultsVisibility,
+      minChoices: source.minChoices,
+      maxChoices: source.maxChoices,
       options: {
         create: [...source.options].sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, position }))
       }

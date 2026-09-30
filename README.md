@@ -33,6 +33,14 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Hürden ohne starke Identität (optional, pro Abstimmung)** - siehe "Hürden" unten:
   Pflicht-Namensfeld im Cookie-Modus, Höchstzahl an Teilnehmenden, Zugangscode. Neue
   Cookie-Identitäten werden außerdem pro IP und Abstimmung gedrosselt.
+* **Grenzen bei Mehrfachauswahl** (`Poll.minChoices`/`maxChoices`, optional): "wähle 1 bis
+  3". Ohne JavaScript kann die Seite das nicht erzwingen - `castVote` prüft und lehnt mit
+  Hinweis ab. Gelöschte Optionen machen ein Minimum nie unerfüllbar (`choiceLimits` in
+  `app/lib/results.ts`).
+* **Sichtbarkeit des Ergebnisses** (`Poll.resultsVisibility`): immer live (Standard), erst
+  nach der eigenen Stimme, erst nach dem Ende oder nie öffentlich (nur Verwaltung). Solange
+  es verborgen ist, zeigt die Seite nur die Zahl der Teilnehmenden. Bei "nur Verwaltung"
+  geht das Ergebnis auch nicht an rsvp-app (dort stünde es öffentlich).
 * **Live-Ergebnis:** Stimmenanzahl und Prozentanteil pro Option, in Echtzeit. Der
   Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
@@ -394,7 +402,7 @@ Schließen (`closePoll`) als auch beim automatischen Schließen-Cronjob (siehe u
 Gewinner = alle Optionen mit der höchsten Stimmenzahl (kann mehrere bei Gleichstand
 sein, oder keine bei 0 Stimmen). Best-effort mit 5s-Timeout - ein nicht erreichbares
 rsvp-app verhindert nie das Schließen der Abstimmung selbst. Ist die Mindestbeteiligung
-verfehlt, unterbleibt die Meldung: rsvp-app kennt "nicht beschlussfähig" noch nicht und
+verfehlt oder ist das Ergebnis auf "nur Verwaltung" gestellt, unterbleibt die Meldung. Zum Quorum: rsvp-app kennt "nicht beschlussfähig" noch nicht und
 würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen (Folgepunkt in
 `TODO.md`).
 
