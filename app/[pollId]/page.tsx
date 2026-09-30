@@ -128,6 +128,13 @@ export default async function PollPage({
           </Hint>
         )}
 
+        {!isClosed && block === 'account-missing' && (
+          <Hint>
+            Für diese Abstimmung brauchst du ein Konto, damit jede Person nur einmal abstimmt.{' '}
+            <Link href={`/anmelden?next=${encodeURIComponent(`/${poll.id}`)}`} className="underline font-medium">Jetzt anmelden</Link>
+          </Hint>
+        )}
+
         {!isClosed && block === 'unavailable' && (
           <Hint>
             Für diese Abstimmung ist eine Art der Stimmabgabe eingestellt, die dieses Tool noch nicht anbietet.
@@ -149,6 +156,11 @@ export default async function PollPage({
             {voter?.kind === 'RSVP' && (
               <p className="text-xs text-gray-500">
                 Angemeldet als <strong>{voter.name}</strong> (über rsvp-app verifiziert)
+              </p>
+            )}
+            {voter?.kind === 'ACCOUNT' && (
+              <p className="text-xs text-gray-500">
+                Du stimmst mit deinem Konto ab: <strong>{voter.name}</strong>
               </p>
             )}
             {namesVisible && (

@@ -87,7 +87,12 @@ export default function DatenschutzPage() {
             Stimme wird entfernt.
           </p>
           <p className="mt-2">
-            Die E-Mail-Adressen sehen die Ersteller:in und Personen mit Verwaltungs-Freigabe auf der Verwaltungsseite.
+            Ebenso kann eine Abstimmung <strong>nur mit Konto</strong> möglich sein. Dann speichern wir zu deiner
+            Stimme die Kennung deines Kontos und deinen Kontonamen (ohne Namen deine E-Mail-Adresse). Wird dein Konto
+            gelöscht, bleibt die Stimme gezählt, der Name wird aber entfernt.
+          </p>
+          <p className="mt-2">
+            Die E-Mail-Adressen bzw. Namen sehen die Ersteller:in und Personen mit Verwaltungs-Freigabe auf der Verwaltungsseite.
             Nur wenn die Ersteller:in die Option &quot;Abstimmende namentlich anzeigen&quot; aktiviert, sind sie auch
             auf der öffentlichen Ergebnisseite sichtbar. Die Abstimmungsseite weist dich darauf hin.
           </p>

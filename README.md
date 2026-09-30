@@ -19,6 +19,8 @@ anlegt und verwaltet (siehe "Konten" unten).
   * **Offen für alle (Standard, `COOKIE`):** Identifikation über ein zufälliges
     Browser-Cookie (`voter_token`), kein Konto. Die eigene Auswahl kann jederzeit
     geändert werden, solange die Abstimmung offen ist.
+  * **Nur mit Konto (`ACCOUNT`):** Eine Stimme pro Konto dieses Tools, geräteübergreifend -
+    siehe "Abstimmen mit Konto" unten.
   * **Nur über rsvp-app (`RSVP`):** Statt des Cookies wird eine über `rsvp-app`
     verifizierte E-Mail als Identität genutzt - siehe "Verifizierte Abstimmungen"
     unten. Verhindert Mehrfachabstimmen auch über verschiedene Geräte/Browser hinweg.
@@ -48,7 +50,7 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
 | `RSVP` | von rsvp-app bestätigte E-Mail, nur Zusagende | umgesetzt |
 | `LINK` | persönlicher Stimmlink | geplant (`TODO.md` A1) |
 | `EMAIL` | selbst bestätigte E-Mail-Adresse | geplant (A2) |
-| `ACCOUNT` | Konto | geplant (A3) |
+| `ACCOUNT` | Konto dieses Tools (auch per Verbund angelegt) | umgesetzt |
 
 * Jede Stimme speichert `identityKind`, einen `voterKey` mit der Art als Präfix
   (`cookie:…`, `rsvp:…` - Schlüssel verschiedener Arten können so nie kollidieren) und
@@ -88,6 +90,19 @@ Identität ersetzen** - die Oberfläche sagt das jeweils beim Einstellen:
 
 Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Seite
 (`?hinweis=…`, feste Texte in `app/[pollId]/page.tsx`).
+
+## Abstimmen mit Konto (Modus `ACCOUNT`)
+
+* Abstimmen kann jedes Konto dieses Tools - lokal eingeladen oder beim ersten Verbund-Login
+  entstanden (siehe "Konten-Verbund"). Ohne Anmeldung zeigt die Seite einen Hinweis mit
+  Link zur Anmeldung, die danach auf die Abstimmung zurückführt.
+* `voterKey = account:<User.id>` - nie die E-Mail, die sich ändern lässt. Als Name wird der
+  Kontoname gespeichert, sonst die E-Mail (bei jeder Änderung der Auswahl aktualisiert).
+* Wer nur abstimmen soll, bekommt ein Konto mit der Rolle **Moderator**: Ohne Freigabe kann
+  es nichts verwalten. Eigene **Teilnehmendenkonten** (ohne jede Verwaltungsrolle, auch aus
+  rsvp-app) sind für den Suite-Verbund geplant (`TODO.md` D1).
+* **Wird ein Konto gelöscht** (von Hand oder per Löschfrist), bleiben seine Stimmen gezählt
+  - sonst änderten sich Ergebnisse rückwirkend -, verlieren aber den Namen.
 
 ## Verifizierte Abstimmungen (Modus `RSVP`)
 

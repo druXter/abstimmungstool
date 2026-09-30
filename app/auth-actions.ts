@@ -7,6 +7,7 @@ import { revalidatePath } from 'next/cache'
 import { sanitizeNextPath } from 'suite-kit'
 import type { Role } from '@prisma/client'
 import { prisma } from './lib/prisma'
+import { voterKey } from './lib/voter-identity'
 import { baseUrl } from './lib/base-url'
 import { formPassword, formString, normalizeEmail } from './lib/form'
 import { hashPassword, validatePassword, verifyAgainstDummy, verifyPassword } from './lib/password'
@@ -270,6 +271,9 @@ export async function deleteUser(formData: FormData) {
 
   await prisma.$transaction([
     prisma.poll.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
+    // Stimmen im Modus ACCOUNT bleiben gezählt (sonst änderten sich Ergebnisse rückwirkend),
+    // verlieren aber den Namen - übrig bleibt nur die ID eines Kontos, das es nicht mehr gibt.
+    prisma.vote.updateMany({ where: { voterKey: voterKey('ACCOUNT', target.id) }, data: { voterName: null } }),
     prisma.user.delete({ where: { id: target.id } })
   ])
 

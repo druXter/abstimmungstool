@@ -2,6 +2,7 @@
 import type { VoterIdentity } from '@prisma/client'
 import { getOrCreateVoterToken, getVoterToken } from './voter'
 import { verifyRsvpToken } from './rsvp-verification'
+import { getCurrentUser } from './auth'
 
 /**
  * Die EINE Stelle, die aus einer Anfrage die Identität einer abstimmenden Person macht -
@@ -21,9 +22,10 @@ export type Voter = {
  * Warum (noch) nicht abgestimmt werden kann bzw. was die Oberfläche dazu sagen soll.
  * - rsvp-missing:  Modus RSVP, aber kein gültiger Token (direkter Aufruf ohne rsvp-app)
  * - rsvp-declined: Modus RSVP, Person hat für den Termin abgesagt
+ * - account-missing: Modus ACCOUNT, niemand angemeldet
  * - unavailable:   Modus ist vorgesehen, aber noch nicht umgesetzt (fail-closed)
  */
-export type VoterBlock = 'rsvp-missing' | 'rsvp-declined' | 'unavailable'
+export type VoterBlock = 'rsvp-missing' | 'rsvp-declined' | 'account-missing' | 'unavailable'
 
 export type VoterState = {
   /** Bereits bekannte Identität - für "deine Auswahl" und die Stimmabgabe. */
@@ -33,7 +35,7 @@ export type VoterState = {
 }
 
 /** Die Modi, die man beim Anlegen/Bearbeiten wählen kann (die übrigen sind noch nicht umgesetzt). */
-export const OFFERED_IDENTITIES: readonly VoterIdentity[] = ['COOKIE', 'RSVP']
+export const OFFERED_IDENTITIES: readonly VoterIdentity[] = ['COOKIE', 'ACCOUNT', 'RSVP']
 
 /** Liest den gewählten Modus aus einem Formular - alles Unbekannte fällt auf den Cookie-Standard zurück. */
 export function parseVoterIdentity(value: FormDataEntryValue | null): VoterIdentity {
@@ -76,9 +78,15 @@ export async function resolveVoter(
       const voter: Voter = { kind: 'RSVP', key: voterKey('RSVP', identity.email), name: identity.email }
       return { voter, block: identity.attending ? null : 'rsvp-declined' }
     }
+    case 'ACCOUNT': {
+      // Jedes Konto dieses Tools, auch ein über den Verbund angelegtes (siehe README "Konten").
+      // Schlüssel ist die Konto-ID, nie die E-Mail - die lässt sich ändern.
+      const user = await getCurrentUser()
+      if (!user) return { voter: null, block: 'account-missing' }
+      return { voter: { kind: 'ACCOUNT', key: voterKey('ACCOUNT', user.id), name: user.name || user.email }, block: null }
+    }
     case 'LINK':
     case 'EMAIL':
-    case 'ACCOUNT':
       return { voter: null, block: 'unavailable' }
   }
 }

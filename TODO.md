@@ -33,7 +33,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
       (sonst Mailschleuder).
 
 ### A3. Mit Konto abstimmen
-- [ ] Mit lokalem Konto bzw. Suite-Konto abstimmen (Sessions/Verbund existieren schon).
+- [x] Mit lokalem Konto bzw. Suite-Konto abstimmen (Sessions/Verbund existieren schon).
 - [ ] Erweiterung auf **Teilnehmendenkonten** aus dem Suite-Verbund, siehe Abschnitt D.
 
 ### A4. Zugangscode pro Abstimmung

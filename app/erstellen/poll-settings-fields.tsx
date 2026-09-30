@@ -14,7 +14,10 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   },
   LINK: { title: 'Persönliche Stimmlinks', text: '' },
   EMAIL: { title: 'Bestätigte E-Mail-Adresse', text: '' },
-  ACCOUNT: { title: 'Mit Konto', text: '' }
+  ACCOUNT: {
+    title: 'Nur mit Konto (1 Stimme pro Konto)',
+    text: 'Abstimmen kann, wer hier ein Konto hat - auch eines, das über ein verbundenes Tool entstanden ist. Angezeigt wird der Name, sonst die E-Mail des Kontos. Konten legst du unter "Nutzer" an (Rolle Moderator genügt).'
+  }
 }
 
 type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode'>

@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { expect, test } from '@playwright/test'
-import { createAccount, createPoll, login, prisma, uniqueEmail } from './helpers'
+import { createAccount, createPoll, login, PASSWORD, prisma, uniqueEmail } from './helpers'
 import { TEST_RSVP_SECRET } from '../../playwright.config'
 
 // Stimmabgabe und Identitätsmodell (Poll.voterIdentity, siehe app/lib/voter-identity.ts).
@@ -128,6 +128,61 @@ test.describe('Modus RSVP', () => {
     const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
     await page.goto(`/${poll.id}?verify=${signRsvp({ email: uniqueEmail('gast'), pollId: 'eine-andere', attending: true })}`)
     await expect(page.getByText('nur über den entsprechenden Link/Button in rsvp-app erreichbar')).toBeVisible()
+  })
+})
+
+test.describe('Modus ACCOUNT', () => {
+  test('ohne Anmeldung Hinweis, nach Anmeldung zurück und abstimmen - geräteübergreifend eine Stimme', async ({ page, browser }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { voterIdentity: 'ACCOUNT', showVoterNames: true })
+    const voter = await prisma.user.update({ where: { id: (await createAccount('MODERATOR')).id }, data: { name: 'Berta' } })
+
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByText('Für diese Abstimmung brauchst du ein Konto')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
+    await page.getByRole('link', { name: 'Jetzt anmelden' }).click()
+    await page.getByLabel('E-Mail').fill(voter.email)
+    await page.getByLabel('Passwort', { exact: true }).fill(PASSWORD)
+    await page.getByRole('main').getByRole('button', { name: 'Anmelden' }).click()
+    await page.waitForURL(url => url.pathname === `/${poll.id}`)
+
+    await expect(page.getByText('Du stimmst mit deinem Konto ab: Berta')).toBeVisible()
+    await page.getByRole('radio', { name: 'Pizza' }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(page.getByText('Pizza ✓')).toBeVisible()
+    await expect(page.getByText('Berta', { exact: true }).and(page.locator('p'))).toBeVisible()
+    const stored = await prisma.vote.findFirstOrThrow({ where: { pollId: poll.id } })
+    expect(stored).toMatchObject({ identityKind: 'ACCOUNT', voterKey: `account:${voter.id}`, voterName: 'Berta' })
+
+    // Anderes Gerät, gleiches Konto: dieselbe Stimme, keine zweite.
+    const other = await (await browser.newContext()).newPage()
+    await login(other, voter.email)
+    await other.goto(`/${poll.id}`)
+    await expect(other.getByText('Pizza ✓')).toBeVisible()
+    await other.getByRole('radio', { name: 'Sushi' }).check()
+    await other.getByRole('button', { name: 'Auswahl speichern' }).click()
+    await expect(other.getByText('Sushi ✓')).toBeVisible()
+    await expect(other.getByText('Live-Ergebnis (1 Person)')).toBeVisible()
+    await other.context().close()
+  })
+
+  test('Löschen des Kontos behält die Stimme, entfernt aber den Namen', async ({ page }) => {
+    const admin = await createAccount('ADMIN')
+    const poll = await createPoll(admin.id, { voterIdentity: 'ACCOUNT' })
+    const voter = await createAccount('MODERATOR')
+    await prisma.vote.create({
+      data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'ACCOUNT', voterKey: `account:${voter.id}`, voterName: voter.email }
+    })
+
+    await login(page, admin.email)
+    await page.goto('/nutzer')
+    const row = page.getByRole('listitem').filter({ hasText: voter.email })
+    page.once('dialog', dialog => dialog.accept())
+    await row.getByRole('button', { name: /Löschen/ }).click()
+    await expect(page.getByText(voter.email)).toHaveCount(0)
+
+    const stored = await prisma.vote.findFirstOrThrow({ where: { pollId: poll.id } })
+    expect(stored.voterName).toBeNull()
   })
 })
 

@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { safeEqual } from '../../../lib/permissions'
+import { voterKey } from '../../../lib/voter-identity'
 
 // Bewusst dieselben Fristen wie in rsvp-app (dort app/api/cron/cleanup/route.ts), damit die
 // Tools der Suite einheitlich mit Daten umgehen und die Datenschutzerklärungen dieselben
@@ -67,7 +68,12 @@ export async function GET(request: Request) {
     where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} } },
     select: { id: true }
   })
-  // Sitzungen, Verknüpfungen und Freigaben verschwinden per Cascade mit dem Konto.
+  // Sitzungen, Verknüpfungen und Freigaben verschwinden per Cascade mit dem Konto. Stimmen im
+  // Modus ACCOUNT bleiben gezählt, verlieren aber den Namen (wie bei deleteUser).
+  await prisma.vote.updateMany({
+    where: { voterKey: { in: inactiveUsers.map(u => voterKey('ACCOUNT', u.id)) } },
+    data: { voterName: null }
+  })
   await prisma.user.deleteMany({ where: { id: { in: inactiveUsers.map(u => u.id) } } })
 
   await prisma.session.deleteMany({ where: { expiresAt: { lt: now } } })
