@@ -199,6 +199,9 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   Einsatz mit Externen prüfen lassen und bei Änderungen der Datenverarbeitung mitpflegen.
   Impressum und Verantwortlicher kommen aus den `IMPRESSUM_*`-Variablen.
 
+Geplante Erweiterungen (u.a. Schutz vor Mehrfachabstimmung ohne rsvp-app, weitere
+Abstimmungsarten, Suite-Verbund für Teilnehmendenkonten) stehen in `TODO.md`.
+
 ## Verknüpfung mit rsvp-app (umgesetzt)
 
 Dieses Tool ist so angelegt, dass es *optional* von `rsvp-app` (separates Projekt,
