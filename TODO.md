@@ -9,14 +9,14 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 ## A. Schutz vor Mehrfachabstimmung
 
 ### A0. Grundlage: Identitätsmodell verallgemeinern (Voraussetzung für A1-A5)
-- [ ] `Poll.voterIdentity` (Enum: `COOKIE`, `LINK`, `EMAIL`, `ACCOUNT`, `RSVP`) ersetzt den Schalter
+- [x] `Poll.voterIdentity` (Enum: `COOKIE`, `LINK`, `EMAIL`, `ACCOUNT`, `RSVP`) ersetzt den Schalter
       `requireRsvpVerification`.
-- [ ] `Vote`: `identityKind` + `voterKey` statt `voterToken`/`verifiedEmail`, Eindeutigkeit per
+- [x] `Vote`: `identityKind` + `voterKey` statt `voterToken`/`verifiedEmail`, Eindeutigkeit per
       `@@unique([pollId, voterKey, optionId])`. `replaceVotes`/`castVote` (`app/actions.ts`) lösen nur noch
       einen Schlüssel auf.
-- [ ] Umzugsskript für die Bestandsdaten (Cookie- und RSVP-Stimmen). Es gibt keinen `migrations`-Ordner, nur
+- [x] Umzugsskript für die Bestandsdaten (Cookie- und RSVP-Stimmen). Es gibt keinen `migrations`-Ordner, nur
       `db push` - Skript einmalig vor/nach dem Push ausführen, Backup vorher.
-- [ ] `showVoterNames` auf alle Modi mit Namen/E-Mail verallgemeinern (heute nur mit RSVP wirksam).
+- [x] `showVoterNames` auf alle Modi mit Namen/E-Mail verallgemeinern (heute nur mit RSVP wirksam).
 
 ### A1. Persönliche Stimmlinks
 - [ ] Verwaltung gibt eine Namensliste (oder nur eine Anzahl) ein, pro Person ein Link `/[pollId]?k=…`.

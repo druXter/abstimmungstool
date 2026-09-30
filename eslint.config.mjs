@@ -12,8 +12,9 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     "test-results/**",
     "playwright-report/**",
-    // Eigenständiges Node-Skript (CommonJS, läuft ohne Build) - kein App-Code.
+    // Eigenständige Node-Skripte (CommonJS, laufen ohne Build) - kein App-Code.
     "create-user.js",
+    "scripts/**",
   ]),
 ]);
 

@@ -7,6 +7,7 @@ import { getPollLevel } from '../../../lib/permissions'
 import { updatePoll } from '../../../actions'
 import SubmitButton from '../../../ui/submit-button'
 import OptionsFieldList from '../../../erstellen/options-field-list'
+import VoterIdentityFields from '../../../erstellen/voter-identity-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -68,8 +69,9 @@ export default async function BearbeitenPage({
           {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
 
           <div>
-            <label className="block text-sm font-medium mb-1">Frage / Titel</label>
+            <label htmlFor="poll-title" className="block text-sm font-medium mb-1">Frage / Titel</label>
             <input
+              id="poll-title"
               type="text"
               name="title"
               defaultValue={poll.title}
@@ -80,8 +82,9 @@ export default async function BearbeitenPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Beschreibung (optional)</label>
+            <label htmlFor="poll-description" className="block text-sm font-medium mb-1">Beschreibung (optional)</label>
             <textarea
+              id="poll-description"
               name="description"
               defaultValue={poll.description || ''}
               rows={2}
@@ -131,8 +134,8 @@ export default async function BearbeitenPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
-            <input type="datetime-local" name="closesAt" defaultValue={formattedClosesAt} className="w-full border border-gray-300 p-2 rounded" />
+            <label htmlFor="poll-closes-at" className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
+            <input id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={formattedClosesAt} className="w-full border border-gray-300 p-2 rounded" />
           </div>
 
           <label className="flex items-center gap-2 cursor-pointer">
@@ -140,29 +143,11 @@ export default async function BearbeitenPage({
             <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
           </label>
 
-          <div className="rounded-md border border-amber-200 bg-amber-50 p-4 space-y-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="requireRsvpVerification" defaultChecked={poll.requireRsvpVerification} className="w-4 h-4" />
-              <span className="text-sm font-medium text-amber-900">
-                Nur über rsvp-app abstimmbar (max. 1 Stimme pro Person)
-              </span>
-            </label>
-            <p className="text-xs text-amber-700">
-              Ersetzt die anonyme Cookie-Identität durch eine über rsvp-app verifizierte E-Mail - dafür
-              muss diese Abstimmung über einen entsprechend eingerichteten Link/Button in rsvp-app
-              aufgerufen werden. Direkter, anonymer Zugriff auf diese Seite kann dann nicht abstimmen.
-            </p>
-            <label className="flex items-center gap-2 cursor-pointer pt-1">
-              <input type="checkbox" name="showVoterNames" defaultChecked={poll.showVoterNames} className="w-4 h-4" />
-              <span className="text-sm font-medium text-amber-900">
-                Abstimmende namentlich anzeigen (auf der öffentlichen Ergebnisseite)
-              </span>
-            </label>
-            <p className="text-xs text-amber-700">
-              Zeigt bei jeder Option zusätzlich die E-Mails der Personen, die dafür gestimmt haben -
-              nur mit &quot;Nur über rsvp-app abstimmbar&quot; oben nutzbar.
-            </p>
-          </div>
+          <VoterIdentityFields
+            identity={poll.voterIdentity}
+            showVoterNames={poll.showVoterNames}
+            locked={poll.options.some(o => o._count.votes > 0)}
+          />
 
           <SubmitButton>Änderungen speichern</SubmitButton>
         </form>

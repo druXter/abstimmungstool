@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../lib/prisma'
 import { verifyRsvpWebhookPayload } from '../../lib/rsvp-verification'
+import { voterKey } from '../../lib/voter-identity'
 
 /**
  * Empfängt die aktive Zu-/Absage-Meldung von rsvp-app (Gegenstück zu dessen
@@ -38,7 +39,7 @@ export async function POST(request: Request) {
   }
 
   if (!message.attending) {
-    await prisma.vote.deleteMany({ where: { pollId: poll.id, verifiedEmail: message.email } })
+    await prisma.vote.deleteMany({ where: { pollId: poll.id, voterKey: voterKey('RSVP', message.email) } })
   }
 
   return NextResponse.json({ ok: true })

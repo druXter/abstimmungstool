@@ -3,8 +3,7 @@ import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '../lib/prisma'
 import { castVote } from '../actions'
-import { getVoterToken } from '../lib/voter'
-import { verifyRsvpToken } from '../lib/rsvp-verification'
+import { resolveVoter } from '../lib/voter-identity'
 import SubmitButton from '../ui/submit-button'
 import PollResults from './poll-results'
 
@@ -27,48 +26,27 @@ export default async function PollPage({
         orderBy: { position: 'asc' },
         include: {
           _count: { select: { votes: true } },
-          votes: { select: { verifiedEmail: true } }
+          votes: { select: { voterName: true } }
         }
       },
-      votes: { select: { voterToken: true, verifiedEmail: true } }
+      votes: { select: { voterKey: true } }
     }
   })
   if (!poll) notFound()
 
   // Zähler für die Prozent-Basis in PollResults - siehe dort für die Begründung,
   // warum das die Anzahl abstimmender PERSONEN ist, nicht die Summe der Options-Stimmen.
-  const distinctVoters = new Set(poll.votes.map(v => v.voterToken ?? v.verifiedEmail)).size
+  const distinctVoters = new Set(poll.votes.map(v => v.voterKey)).size
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
 
-  // Identität auflösen - welcher der beiden Modi gilt, entscheidet ausschließlich
-  // poll.requireRsvpVerification (siehe schema.prisma), niemals die bloße Anwesenheit
-  // eines ?verify=-Parameters. Für eine normale (nicht so markierte) Abstimmung wird
-  // ein mitgeschickter Token also einfach ignoriert.
-  let myVoteOptionIds: string[] = []
-  let verifiedEmail: string | null = null
-  let currentlyAttending = false
+  // Wer hier abstimmt (und ob überhaupt), entscheidet allein resolveVoter anhand von
+  // poll.voterIdentity - siehe app/lib/voter-identity.ts.
+  const { voter, block } = await resolveVoter(poll, { verifyToken: verify }, { create: false })
+  const myVoteOptionIds = voter
+    ? (await prisma.vote.findMany({ where: { pollId: poll.id, voterKey: voter.key }, select: { optionId: true } })).map(v => v.optionId)
+    : []
 
-  if (poll.requireRsvpVerification) {
-    const identity = verifyRsvpToken(verify, poll.id)
-    verifiedEmail = identity?.email ?? null
-    currentlyAttending = identity?.attending ?? false
-    if (verifiedEmail) {
-      const votes = await prisma.vote.findMany({
-        where: { pollId: poll.id, verifiedEmail }
-      })
-      myVoteOptionIds = votes.map(v => v.optionId)
-    }
-  } else {
-    const voterToken = await getVoterToken()
-    if (voterToken) {
-      const votes = await prisma.vote.findMany({
-        where: { pollId: poll.id, voterToken }
-      })
-      myVoteOptionIds = votes.map(v => v.optionId)
-    }
-  }
-
-  const canVote = !isClosed && (!poll.requireRsvpVerification || (!!verifiedEmail && currentlyAttending))
+  const canVote = !isClosed && !block
   const hasVoted = myVoteOptionIds.length > 0
 
   return (
@@ -86,7 +64,7 @@ export default async function PollPage({
           )}
         </div>
 
-        {poll.requireRsvpVerification && !isClosed && !verifiedEmail && (
+        {!isClosed && block === 'rsvp-missing' && (
           <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm">
             Diese Abstimmung ist nur über den entsprechenden Link/Button in rsvp-app erreichbar,
             damit jede Person nur einmal abstimmen kann. Ein direkter, anonymer Aufruf dieser Seite
@@ -94,10 +72,17 @@ export default async function PollPage({
           </div>
         )}
 
-        {poll.requireRsvpVerification && !isClosed && verifiedEmail && !currentlyAttending && (
+        {!isClosed && block === 'rsvp-declined' && (
           <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm">
             Du hast für den zugehörigen Termin abgesagt und kannst daher hier nicht (mehr) abstimmen.
             Sag erneut zu, um wieder abstimmen zu können.
+          </div>
+        )}
+
+        {!isClosed && block === 'unavailable' && (
+          <div className="bg-amber-50 border border-amber-200 text-amber-800 p-4 rounded-lg text-sm">
+            Für diese Abstimmung ist eine Art der Stimmabgabe eingestellt, die dieses Tool noch nicht anbietet.
+            Bitte wende dich an die Person, die die Abstimmung verwaltet.
           </div>
         )}
 
@@ -108,9 +93,17 @@ export default async function PollPage({
             <h2 className="font-bold text-gray-900 mb-2">
               {hasVoted ? 'Deine Auswahl ändern' : 'Jetzt abstimmen'}
             </h2>
-            {verifiedEmail && (
+            {voter?.kind === 'RSVP' && (
               <p className="text-xs text-gray-500">
-                Angemeldet als <strong>{verifiedEmail}</strong> (über rsvp-app verifiziert)
+                Angemeldet als <strong>{voter.name}</strong> (über rsvp-app verifiziert)
+              </p>
+            )}
+            {poll.voterIdentity !== 'COOKIE' && (
+              // Die Datenschutzerklärung (Punkt 4) verweist auf diesen Hinweis.
+              <p className="text-xs text-gray-500">
+                {poll.showVoterNames
+                  ? 'Hinweis: Wer abstimmt, wird auf dieser Seite namentlich bei der gewählten Option angezeigt.'
+                  : 'Hinweis: Wer die Abstimmung verwaltet, sieht, wofür du gestimmt hast. Öffentlich bleibt das Ergebnis anonym.'}
               </p>
             )}
             {poll.allowMultipleChoices && (
@@ -144,7 +137,7 @@ export default async function PollPage({
             options={poll.options}
             distinctVoters={distinctVoters}
             myVoteOptionIds={myVoteOptionIds}
-            showVoterNames={poll.showVoterNames && poll.requireRsvpVerification}
+            showVoterNames={poll.showVoterNames}
           />
         </div>
 

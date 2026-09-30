@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 
 /**
  * Prüft von rsvp-app signierte Nachrichten für Abstimmungen mit
- * Poll.requireRsvpVerification. Die Token-AUSSTELLUNG passiert drüben in rsvp-app
+ * Poll.voterIdentity = RSVP. Die Token-AUSSTELLUNG passiert drüben in rsvp-app
  * (app/lib/poll-verification.ts) - hier wird nur geprüft, damit beide Seiten
  * unabhängig voneinander entwickelt/getestet werden können, solange sie sich an
  * dieses Format halten.

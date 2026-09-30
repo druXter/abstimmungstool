@@ -106,7 +106,7 @@ model LoginThrottle {
 
 // Eine Abstimmung mit beliebig vielen Optionen (siehe PollOption). Angelegt wird sie
 // von einem eingeloggten Konto (ownerId), Stimmabgabe ist standardmäßig komplett
-// anonym (siehe Vote.voterToken) - dafür braucht niemand ein Konto.
+// anonym (siehe Vote.voterKey, Modus COOKIE) - dafür braucht niemand ein Konto.
 //
 // creatorToken/creatorEmail sind der ältere, kontolose Verwaltungslink: Er gilt NUR
 // noch für Abstimmungen ohne ownerId (vor Einführung der Konten angelegt) und wird
@@ -114,55 +114,53 @@ model LoginThrottle {
 // Ein Konto kann eine solche Alt-Abstimmung mit dem Token übernehmen (claimPoll), dabei
 // wird der Token erneuert, sodass alte Links wertlos werden.
 //
-// requireRsvpVerification: schaltet für GENAU DIESE Abstimmung von der anonymen
-// Cookie-Identität auf eine über rsvp-app verifizierte E-Mail um (siehe
-// app/lib/rsvp-verification.ts) - damit ist "eine Stimme pro echter Person" statt
-// nur "eine Stimme pro Browser" möglich, kostet aber die Offenheit für Leute ohne
-// RSVP-Konto: direkter/anonymer Zugriff kann dann bewusst NICHT abstimmen (siehe
-// app/[pollId]/page.tsx) - kein unverifizierter Fallback, sonst wäre die Garantie
-// wertlos. Rein additiv und pro Abstimmung einzeln gewählt, ändert nichts am
-// Standardverhalten aller anderen (nicht so markierten) Abstimmungen.
+// voterIdentity: wie eine Stimme einer Person zugeordnet wird (siehe VoterIdentity und
+// app/lib/voter-identity.ts). Standard ist das anonyme Browser-Cookie; RSVP schaltet für
+// GENAU DIESE Abstimmung auf eine über rsvp-app verifizierte E-Mail um (siehe
+// app/lib/rsvp-verification.ts) - damit ist "eine Stimme pro echter Person" statt nur
+// "eine Stimme pro Browser" möglich, kostet aber die Offenheit für Leute ohne passende
+// Identität: Wer sie nicht hat, kann bewusst NICHT abstimmen - kein Cookie-Fallback,
+// sonst wäre die Garantie wertlos. Lässt sich nur ändern, solange noch keine Stimme
+// abgegeben wurde (siehe updatePoll), damit nie Stimmen verschiedener Arten gemischt werden.
 //
 // allowMultipleChoices: erlaubt pro Stimmabgabe mehrere Optionen gleichzeitig
 // (Checkboxen statt Radiobuttons, siehe app/[pollId]/page.tsx) - unabhängig von
-// requireRsvpVerification wählbar, betrifft nur wie viele Optionen EINE Stimmabgabe
+// voterIdentity wählbar, betrifft nur wie viele Optionen EINE Stimmabgabe
 // umfassen darf, nicht die Identität dahinter. Technisch ändert das nichts an
 // castVote's "Stimmen dieser Identität für diesen Poll ersetzen"-Logik (siehe dort) -
 // bei false wird dabei serverseitig auf höchstens eine Option gekappt.
 model Poll {
-  id                      String       @id @default(cuid())
-  title                   String
-  description             String?
+  id                   String        @id @default(cuid())
+  title                String
+  description          String?
   // Besitzendes Konto. null nur bei Alt-Abstimmungen aus der Zeit ohne Konten (dort
   // gilt weiter creatorToken). Wird beim Löschen eines Kontos vorher umgehängt (siehe
   // deleteUser), die SetNull-Regel ist nur das Sicherheitsnetz.
-  ownerId                 String?
-  owner                   User?        @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  access                  PollAccess[]
-  creatorToken            String       @unique @default(uuid())
+  ownerId              String?
+  owner                User?         @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  access               PollAccess[]
+  creatorToken         String        @unique @default(uuid())
   // Nur noch bei Alt-Abstimmungen befüllt (früher: Verwaltungs-Link per Mail). Neue
   // Abstimmungen schreiben dieses Feld nicht mehr - die E-Mail des Kontos genügt.
-  creatorEmail            String?
-  requireRsvpVerification Boolean      @default(false)
-  // Zeigt auf der Ergebnisseite zusätzlich, WER für welche Option gestimmt hat (E-Mail
-  // je Stimme), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat nur eine
-  // sichtbare Wirkung, wenn requireRsvpVerification ebenfalls an ist (sonst gibt es keine
-  // verifiedEmail zu zeigen); unabhängig davon einzeln wählbar, damit ein späteres
-  // Anschalten von requireRsvpVerification nicht überraschend rückwirkend Namen offenlegt.
-  showVoterNames          Boolean      @default(false)
+  creatorEmail         String?
+  voterIdentity        VoterIdentity @default(COOKIE)
+  // Zeigt auf der öffentlichen Ergebnisseite zusätzlich, WER für welche Option gestimmt
+  // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
+  // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus gibt es keine).
+  showVoterNames       Boolean       @default(false)
   // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
   // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
   // rsvp-app für diese Abstimmung antwortet - siehe dort. Nötig, um bei Schließung zu
   // wissen, welchem rsvp-app-Event das Ergebnis gemeldet werden soll (siehe
   // app/lib/rsvp-notify.ts). Bleibt null, solange rsvp-app nie einen Webhook für diese
-  // Abstimmung geschickt hat (z.B. weil requireRsvpVerification nie genutzt wurde).
-  rsvpEventId             String?
-  allowMultipleChoices    Boolean      @default(false)
-  closesAt                DateTime?
-  closedAt                DateTime?
-  createdAt               DateTime     @default(now())
-  options                 PollOption[]
-  votes                   Vote[]
+  // Abstimmung geschickt hat (z.B. weil der Modus RSVP nie genutzt wurde).
+  rsvpEventId          String?
+  allowMultipleChoices Boolean       @default(false)
+  closesAt             DateTime?
+  closedAt             DateTime?
+  createdAt            DateTime      @default(now())
+  options              PollOption[]
+  votes                Vote[]
 
   @@index([ownerId])
 }
@@ -176,16 +174,29 @@ model PollOption {
   votes    Vote[]
 }
 
+// Wie eine Stimme einer Person zugeordnet wird (Poll.voterIdentity, Vote.identityKind).
+// Umgesetzt sind COOKIE und RSVP; LINK (persönlicher Stimmlink), EMAIL (bestätigte
+// Adresse) und ACCOUNT (Konto) sind vorgesehen (siehe TODO.md, Abschnitt A) und werden
+// bis dahin fail-closed behandelt (niemand kann abstimmen, siehe app/lib/voter-identity.ts).
+enum VoterIdentity {
+  COOKIE
+  LINK
+  EMAIL
+  ACCOUNT
+  RSVP
+}
+
 // Eine Stimme ist EIN (Identität, Option)-Paar - bei einer Mehrfachauswahl-Abstimmung
 // (Poll.allowMultipleChoices) entstehen für eine Stimmabgabe entsprechend mehrere
-// Vote-Zeilen, eine pro gewählter Option, alle mit derselben Identität. Die Identität
-// hängt entweder an einem zufälligen, im Browser gespeicherten voterToken-Cookie
-// (siehe app/lib/voter.ts) ODER, bei Poll.requireRsvpVerification, an einer über
-// rsvp-app verifizierten E-Mail (siehe app/lib/rsvp-verification.ts) - pro Poll gilt
-// immer nur genau eine der beiden Spalten, nie beide gleichzeitig. Beide
-// @@unique-Constraints greifen unabhängig voneinander - NULL-Werte kollidieren in
-// SQLite nicht untereinander, daher stört die jeweils ungenutzte Spalte (durchgehend
-// NULL) die Eindeutigkeit der anderen nie.
+// Vote-Zeilen, eine pro gewählter Option, alle mit demselben voterKey.
+//
+// voterKey ist die aufgelöste Identität, IMMER mit der Art als Präfix (z.B.
+// "cookie:<zufälliger Token>" oder "rsvp:<verifizierte E-Mail>", siehe voterKey() in
+// app/lib/voter-identity.ts) - so können Schlüssel verschiedener Arten nie kollidieren.
+// identityKind wiederholt die Art als eigene Spalte, damit man ohne String-Zerlegung
+// danach filtern kann. voterName ist, was bei Poll.showVoterNames bzw. auf der
+// Verwaltungsseite angezeigt wird (im Cookie-Modus null).
+//
 // castVote (app/actions.ts) behandelt eine Stimmabgabe immer als "ersetze die
 // komplette Auswahl dieser Identität für diesen Poll" - überschreibt/löscht also
 // nicht mehr aktuelle Zeilen und legt die neu gewählten an, statt sie zu duplizieren,
@@ -193,18 +204,20 @@ model PollOption {
 // Bekannte, bewusst in Kauf genommene Grenze der Cookie-Variante: Wer Cookies löscht
 // oder ein anderes Gerät nutzt, kann erneut abstimmen - für den vorgesehenen Rahmen
 // (kleine, vertraute Gruppe) ein akzeptierter Kompromiss, kein Sicherheitsversprechen
-// für öffentliche Abstimmungen mit Fremden. Genau diese Lücke schließt die
-// verifizierte Variante, wo sie eingesetzt wird.
+// für öffentliche Abstimmungen mit Fremden. Genau diese Lücke schließen die anderen Arten.
+//
+// Umzug der Bestandsdaten aus dem früheren Modell (voterToken/verifiedEmail,
+// Poll.requireRsvpVerification): scripts/migrate-db.js, läuft vor jedem `db push`.
 model Vote {
-  id            String     @id @default(cuid())
-  pollId        String
-  poll          Poll       @relation(fields: [pollId], references: [id])
-  optionId      String
-  option        PollOption @relation(fields: [optionId], references: [id])
-  voterToken    String?
-  verifiedEmail String?
-  createdAt     DateTime   @default(now())
+  id           String        @id @default(cuid())
+  pollId       String
+  poll         Poll          @relation(fields: [pollId], references: [id])
+  optionId     String
+  option       PollOption    @relation(fields: [optionId], references: [id])
+  identityKind VoterIdentity
+  voterKey     String
+  voterName    String?
+  createdAt    DateTime      @default(now())
 
-  @@unique([pollId, voterToken, optionId])
-  @@unique([pollId, verifiedEmail, optionId])
+  @@unique([pollId, voterKey, optionId])
 }

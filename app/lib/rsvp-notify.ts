@@ -15,8 +15,8 @@ function rsvpAppBaseUrl(): string | null {
  * Schließen-Cronjob (app/api/cron/close-expired-polls/route.ts).
  *
  * No-op ohne poll.rsvpEventId (noch nie ein rsvp-webhook für diese Abstimmung
- * empfangen, siehe app/api/rsvp-webhook/route.ts - z.B. weil requireRsvpVerification
- * nie genutzt wurde) oder ohne konfiguriertes RSVP_APP_BASE_URL/
+ * empfangen, siehe app/api/rsvp-webhook/route.ts - z.B. weil der Modus RSVP nie
+ * genutzt wurde) oder ohne konfiguriertes RSVP_APP_BASE_URL/
  * RSVP_VERIFICATION_SECRET. Gewinner = alle Optionen mit der höchsten Stimmenzahl
  * (kann mehrere sein bei Gleichstand, oder keine bei 0 Stimmen insgesamt). Bewusst
  * best-effort mit kurzem Timeout, wie das Gegenstück in rsvp-app - ein nicht

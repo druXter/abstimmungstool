@@ -21,5 +21,8 @@ RUN npm run build
 # next start lauscht standardmäßig auf Port 3000 im Container
 EXPOSE 3000
 
-# Beim Starten des Containers: Datenbank-Struktur sicherstellen und App starten
-CMD ["sh", "-c", "npx prisma db push && npm start"]
+# Beim Starten des Containers: ggf. Bestandsdaten umziehen (scripts/migrate-db.js, legt
+# vorher eine Sicherung in ./data an), Datenbank-Struktur sicherstellen und App starten.
+# Schlägt der Umzug fehl, startet der Container bewusst nicht - `db push` würde sonst an
+# den alten Spalten scheitern oder (mit --accept-data-loss) Daten verwerfen.
+CMD ["sh", "-c", "node scripts/migrate-db.js && npx prisma db push && npm start"]

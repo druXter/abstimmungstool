@@ -7,8 +7,8 @@ const COOKIE_NAME = 'voter_token'
 /**
  * Liefert eine zufällige, anonyme Kennung für "dieses Browser-Gerät" - erzeugt beim
  * ersten Aufruf und danach dauerhaft im Cookie gespeichert. Das ist die einzige
- * "Identität", die eine Stimme hat (siehe Vote.voterToken in schema.prisma) - kein
- * Konto, keine E-Mail. Bewusste, dokumentierte Grenze: Wer Cookies löscht oder ein
+ * "Identität", die eine Stimme im Modus COOKIE hat (siehe app/lib/voter-identity.ts) -
+ * kein Konto, keine E-Mail. Bewusste, dokumentierte Grenze: Wer Cookies löscht oder ein
  * anderes Gerät nutzt, bekommt einen neuen Token und kann erneut abstimmen.
  */
 export async function getOrCreateVoterToken(): Promise<string> {
@@ -27,7 +27,7 @@ export async function getOrCreateVoterToken(): Promise<string> {
 }
 
 /**
- * Liest den voterToken nur, ohne einen neuen anzulegen - für Stellen, die lediglich
+ * Liest das Cookie nur, ohne einen neuen anzulegen - für Stellen, die lediglich
  * prüfen wollen, ob (und wie) diese:r Besucher:in bereits abgestimmt hat, ohne
  * versehentlich ein Cookie in einer reinen Lese-Anfrage zu setzen (Server Components
  * dürfen z.B. beim Rendern keine Cookies schreiben).

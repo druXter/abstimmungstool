@@ -36,10 +36,10 @@ export default async function VerwaltenPage({
         orderBy: { position: 'asc' },
         include: {
           _count: { select: { votes: true } },
-          votes: { select: { verifiedEmail: true } }
+          votes: { select: { voterName: true } }
         }
       },
-      votes: { select: { voterToken: true, verifiedEmail: true } },
+      votes: { select: { voterKey: true, voterName: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
       owner: { select: { email: true, name: true } }
     }
@@ -62,7 +62,10 @@ export default async function VerwaltenPage({
 
   // Siehe app/[pollId]/page.tsx für die Begründung, warum die Prozent-Basis in
   // PollResults die Anzahl abstimmender Personen ist, nicht die Summe der Stimmen.
-  const distinctVoters = new Set(poll.votes.map(v => v.voterToken ?? v.verifiedEmail)).size
+  const distinctVoters = new Set(poll.votes.map(v => v.voterKey)).size
+  // Wer verwaltet, sieht Namen immer (sofern die Art der Stimmabgabe welche liefert) -
+  // öffentlich nur mit showVoterNames.
+  const hasVoterNames = poll.votes.some(v => v.voterName)
   const isClosed = !!poll.closedAt
   const publicLink = `${baseUrl()}/${poll.id}`
 
@@ -182,11 +185,11 @@ export default async function VerwaltenPage({
           <PollResults
             options={poll.options}
             distinctVoters={distinctVoters}
-            showVoterNames={poll.requireRsvpVerification}
+            showVoterNames
           />
-          {poll.requireRsvpVerification && !poll.showVoterNames && (
+          {hasVoterNames && !poll.showVoterNames && (
             <p className="text-xs text-gray-400 mt-3">
-              Die E-Mails oben siehst nur du (und wer die Abstimmung verwalten darf). Auf der öffentlichen Seite sind sie
+              Die Namen oben siehst nur du (und wer die Abstimmung verwalten darf). Auf der öffentlichen Seite sind sie
               aktuell verborgen - &quot;Abstimmende namentlich anzeigen&quot; ist aus (siehe Bearbeiten).
             </p>
           )}

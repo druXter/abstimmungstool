@@ -56,3 +56,6 @@ data/
 
 # Erlaube explizit die .env.example (wird sonst von ".env*" oben blockiert!)
 !.env.example
+
+# Sicherungen von scripts/migrate-db.js
+*.vor-umzug-*

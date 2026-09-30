@@ -1,0 +1,160 @@
+import { createHmac } from 'node:crypto'
+import { expect, test } from '@playwright/test'
+import { createAccount, createPoll, login, prisma, uniqueEmail } from './helpers'
+import { TEST_RSVP_SECRET } from '../../playwright.config'
+
+// Stimmabgabe und Identitätsmodell (Poll.voterIdentity, siehe app/lib/voter-identity.ts).
+// rsvp-app spielen die Tests selbst: Sie signieren Klick-Tokens und Webhooks mit dem
+// gemeinsamen Test-Secret, genau im Format aus app/lib/rsvp-verification.ts.
+
+function signRsvp(payload: object): string {
+  const part = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url')
+  return `${part}.${createHmac('sha256', TEST_RSVP_SECRET).update(part).digest('base64url')}`
+}
+
+test.describe('Modus COOKIE (Standard)', () => {
+  test('anlegen, abstimmen, Auswahl ändern - eine Person bleibt eine Person', async ({ page, browser }) => {
+    const owner = await createAccount()
+    await login(page, owner.email)
+    await page.goto('/erstellen')
+    await page.getByLabel('Frage / Titel').fill('Wohin am Mittwoch?')
+    const optionInputs = page.locator('input[name="option"]')
+    await optionInputs.nth(0).fill('Pizza')
+    await optionInputs.nth(1).fill('Sushi')
+    // Der Standard ist vorausgewählt.
+    await expect(page.getByRole('radio', { name: /Offen für alle/ })).toBeChecked()
+    await page.getByRole('button', { name: 'Abstimmung erstellen' }).click()
+    await page.waitForURL(/\/verwalten\?created=1/)
+    const pollId = new URL(page.url()).pathname.split('/')[1]
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: pollId } })).voterIdentity).toBe('COOKIE')
+
+    const voterContext = await browser.newContext()
+    const voterPage = await voterContext.newPage()
+    await voterPage.goto(`/${pollId}`)
+    await voterPage.getByRole('radio', { name: 'Pizza' }).check()
+    await voterPage.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(voterPage.getByText('Pizza ✓')).toBeVisible()
+    await expect(voterPage.getByText('Live-Ergebnis (1 Person)')).toBeVisible()
+
+    await voterPage.getByRole('radio', { name: 'Sushi' }).check()
+    await voterPage.getByRole('button', { name: 'Auswahl speichern' }).click()
+    await expect(voterPage.getByText('Sushi ✓')).toBeVisible()
+    await expect(voterPage.getByText('Live-Ergebnis (1 Person)')).toBeVisible()
+
+    const votes = await prisma.vote.findMany({ where: { pollId } })
+    expect(votes).toHaveLength(1)
+    expect(votes[0].identityKind).toBe('COOKIE')
+    expect(votes[0].voterKey).toMatch(/^cookie:/)
+    expect(votes[0].voterName).toBeNull()
+
+    // Ein anderer Browser ist eine andere (Cookie-)Identität.
+    const otherContext = await browser.newContext()
+    const otherPage = await otherContext.newPage()
+    await otherPage.goto(`/${pollId}`)
+    await otherPage.getByRole('radio', { name: 'Sushi' }).check()
+    await otherPage.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(otherPage.getByText('Live-Ergebnis (2 Personen)')).toBeVisible()
+
+    await voterContext.close()
+    await otherContext.close()
+  })
+
+  test('ein mitgeschickter rsvp-Token wird ignoriert', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id)
+    const verify = signRsvp({ email: uniqueEmail('gast'), pollId: poll.id, attending: true })
+    await page.goto(`/${poll.id}?verify=${verify}`)
+    await page.getByRole('radio', { name: 'Pizza' }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(page.getByText('Pizza ✓')).toBeVisible()
+    const vote = await prisma.vote.findFirstOrThrow({ where: { pollId: poll.id } })
+    expect(vote.identityKind).toBe('COOKIE')
+  })
+})
+
+test.describe('Modus RSVP', () => {
+  test('ohne Token kein Abstimmen - auch nicht per direkt abgeschicktem Formular', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByText('nur über den entsprechenden Link/Button in rsvp-app erreichbar')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
+
+    // Formular mit gültigem Token laden, den Token vor dem Absenden entfernen: Der Server
+    // muss selbst ablehnen, nicht nur die Seite das Formular ausblenden.
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email: uniqueEmail('gast'), pollId: poll.id, attending: true })}`)
+    await page.locator('input[name="verifyToken"]').evaluate(input => input.remove())
+    await page.getByRole('radio', { name: 'Pizza' }).check()
+    const actionDone = page.waitForResponse(response => response.request().method() === 'POST')
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await actionDone
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+    await expect(page.getByText('Pizza ✓')).toHaveCount(0)
+  })
+
+  test('mit Token abstimmen, namentlich anzeigen, Absage entfernt die Stimme', async ({ page, request }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP', showVoterNames: true })
+    const email = uniqueEmail('gast')
+
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email: email.toUpperCase(), pollId: poll.id, attending: true })}`)
+    await expect(page.getByText(`Angemeldet als ${email}`)).toBeVisible()
+    await page.getByRole('radio', { name: 'Sushi' }).check()
+    await page.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(page.getByText('Sushi ✓')).toBeVisible()
+    // showVoterNames: die (kleingeschriebene) E-Mail steht bei der Option.
+    await expect(page.getByText(email, { exact: true }).and(page.locator('p'))).toBeVisible()
+
+    const vote = await prisma.vote.findFirstOrThrow({ where: { pollId: poll.id } })
+    expect(vote).toMatchObject({ identityKind: 'RSVP', voterKey: `rsvp:${email}`, voterName: email })
+
+    // Neuer Klick über rsvp-app nach einer Absage: sichtbar blockiert.
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email, pollId: poll.id, attending: false })}`)
+    await expect(page.getByText('Du hast für den zugehörigen Termin abgesagt')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Abstimmen|Auswahl speichern/ })).toHaveCount(0)
+
+    // Webhook der Absage entfernt die bereits gezählte Stimme.
+    const response = await request.post('/api/rsvp-webhook', {
+      headers: { 'content-type': 'text/plain' },
+      data: signRsvp({ email, pollId: poll.id, eventId: 'event-1', attending: false })
+    })
+    expect(response.ok()).toBe(true)
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
+  })
+
+  test('Token für eine andere Abstimmung gilt nicht', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email: uniqueEmail('gast'), pollId: 'eine-andere', attending: true })}`)
+    await expect(page.getByText('nur über den entsprechenden Link/Button in rsvp-app erreichbar')).toBeVisible()
+  })
+})
+
+test.describe('Bearbeiten', () => {
+  test('Modus lässt sich ändern, solange niemand abgestimmt hat - danach gesperrt', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id)
+    await login(page, owner.email)
+
+    await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+    await page.getByRole('radio', { name: /Nur über rsvp-app/ }).check()
+    await page.getByRole('button', { name: 'Änderungen speichern' }).click()
+    await page.waitForURL(/saved=1/)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).voterIdentity).toBe('RSVP')
+
+    await prisma.vote.create({
+      data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'RSVP', voterKey: 'rsvp:x@example.test', voterName: 'x@example.test' }
+    })
+    await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+    await expect(page.getByText('die Art der Stimmabgabe lässt sich deshalb nicht mehr ändern')).toBeVisible()
+    await expect(page.getByRole('radio', { name: /Offen für alle/ })).toBeDisabled()
+    await page.getByRole('button', { name: 'Änderungen speichern' }).click()
+    await page.waitForURL(/saved=1/)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).voterIdentity).toBe('RSVP')
+
+    // Wer verwaltet, sieht die Namen auch ohne showVoterNames.
+    await expect(page.getByText('x@example.test', { exact: true })).toBeVisible()
+    await expect(page.getByText('Die Namen oben siehst nur du')).toBeVisible()
+  })
+})

@@ -1,4 +1,4 @@
-import { PrismaClient, type Role } from '@prisma/client'
+import { PrismaClient, type Prisma, type Role } from '@prisma/client'
 import type { Page } from '@playwright/test'
 import { hashPassword } from '../../app/lib/password'
 import { BASE_URL } from '../../playwright.config'
@@ -31,6 +31,19 @@ export function uniqueIp(): string {
 export async function createAccount(role: Role = 'CREATOR') {
   return prisma.user.create({
     data: { email: uniqueEmail(role.toLowerCase()), role, passwordHash: await hashPassword(PASSWORD) }
+  })
+}
+
+/** Legt eine Abstimmung direkt in der Datenbank an (Standard: zwei Optionen "Pizza" und "Sushi"). */
+export async function createPoll(ownerId: string, data: Partial<Prisma.PollUncheckedCreateInput> = {}, labels = ['Pizza', 'Sushi']) {
+  return prisma.poll.create({
+    data: {
+      title: `Abstimmung ${unique()}`,
+      ownerId,
+      ...data,
+      options: { create: labels.map((label, position) => ({ label, position })) }
+    },
+    include: { options: { orderBy: { position: 'asc' } } }
   })
 }
 

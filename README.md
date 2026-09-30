@@ -14,14 +14,15 @@ anlegt und verwaltet (siehe "Konten" unten).
   eine Option pro Stimme (Radiobuttons); mit `allowMultipleChoices` können mehrere
   Optionen gleichzeitig gewählt werden (Checkboxen) - z.B. "welche Restaurants
   wären für dich alle okay?". Ändert nichts an der Identitätslogik, siehe unten.
-* **Anonyme Stimmabgabe (Standard):** Identifikation über ein zufälliges
-  Browser-Cookie (`voter_token`), kein Konto. Die eigene Auswahl kann jederzeit
-  geändert werden, solange die Abstimmung offen ist.
-* **Verifizierte Stimmabgabe (optional, pro Abstimmung einzeln aktivierbar):**
-  Statt des Cookies wird eine über `rsvp-app` verifizierte E-Mail als Identität
-  genutzt - siehe "Verifizierte Abstimmungen" unten. Verhindert Mehrfachabstimmen
-  auch über verschiedene Geräte/Browser hinweg, nicht nur im selben Browser. Lässt
-  sich mit der Mehrfachauswahl kombinieren.
+* **Wer darf abstimmen? (pro Abstimmung, `Poll.voterIdentity`)** - siehe
+  "Identität der Abstimmenden" unten:
+  * **Offen für alle (Standard, `COOKIE`):** Identifikation über ein zufälliges
+    Browser-Cookie (`voter_token`), kein Konto. Die eigene Auswahl kann jederzeit
+    geändert werden, solange die Abstimmung offen ist.
+  * **Nur über rsvp-app (`RSVP`):** Statt des Cookies wird eine über `rsvp-app`
+    verifizierte E-Mail als Identität genutzt - siehe "Verifizierte Abstimmungen"
+    unten. Verhindert Mehrfachabstimmen auch über verschiedene Geräte/Browser hinweg.
+  * Lässt sich mit der Mehrfachauswahl kombinieren.
 * **Live-Ergebnis:** Stimmenanzahl und Prozentanteil pro Option, in Echtzeit. Der
   Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
@@ -32,15 +33,39 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Gemeinsam moderieren:** Eine Abstimmung lässt sich mit anderen Konten teilen; diese
   können sie bearbeiten und schließen.
 
-## Verifizierte Abstimmungen (Mehrfachabstimmen bei Einbindung ausschließen)
+## Identität der Abstimmenden
 
-Beim Anlegen kann eine Abstimmung mit "Nur über rsvp-app abstimmbar" markiert werden
-(`Poll.requireRsvpVerification`). Für eine so markierte Abstimmung gilt:
+Pro Abstimmung legt `Poll.voterIdentity` fest, woran eine Stimme einer Person zugeordnet
+wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
+`app/lib/voter-identity.ts`), die Abstimmungsseite und `castVote` gehen beide darüber.
+
+| Modus | Identität | Stand |
+| --- | --- | --- |
+| `COOKIE` | zufälliges Browser-Cookie (Standard) | umgesetzt |
+| `RSVP` | von rsvp-app bestätigte E-Mail, nur Zusagende | umgesetzt |
+| `LINK` | persönlicher Stimmlink | geplant (`TODO.md` A1) |
+| `EMAIL` | selbst bestätigte E-Mail-Adresse | geplant (A2) |
+| `ACCOUNT` | Konto | geplant (A3) |
+
+* Jede Stimme speichert `identityKind`, einen `voterKey` mit der Art als Präfix
+  (`cookie:…`, `rsvp:…` - Schlüssel verschiedener Arten können so nie kollidieren) und
+  ggf. einen `voterName` für die namentliche Anzeige. Eindeutig ist
+  `(pollId, voterKey, optionId)`.
+* **Fail-closed:** Fehlt die geforderte Identität, kann nicht abgestimmt werden - es
+  gibt nie einen Rückfall auf das Cookie. Noch nicht umgesetzte Modi sind entsprechend
+  für niemanden abstimmbar (und werden beim Anlegen nicht angeboten).
+* **Der Modus ist gesperrt, sobald jemand abgestimmt hat** (Bearbeiten-Seite und
+  `updatePoll`) - sonst stünden Stimmen verschiedener Arten nebeneinander, und die
+  bisherigen könnte niemand mehr ändern.
+
+## Verifizierte Abstimmungen (Modus `RSVP`)
+
+Beim Anlegen kann eine Abstimmung auf "Nur über rsvp-app" gestellt werden
+(`Poll.voterIdentity = RSVP`). Dann gilt:
 
 * Stimmen werden nicht mehr per Cookie, sondern per **verifizierter E-Mail**
-  unterschieden (`Vote.verifiedEmail` statt `Vote.voterToken`) - dieselbe Person
-  kann dadurch nicht mit einem zweiten Gerät oder einem gelöschten Cookie erneut
-  abstimmen.
+  unterschieden (`voterKey = rsvp:<E-Mail>`) - dieselbe Person kann dadurch nicht mit
+  einem zweiten Gerät oder einem gelöschten Cookie erneut abstimmen.
 * Die E-Mail kommt aus einem **signierten Token**, den `rsvp-app` ausstellt (siehe
   "Token-Format" unten) und der als `?verify=...`-Parameter an den Abstimmungs-Link
   angehängt wird.
@@ -59,8 +84,7 @@ Beim Anlegen kann eine Abstimmung mit "Nur über rsvp-app abstimmbar" markiert w
   signierten Webhook (`POST /api/rsvp-webhook`, siehe unten) - so verschwindet eine
   bereits gezählte Stimme auch dann, wenn die Person die Abstimmung selbst nie wieder
   aufruft.
-* Alle **anderen** (nicht so markierten) Abstimmungen sind davon komplett
-  unberührt und funktionieren weiterhin rein anonym per Cookie wie zuvor.
+* Alle Abstimmungen in anderen Modi ignorieren einen mitgeschickten `?verify=`-Token.
 
 ### Token-Format (Vertrag zwischen rsvp-app und diesem Tool)
 
@@ -227,11 +251,13 @@ fehlende oder ungültige Verifizierung blockiert rsvp-app nie.
 ## Namentliche Ergebnis-Anzeige (optional)
 
 `Poll.showVoterNames` (Checkbox "Abstimmende namentlich anzeigen" beim Anlegen/
-Bearbeiten, nur mit `requireRsvpVerification` sinnvoll) zeigt auf der öffentlichen
-Ergebnisseite zusätzlich zu den aggregierten Zahlen die E-Mails der Personen, die für
-welche Option gestimmt haben (`app/[pollId]/poll-results.tsx`). Standardmäßig aus.
+Bearbeiten) zeigt auf der öffentlichen Ergebnisseite zusätzlich zu den aggregierten
+Zahlen, wer für welche Option gestimmt hat (`Vote.voterName`, je nach Modus Name oder
+E-Mail, siehe `app/[pollId]/poll-results.tsx`). Standardmäßig aus. Im Modus `COOKIE` gibt
+es keine Namen - der Schalter bleibt dort ohne Wirkung.
 Der Ersteller/die Erstellerin und alle Konten mit Verwaltungs-Berechtigung (Freigabe) sehen
-diese E-Mails auf der Verwaltungsseite immer, unabhängig von diesem Schalter.
+die Namen auf der Verwaltungsseite immer, unabhängig von diesem Schalter. Das Abstimmformular
+weist in allen Modi mit Namen darauf hin, wer sie sieht.
 
 ## Ergebnis-Meldung an rsvp-app
 
@@ -291,22 +317,37 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
 npm install
 cp .env.example .env   # Werte eintragen, siehe Kommentare in der Datei
 npx prisma generate
+node scripts/migrate-db.js   # Datenumzüge, siehe unten - auf einer neuen Datenbank ohne Wirkung
 npx prisma db push
 node create-user.js deine-email@domain.de ADMIN   # erstes Konto, siehe "Konten"
 npm run dev             # Port 3600, siehe package.json
 ```
 
 Es gibt keinen `migrations`-Ordner - wie bei rsvp-app ausschließlich per
-`npx prisma db push` synchronisiert.
+`npx prisma db push` synchronisiert. Was `db push` nicht verlustfrei kann (Spalten mit
+Daten ersetzen), erledigt vorher `scripts/migrate-db.js`: Jeder Umzug prüft selbst, ob er
+nötig ist, legt vor einer Änderung eine Sicherung der Datenbankdatei daneben
+(`<datei>.vor-umzug-<zeit>`) und läuft in einer Transaktion. Das Skript läuft deshalb vor
+**jedem** `db push` - im Container automatisch beim Start (siehe `Dockerfile`). Schlägt es
+fehl, startet der Container nicht; dann **nicht** mit `db push --accept-data-loss`
+weitermachen, sondern den Fehler ansehen.
+
+* Umzug 1 (2026-09-30): `Vote.voterToken`/`verifiedEmail` → `identityKind`/`voterKey`/
+  `voterName`, `Poll.requireRsvpVerification` → `Poll.voterIdentity` (siehe "Identität
+  der Abstimmenden").
 
 ## Tests
 
-End-to-End-Tests mit Playwright (`tests/e2e/`), derzeit für den Konten-Verbund:
+End-to-End-Tests mit Playwright (`tests/e2e/`):
 
 ```bash
 npx playwright install chromium   # einmalig
 npm run test:e2e
 ```
+
+Abgedeckt sind der Konten-Verbund (`suite.spec.ts`) und die Stimmabgabe samt
+Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
+Klick-Tokens und Webhooks mit einem Test-Secret signieren).
 
 Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
 eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die
@@ -324,6 +365,8 @@ docker compose up -d --build
 ```
 
 Beim Bauen holt `npm` das gemeinsame Paket `suite-kit` direkt von GitHub - das Dockerfile
-installiert dafür `git`. `./data` wird für die SQLite-Datenbank gemountet. Port 3006 ist in
+installiert dafür `git`. `./data` wird für die SQLite-Datenbank gemountet. Beim Start
+läuft zuerst `scripts/migrate-db.js` (Sicherung landet ebenfalls in `./data`), dann
+`prisma db push`. Vor einem Update mit Datenumzug trotzdem selbst eine Sicherung ziehen. Port 3006 ist in
 `docker-compose.yml` voreingestellt (3000-3005 sind auf diesem Server bereits von
 anderen Diensten belegt) - bei Bedarf anpassen.

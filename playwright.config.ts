@@ -14,6 +14,10 @@ export const BASE_URL = `http://127.0.0.1:${PORT}`
 // Datenbank zu). Relative SQLite-Pfade löst Prisma relativ zu prisma/schema.prisma auf.
 process.env.DATABASE_URL = 'file:./test.db'
 process.env.BASE_URL = BASE_URL
+// Gemeinsames Secret mit der (von den Tests gespielten) rsvp-app - die Tests signieren damit
+// Klick-Tokens und Webhooks selbst (app/lib/rsvp-verification.ts). Nur ein Testwert.
+export const TEST_RSVP_SECRET = 'nur-fuer-e2e-tests-kein-echtes-secret'
+process.env.RSVP_VERIFICATION_SECRET = TEST_RSVP_SECRET
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -47,13 +51,13 @@ export default defineConfig({
       // Konto-Föderation: Test-Doppel anderer Tools aus tests/e2e/suite-server.ts.
       SUITE_IDPS: TEST_SUITE_IDPS,
       SUITE_APP_NAME: 'Abstimmungstool Test',
+      RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
       // Werte aus einer lokalen .env ausdrücklich leeren (gesetzte Variablen - auch leere - haben
       // Vorrang vor .env): kein Mailversand, keine Anbieter-Rolle, keine echte rsvp-app.
       SMTP_HOST: '',
       SUITE_SIGNING_KEY: '',
       SUITE_TRUSTED_APPS: '',
       RSVP_APP_BASE_URL: '',
-      RSVP_VERIFICATION_SECRET: '',
       CRON_SECRET: '',
       TZ: 'Europe/Berlin'
     }
