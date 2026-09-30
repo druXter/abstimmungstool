@@ -151,3 +151,8 @@ export function voteEmailRules(ip: string, email: string, pollId: string): Throt
     { scope: 'vote-mail:email', identifier: `${pollId}\u0000${email}`, limit: 3, windowMs: 60 * MINUTE }
   ]
 }
+
+/** Regel für Options-Vorschläge von Teilnehmenden: pro IP und Abstimmung, gegen das Zumüllen der Liste. */
+export function suggestionRule(ip: string, pollId: string): ThrottleRule {
+  return { scope: 'suggest:ip', identifier: `${pollId}\u0000${ip}`, limit: 10, windowMs: 60 * MINUTE }
+}

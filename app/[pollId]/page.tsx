@@ -2,7 +2,8 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '../lib/prisma'
-import { castVote, forgetVoteEmail, requestVoteEmail, unlockPoll } from '../actions'
+import { castVote, forgetVoteEmail, requestVoteEmail, suggestOption, unlockPoll } from '../actions'
+import { inputTypeFor } from '../lib/date-options'
 import { resolveVoter } from '../lib/voter-identity'
 import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import SubmitButton from '../ui/submit-button'
@@ -20,6 +21,12 @@ const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: str
   'code-falsch': { tone: 'error', text: 'Der Zugangscode stimmt nicht.' },
   'code-gesperrt': { tone: 'error', text: 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.' },
   auswahl: { tone: 'error', text: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Auswahl wurde nicht gespeichert.' },
+  'vorschlag-wartet': { tone: 'success', text: 'Danke für deinen Vorschlag! Er erscheint, sobald die Verwaltung ihn freigegeben hat.' },
+  'vorschlag-da': { tone: 'success', text: 'Deine Option steht jetzt zur Wahl.' },
+  'vorschlag-ungueltig': { tone: 'error', text: 'Bitte gib eine Option ein.' },
+  'vorschlag-doppelt': { tone: 'error', text: 'Diese Option gibt es schon (oder sie wurde schon vorgeschlagen).' },
+  'vorschlag-voll': { tone: 'error', text: 'Diese Abstimmung hat schon die höchstmögliche Zahl an Optionen.' },
+  'vorschlag-gedrosselt': { tone: 'error', text: 'Von deinem Netzwerk aus kamen gerade sehr viele Vorschläge. Bitte versuche es später erneut.' },
   'mail-gesendet': { tone: 'success', text: 'Wir haben dir einen Bestätigungslink geschickt. Öffne ihn in diesem Browser, um abzustimmen - er ist 24 Stunden gültig.' },
   'mail-bestaetigt': { tone: 'success', text: 'Deine Adresse ist bestätigt. Du kannst jetzt abstimmen.' },
   'mail-ungueltig': { tone: 'error', text: 'Bitte gib eine gültige E-Mail-Adresse ein.' },
@@ -55,6 +62,7 @@ export default async function PollPage({
     where: { id: pollId },
     include: {
       options: {
+        where: { approved: true },
         orderBy: { position: 'asc' },
         include: {
           _count: { select: { votes: true } },
@@ -273,6 +281,28 @@ export default async function PollPage({
               </label>
             ))}
             <SubmitButton>{hasVoted ? 'Auswahl speichern' : 'Abstimmen'}</SubmitButton>
+          </form>
+        )}
+
+        {poll.allowVoterOptions && !isClosed && !block && (
+          <form action={suggestOption} className="bg-white p-6 rounded-lg shadow space-y-3">
+            <input type="hidden" name="pollId" value={poll.id} />
+            {identityInputs}
+            <h2 className="font-bold text-gray-900">Option vorschlagen</h2>
+            {poll.voterOptionsNeedApproval && (
+              <p className="text-xs text-gray-500">Vorschläge erscheinen erst, wenn die Verwaltung sie freigegeben hat.</p>
+            )}
+            <div className="flex gap-2">
+              <label htmlFor="suggestion" className="sr-only">Neue Option</label>
+              <input
+                id="suggestion" name="suggestion" type={inputTypeFor(poll.optionKind)} required maxLength={200}
+                placeholder={poll.optionKind === 'TEXT' ? 'Neue Option' : undefined}
+                className="flex-1 border border-gray-300 p-2 rounded text-gray-900"
+              />
+              <button type="submit" className="bg-blue-600 text-white text-sm font-bold px-4 rounded hover:bg-blue-700 transition">
+                Vorschlagen
+              </button>
+            </div>
           </form>
         )}
 

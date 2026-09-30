@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getCurrentUser } from '../../lib/auth'
 import { canCreatePolls, getPollLevel } from '../../lib/permissions'
-import { claimPoll, closePoll, duplicatePoll, sharePoll, unsharePoll } from '../../actions'
+import { claimPoll, closePoll, duplicatePoll, reviewSuggestion, sharePoll, unsharePoll } from '../../actions'
 import { baseUrl } from '../../lib/base-url'
 import PollResults from '../poll-results'
 import CopyableField from '../../ui/copyable-field'
@@ -37,6 +37,7 @@ export default async function VerwaltenPage({
     include: {
       options: {
         orderBy: { position: 'asc' },
+        where: { approved: true },
         include: {
           _count: { select: { votes: true } },
           votes: { select: { voterName: true } }
@@ -45,6 +46,7 @@ export default async function VerwaltenPage({
       votes: { select: { voterKey: true, voterName: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
       owner: { select: { email: true, name: true } },
+      _count: { select: { options: { where: { approved: false } } } },
       voterLinks: { select: { id: true, label: true, email: true, hasVoted: true }, orderBy: { createdAt: 'asc' } }
     }
   })
@@ -154,6 +156,8 @@ export default async function VerwaltenPage({
           </div>
         </div>
 
+        {poll._count.options > 0 && <PendingSuggestions pollId={poll.id} legacyToken={legacy && token ? token : ''} />}
+
         {poll.voterIdentity === 'LINK' && (
           <VoterLinksPanel
             pollId={poll.id}
@@ -250,5 +254,29 @@ export default async function VerwaltenPage({
         </p>
       </div>
     </main>
+  )
+}
+
+/** Offene Options-Vorschläge von Teilnehmenden (Poll.allowVoterOptions) zum Freigeben oder Ablehnen. */
+async function PendingSuggestions({ pollId, legacyToken }: { pollId: string; legacyToken: string }) {
+  const pending = await prisma.pollOption.findMany({ where: { pollId, approved: false }, orderBy: { position: 'asc' }, select: { id: true, label: true } })
+  return (
+    <div className="bg-white p-6 rounded-lg shadow space-y-3">
+      <h2 className="font-bold text-gray-900">Vorschläge von Teilnehmenden ({pending.length})</h2>
+      <ul className="divide-y text-sm border rounded">
+        {pending.map(option => (
+          <li key={option.id} className="flex items-center justify-between gap-2 p-2">
+            <span className="truncate">{option.label}</span>
+            <form action={reviewSuggestion} className="flex gap-3 text-xs">
+              <input type="hidden" name="pollId" value={pollId} />
+              <input type="hidden" name="optionId" value={option.id} />
+              {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
+              <button type="submit" name="intent" value="approve" className="text-green-700 hover:underline" aria-label={`${option.label} freigeben`}>Freigeben</button>
+              <button type="submit" name="intent" value="reject" className="text-red-700 hover:underline" aria-label={`${option.label} ablehnen`}>Ablehnen</button>
+            </form>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

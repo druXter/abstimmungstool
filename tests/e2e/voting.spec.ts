@@ -330,3 +330,81 @@ test.describe('Terminoptionen', () => {
     expect(options[0].startsAt?.toISOString()).toBe('2026-12-23T23:00:00.000Z')
   })
 })
+
+test.describe('Optionen von Teilnehmenden', () => {
+  test('mit Freigabe: erst unsichtbar und nicht wählbar, nach Freigabe in der Liste', async ({ page, browser }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { allowVoterOptions: true, voterOptionsNeedApproval: true })
+    const voter = await (await browser.newContext()).newPage()
+    await voter.goto(`/${poll.id}`)
+    await voter.getByLabel('Neue Option').fill('Döner')
+    await voter.getByRole('button', { name: 'Vorschlagen' }).click()
+    await expect(voter.getByText('Danke für deinen Vorschlag!')).toBeVisible()
+    await expect(voter.getByRole('radio', { name: 'Döner' })).toHaveCount(0)
+
+    // Doppelt vorschlagen geht nicht - auch nicht, solange er noch wartet.
+    await voter.getByLabel('Neue Option').fill('Döner')
+    await voter.getByRole('button', { name: 'Vorschlagen' }).click()
+    await expect(voter.getByText('Diese Option gibt es schon')).toBeVisible()
+
+    const pending = await prisma.pollOption.findFirstOrThrow({ where: { pollId: poll.id, label: 'Döner' } })
+    expect(pending.approved).toBe(false)
+
+    // Manipuliertes Formular, das nur die ID des offenen Vorschlags schickt: der Server nimmt es nicht an.
+    await voter.waitForLoadState('networkidle')
+    await voter.locator('form:has(button:text("Abstimmen"))').evaluate((form, id) => {
+      form.querySelectorAll('input[name="optionId"]').forEach(input => input.removeAttribute('required'))
+      const hidden = document.createElement('input')
+      hidden.type = 'hidden'
+      hidden.name = 'optionId'
+      hidden.value = id
+      form.appendChild(hidden)
+    }, pending.id)
+    const done = voter.waitForResponse(response => response.request().method() === 'POST')
+    await voter.getByRole('button', { name: 'Abstimmen' }).click()
+    await done
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+
+    // Bearbeiten und Speichern lässt den offenen Vorschlag in Ruhe.
+    await login(page, owner.email)
+    await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+    await page.getByRole('button', { name: 'Änderungen speichern' }).click()
+    await page.waitForURL(/saved=1/)
+    expect(await prisma.pollOption.count({ where: { id: pending.id } })).toBe(1)
+
+    await expect(page.getByText('Vorschläge von Teilnehmenden (1)')).toBeVisible()
+    await page.getByRole('button', { name: 'Döner freigeben' }).click()
+    await expect(page.getByText('Vorschläge von Teilnehmenden')).toHaveCount(0)
+
+    await voter.reload()
+    await voter.getByRole('radio', { name: 'Döner' }).check()
+    await voter.getByRole('button', { name: 'Abstimmen' }).click()
+    await expect(voter.getByText('Döner ✓')).toBeVisible()
+    await voter.context().close()
+  })
+
+  test('ohne Freigabe sofort wählbar, Ablehnen entfernt einen Vorschlag', async ({ page }) => {
+    const owner = await createAccount()
+    const direct = await createPoll(owner.id, { allowVoterOptions: true, voterOptionsNeedApproval: false })
+    await page.goto(`/${direct.id}`)
+    await page.getByLabel('Neue Option').fill('Tacos')
+    await page.getByRole('button', { name: 'Vorschlagen' }).click()
+    await expect(page.getByText('Deine Option steht jetzt zur Wahl.')).toBeVisible()
+    await expect(page.getByRole('radio', { name: 'Tacos' })).toBeVisible()
+
+    const reviewed = await createPoll(owner.id, { allowVoterOptions: true })
+    await prisma.pollOption.create({ data: { pollId: reviewed.id, label: 'Spam', position: 2, approved: false } })
+    await login(page, owner.email)
+    await page.goto(`/${reviewed.id}/verwalten`)
+    await page.getByRole('button', { name: 'Spam ablehnen' }).click()
+    await expect(page.getByText('Vorschläge von Teilnehmenden')).toHaveCount(0)
+    expect(await prisma.pollOption.count({ where: { pollId: reviewed.id } })).toBe(2)
+  })
+
+  test('ohne Erlaubnis kein Vorschlagsformular', async ({ page }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id)
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByRole('button', { name: 'Vorschlagen' })).toHaveCount(0)
+  })
+})

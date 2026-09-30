@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
 import { parseVoterIdentity, resolveVoter, type Voter } from './lib/voter-identity'
 import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENGTH } from './lib/access-code'
-import { accessCodeRule, clientIp, newVoterRule, reserve, voteEmailRules } from './lib/throttle'
+import { accessCodeRule, clientIp, newVoterRule, reserve, suggestionRule, voteEmailRules } from './lib/throttle'
 import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
 import { afterPollClosed } from './lib/poll-closed'
@@ -48,6 +48,8 @@ function parsePollSettings(formData: FormData) {
     minChoices: min !== null && max !== null && min > max ? null : min,
     maxChoices: max,
     resultsVisibility: visibility,
+    allowVoterOptions: formData.get('allowVoterOptions') === 'on',
+    voterOptionsNeedApproval: formData.get('voterOptionsNeedApproval') === 'on',
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
     accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
@@ -148,8 +150,11 @@ export async function updatePoll(formData: FormData) {
   const existingLabels = formData.getAll('existingOptionLabel') as string[]
   const deleteIds = new Set(formData.getAll('deleteOptionId') as string[])
 
-  const validExistingIds = new Set(poll.options.map(o => o.id))
-  const optionsWithVotes = new Set(poll.options.filter(o => o._count.votes > 0).map(o => o.id))
+  // Offene Vorschläge (approved = false) fasst Bearbeiten nicht an - sie stehen nicht im
+  // Formular und würden sonst als "entfernt" gelöscht.
+  const approvedOptions = poll.options.filter(o => o.approved)
+  const validExistingIds = new Set(approvedOptions.map(o => o.id))
+  const optionsWithVotes = new Set(approvedOptions.filter(o => o._count.votes > 0).map(o => o.id))
   // Der Stimmmodus ist gesperrt, sobald jemand abgestimmt hat - sonst stünden Stimmen
   // verschiedener Identitätsarten nebeneinander, und die bisherigen könnte niemand mehr ändern.
   const locked = optionsWithVotes.size > 0
@@ -172,7 +177,7 @@ export async function updatePoll(formData: FormData) {
   const newOptions = formData.getAll('newOption')
     .map(raw => readOption(raw, poll.optionKind))
     .filter((o): o is OptionInput => o !== null)
-    .slice(0, MAX_OPTIONS - keptOptions.length)
+    .slice(0, MAX_OPTIONS - keptOptions.length - (poll.options.length - approvedOptions.length))
 
   if (keptOptions.length + newOptions.length < 2) return
   const ordered: (OptionInput & { id?: string })[] = inDisplayOrder([...keptOptions, ...newOptions])
@@ -184,7 +189,7 @@ export async function updatePoll(formData: FormData) {
     })
 
     const keptIds = new Set(keptOptions.map(o => o.id))
-    const toDelete = poll.options.filter(o => !keptIds.has(o.id) && !optionsWithVotes.has(o.id))
+    const toDelete = approvedOptions.filter(o => !keptIds.has(o.id) && !optionsWithVotes.has(o.id))
     for (const opt of toDelete) {
       await tx.pollOption.delete({ where: { id: opt.id } })
     }
@@ -258,7 +263,8 @@ export async function castVote(formData: FormData): Promise<void> {
   const rawOptionIds = formData.getAll('optionId').filter((v): v is string => typeof v === 'string')
   if (!pollId || rawOptionIds.length === 0) return
 
-  const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: true } })
+  // Nur freigegebene Optionen - ein noch offener Vorschlag ist keine wählbare Option.
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: { where: { approved: true } } } })
   if (!poll) return
 
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
@@ -309,6 +315,61 @@ export async function castVote(formData: FormData): Promise<void> {
   // Auf die Seite ohne ?hinweis= - sonst stünde eine frühere Ablehnung (z.B. falsche Anzahl)
   // auch nach der erfolgreichen Stimme noch da. Identitäts-Parameter bleiben erhalten.
   redirect(pollUrl(pollId, identity))
+}
+
+/** Termine nach dem Hinzufügen neuer Optionen wieder chronologisch durchnummerieren. */
+async function renumberDateOptions(pollId: string) {
+  const options = await prisma.pollOption.findMany({ where: { pollId }, orderBy: [{ startsAt: 'asc' }, { position: 'asc' }], select: { id: true } })
+  await prisma.$transaction(options.map((o, position) => prisma.pollOption.update({ where: { id: o.id }, data: { position } })))
+}
+
+/**
+ * Teilnehmende schlagen eine Option vor (Poll.allowVoterOptions). Wer vorschlägt, muss
+ * abstimmen dürfen (gleiche Identitätsprüfung wie castVote); gedrosselt pro IP und
+ * Abstimmung. Mit voterOptionsNeedApproval landet der Vorschlag erst bei der Verwaltung
+ * (approved = false), sonst sofort in der Liste. Wer vorgeschlagen hat, wird nicht gespeichert.
+ */
+export async function suggestOption(formData: FormData): Promise<void> {
+  const pollId = formString(formData, 'pollId', 50)
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: { select: { label: true } } } })
+  if (!poll || !poll.allowVoterOptions) return
+  const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
+  if (isClosed || !(await hasPollAccess(poll))) return
+
+  const identity = identityFromForm(formData)
+  const { block } = await resolveVoter(poll, identity, { create: false })
+  if (block) return
+
+  const option = readOption(formData.get('suggestion') ?? undefined, poll.optionKind)
+  if (!option) redirect(pollUrl(pollId, identity, 'vorschlag-ungueltig'))
+  if (poll.options.some(o => o.label === option.label)) redirect(pollUrl(pollId, identity, 'vorschlag-doppelt'))
+  if (poll.options.length >= MAX_OPTIONS) redirect(pollUrl(pollId, identity, 'vorschlag-voll'))
+  if (!(await reserve([suggestionRule(await clientIp(), pollId)]))) redirect(pollUrl(pollId, identity, 'vorschlag-gedrosselt'))
+
+  await prisma.pollOption.create({
+    data: { pollId, ...option, position: poll.options.length, approved: !poll.voterOptionsNeedApproval }
+  })
+  if (poll.optionKind !== 'TEXT') await renumberDateOptions(pollId)
+  revalidatePath(`/${pollId}`)
+  revalidatePath(`/${pollId}/verwalten`)
+  redirect(pollUrl(pollId, identity, poll.voterOptionsNeedApproval ? 'vorschlag-wartet' : 'vorschlag-da'))
+}
+
+/** Verwaltung: einen offenen Vorschlag freigeben (intent=approve) oder ablehnen (intent=reject). */
+export async function reviewSuggestion(formData: FormData): Promise<void> {
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const option = ctx.poll.options.find(o => o.id === formString(formData, 'optionId', 50) && !o.approved)
+  if (!option) return
+
+  if (formString(formData, 'intent', 10) === 'approve') {
+    await prisma.pollOption.update({ where: { id: option.id }, data: { approved: true } })
+  } else {
+    // Ein offener Vorschlag kann keine Stimmen haben (castVote nimmt nur freigegebene Optionen).
+    await prisma.pollOption.delete({ where: { id: option.id } })
+  }
+  revalidatePath(`/${ctx.poll.id}`)
+  redirect(manageUrl(ctx.poll.id, ctx.token))
 }
 
 /**
@@ -415,11 +476,13 @@ export async function duplicatePoll(formData: FormData) {
       quorum: source.quorum,
       notifyOwnerOnClose: source.notifyOwnerOnClose,
       resultsVisibility: source.resultsVisibility,
+      allowVoterOptions: source.allowVoterOptions,
+      voterOptionsNeedApproval: source.voterOptionsNeedApproval,
       minChoices: source.minChoices,
       maxChoices: source.maxChoices,
       optionKind: source.optionKind,
       options: {
-        create: [...source.options].sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, startsAt: o.startsAt, position }))
+        create: source.options.filter(o => o.approved).sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, startsAt: o.startsAt, position }))
       }
     }
   })

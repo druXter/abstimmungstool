@@ -39,6 +39,12 @@ anlegt und verwaltet (siehe "Konten" unten).
   `app/lib/date-options.ts`) - Ergebnis, CSV, Mail und rsvp-app zeigen einfach das Label.
   Eingabe und Anzeige in der Zeitzone des Servers (`TZ`), wie das Schließdatum. Die Art steht
   nach dem Anlegen fest.
+* **Optionen von Teilnehmenden** (`Poll.allowVoterOptions`, optional): Wer abstimmen darf,
+  kann Optionen vorschlagen (gedrosselt: 10 pro IP, Abstimmung und Stunde; wer vorschlägt,
+  wird nicht gespeichert). Mit `voterOptionsNeedApproval` (beim Anlegen vorausgewählt)
+  erscheinen Vorschläge erst nach Freigabe auf der Verwaltungsseite. Offene Vorschläge
+  (`PollOption.approved = false`) zählen nirgends als Option - weder beim Abstimmen noch in
+  Ergebnis, Export oder beim Bearbeiten.
 * **Grenzen bei Mehrfachauswahl** (`Poll.minChoices`/`maxChoices`, optional): "wähle 1 bis
   3". Ohne JavaScript kann die Seite das nicht erzwingen - `castVote` prüft und lehnt mit
   Hinweis ab. Gelöschte Optionen machen ein Minimum nie unerfüllbar (`choiceLimits` in

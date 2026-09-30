@@ -38,7 +38,7 @@ export async function loadResult(pollId: string): Promise<(PollResult & { poll: 
     where: { id: pollId },
     select: {
       id: true, title: true, quorum: true,
-      options: { orderBy: { position: 'asc' }, select: { id: true, label: true, _count: { select: { votes: true } } } }
+      options: { where: { approved: true }, orderBy: { position: 'asc' }, select: { id: true, label: true, _count: { select: { votes: true } } } }
     }
   })
   if (!poll) return null

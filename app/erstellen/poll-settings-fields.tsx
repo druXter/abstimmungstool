@@ -28,7 +28,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices' | 'allowVoterOptions' | 'voterOptionsNeedApproval'>
 
 /**
  * Die Einstellungen einer Abstimmung, gemeinsam für Anlegen und Bearbeiten (Gegenstück:
@@ -63,6 +63,17 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
           <input id="poll-max-choices" type="number" name="maxChoices" min={1} max={25} defaultValue={poll?.maxChoices ?? ''} placeholder="alle" className="w-20 border border-gray-300 p-1.5 rounded" />
           <span className="text-xs text-gray-500">Optionen pro Stimme (optional, nur bei Mehrfachauswahl)</span>
         </div>
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="allowVoterOptions" defaultChecked={poll?.allowVoterOptions} className="w-4 h-4" />
+          <span className="text-sm font-medium">Teilnehmende dürfen Optionen vorschlagen</span>
+        </label>
+        <label className="flex items-center gap-2 cursor-pointer ml-6 mt-1">
+          <input type="checkbox" name="voterOptionsNeedApproval" defaultChecked={poll ? poll.voterOptionsNeedApproval : true} className="w-4 h-4" />
+          <span className="text-sm">erst nach Freigabe durch die Verwaltung sichtbar</span>
+        </label>
       </div>
 
       <div>

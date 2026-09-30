@@ -27,7 +27,10 @@ export default async function BearbeitenPage({
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
     include: {
+      // Alle Optionen inkl. offener Vorschläge zählen gegen die Höchstzahl.
+      _count: { select: { options: true } },
       options: {
+        where: { approved: true },
         orderBy: { position: 'asc' },
         include: { _count: { select: { votes: true } } }
       }
@@ -128,7 +131,7 @@ export default async function BearbeitenPage({
 
           <div>
             <label className="block text-sm font-medium mb-1">Weitere Optionen hinzufügen</label>
-            <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - poll.options.length, 0)} startCount={0} inputType={inputTypeFor(poll.optionKind)} />
+            <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - poll._count.options, 0)} startCount={0} inputType={inputTypeFor(poll.optionKind)} />
           </div>
 
           <PollSettingsFields poll={poll} locked={poll.options.some(o => o._count.votes > 0)} />

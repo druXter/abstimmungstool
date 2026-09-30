@@ -81,7 +81,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
       (dort liegt das Ergebnis), rsvp-app bekommt nur das endgültige Datum.
     - Gäste des Events benachrichtigt rsvp-app selbst (dort liegen die Kontakte), das Abstimmungstool nur
       die Abstimmenden - Doppel-Benachrichtigungen bei Personen, die beides sind, vermeiden.
-- [ ] **Optionen von Teilnehmenden:** Vorschläge ergänzen, optional erst nach Freigabe durch die Verwaltung.
+- [x] **Optionen von Teilnehmenden:** Vorschläge ergänzen, optional erst nach Freigabe durch die Verwaltung.
 
 ---
 

@@ -130,75 +130,79 @@ model LoginThrottle {
 // castVote's "Stimmen dieser Identität für diesen Poll ersetzen"-Logik (siehe dort) -
 // bei false wird dabei serverseitig auf höchstens eine Option gekappt.
 model Poll {
-  id                   String            @id @default(cuid())
-  title                String
-  description          String?
+  id                       String            @id @default(cuid())
+  title                    String
+  description              String?
   // Besitzendes Konto. null nur bei Alt-Abstimmungen aus der Zeit ohne Konten (dort
   // gilt weiter creatorToken). Wird beim Löschen eines Kontos vorher umgehängt (siehe
   // deleteUser), die SetNull-Regel ist nur das Sicherheitsnetz.
-  ownerId              String?
-  owner                User?             @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
-  access               PollAccess[]
-  creatorToken         String            @unique @default(uuid())
+  ownerId                  String?
+  owner                    User?             @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  access                   PollAccess[]
+  creatorToken             String            @unique @default(uuid())
   // Nur noch bei Alt-Abstimmungen befüllt (früher: Verwaltungs-Link per Mail). Neue
   // Abstimmungen schreiben dieses Feld nicht mehr - die E-Mail des Kontos genügt.
-  creatorEmail         String?
-  voterIdentity        VoterIdentity     @default(COOKIE)
+  creatorEmail             String?
+  voterIdentity            VoterIdentity     @default(COOKIE)
   // Zeigt auf der öffentlichen Ergebnisseite zusätzlich, WER für welche Option gestimmt
   // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
   // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus nur mit requireVoterName).
-  showVoterNames       Boolean           @default(false)
+  showVoterNames           Boolean           @default(false)
   // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
   // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
   // rsvp-app für diese Abstimmung antwortet - siehe dort. Nötig, um bei Schließung zu
   // wissen, welchem rsvp-app-Event das Ergebnis gemeldet werden soll (siehe
   // app/lib/rsvp-notify.ts). Bleibt null, solange rsvp-app nie einen Webhook für diese
   // Abstimmung geschickt hat (z.B. weil der Modus RSVP nie genutzt wurde).
-  rsvpEventId          String?
-  allowMultipleChoices Boolean           @default(false)
+  rsvpEventId              String?
+  allowMultipleChoices     Boolean           @default(false)
   // Nur im Modus COOKIE: Wer abstimmt, muss einen Namen angeben (Vote.voterName). Keine
   // echte Identität - nur soziale Kontrolle, zusammen mit showVoterNames sichtbar.
-  requireVoterName     Boolean           @default(false)
+  requireVoterName         Boolean           @default(false)
   // Höchstzahl an Teilnehmenden (verschiedene voterKeys). Wer schon abgestimmt hat, kann
   // seine Auswahl weiter ändern; neue Personen werden abgewiesen. null = unbegrenzt.
-  maxVoters            Int?
+  maxVoters                Int?
   // Optionaler Zugangscode, mit jedem Modus kombinierbar: Ohne ihn sieht man weder
   // Optionen noch Ergebnis und kann nicht abstimmen. Hält Fremde fern, verhindert aber
   // KEINE Mehrfachabstimmung (alle Berechtigten kennen denselben Code). Im Klartext
   // gespeichert, weil die Verwaltung ihn zum Weitergeben wieder anzeigen muss - er ist ein
   // geteiltes Merkwort, kein Passwort. Siehe app/lib/access-code.ts.
-  accessCode           String?
+  accessCode               String?
   // Nur im Modus LINK: "nur Teilnahme speichern, nicht wer was gewählt hat" (geheime Wahl).
   // Die Stimme hängt dann an einem Schlüssel, der sich nur aus dem Link-Token ableiten lässt
   // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
   // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
-  secretBallot         Boolean           @default(false)
+  secretBallot             Boolean           @default(false)
   // Nur im Modus EMAIL: wer sich bestätigen darf, eine Angabe pro Zeile - "@verein.de" für
   // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
   // app/lib/email-voters.ts; wird auch beim Abstimmen erneut geprüft.
-  allowedEmails        String?
+  allowedEmails            String?
   // Mindestbeteiligung: Das Ergebnis gilt erst ab so vielen Teilnehmenden (verschiedene
   // voterKeys), sonst "nicht beschlussfähig" (siehe app/lib/results.ts). null = kein Quorum.
-  quorum               Int?
+  quorum                   Int?
   // Beim Schließen (manuell oder per Cron) das Ergebnis an das besitzende Konto mailen
   // (app/lib/poll-closed.ts). Nur mit SMTP_HOST wirksam.
-  notifyOwnerOnClose   Boolean           @default(false)
+  notifyOwnerOnClose       Boolean           @default(false)
   // Wann die öffentliche Seite das Ergebnis zeigt (siehe ResultsVisibility). Die Verwaltung
   // sieht es immer.
-  resultsVisibility    ResultsVisibility @default(ALWAYS)
+  resultsVisibility        ResultsVisibility @default(ALWAYS)
   // Nur bei allowMultipleChoices: wie viele Optionen eine Stimmabgabe mindestens/höchstens
   // umfassen muss ("wähle 1 bis 3"). null = keine Grenze. Geprüft in castVote.
-  minChoices           Int?
-  maxChoices           Int?
+  minChoices               Int?
+  maxChoices               Int?
   // Art der Optionen: Freitext oder Termine (siehe OptionKind). Steht nach dem Anlegen fest.
-  optionKind           OptionKind        @default(TEXT)
-  closesAt             DateTime?
-  closedAt             DateTime?
-  createdAt            DateTime          @default(now())
-  options              PollOption[]
-  votes                Vote[]
-  voterLinks           VoterLink[]
-  emailVoters          EmailVoter[]
+  optionKind               OptionKind        @default(TEXT)
+  // Teilnehmende dürfen Optionen vorschlagen (app/actions.ts suggestOption); bei
+  // voterOptionsNeedApproval erst sichtbar, wenn die Verwaltung sie freigibt (PollOption.approved).
+  allowVoterOptions        Boolean           @default(false)
+  voterOptionsNeedApproval Boolean           @default(true)
+  closesAt                 DateTime?
+  closedAt                 DateTime?
+  createdAt                DateTime          @default(now())
+  options                  PollOption[]
+  votes                    Vote[]
+  voterLinks               VoterLink[]
+  emailVoters              EmailVoter[]
 
   @@index([ownerId])
 }
@@ -253,6 +257,10 @@ model PollOption {
   position Int
   // Nur bei Terminoptionen (Poll.optionKind DATE/DATETIME), sonst null.
   startsAt DateTime?
+  // false = Vorschlag von Teilnehmenden, der noch auf Freigabe wartet. Solche Optionen zählen
+  // NIRGENDS als Option (Abstimmen, Ergebnis, Export, Bearbeiten) - nur die Verwaltungsseite
+  // zeigt sie zum Freigeben oder Ablehnen.
+  approved Boolean   @default(true)
   votes    Vote[]
 }
 
