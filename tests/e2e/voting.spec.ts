@@ -275,3 +275,58 @@ test.describe('Ergebnis-Sichtbarkeit und Auswahlgrenzen', () => {
     expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(2)
   })
 })
+
+test.describe('Terminoptionen', () => {
+  test('Termine anlegen: sortiert, formatiert, mit startsAt - Bearbeiten verschiebt', async ({ page }) => {
+    const owner = await createAccount()
+    await login(page, owner.email)
+    await page.goto('/erstellen')
+    await page.getByLabel('Frage / Titel').fill('Wann treffen wir uns?')
+    await page.getByRole('radio', { name: 'Termine mit Uhrzeit' }).check()
+    await expect(page.getByText('Die Optionen werden nach Datum sortiert.')).toBeVisible()
+    const inputs = page.locator('input[name="option"]')
+    await expect(inputs.first()).toHaveAttribute('type', 'datetime-local')
+    await inputs.nth(0).fill('2026-10-08T18:30')
+    await inputs.nth(1).fill('2026-10-07T19:00')
+    await page.getByRole('button', { name: 'Abstimmung erstellen' }).click()
+    await page.waitForURL(/created=1/)
+    const pollId = new URL(page.url()).pathname.split('/')[1]
+
+    const poll = await prisma.poll.findUniqueOrThrow({ where: { id: pollId }, include: { options: { orderBy: { position: 'asc' } } } })
+    expect(poll.optionKind).toBe('DATETIME')
+    expect(poll.options.map(o => o.label)).toEqual(['Mi., 07.10.2026, 19:00 Uhr', 'Do., 08.10.2026, 18:30 Uhr'])
+    // Der Server rechnet in Europe/Berlin (TZ in playwright.config.ts), im Oktober UTC+2.
+    expect(poll.options[0].startsAt?.toISOString()).toBe('2026-10-07T17:00:00.000Z')
+
+    await page.goto(`/${pollId}`)
+    await expect(page.getByRole('radio', { name: 'Mi., 07.10.2026, 19:00 Uhr' })).toBeVisible()
+
+    // Ersten Termin auf einen späteren Tag verschieben: Reihenfolge und Label ziehen mit.
+    await page.goto(`/${pollId}/verwalten/bearbeiten`)
+    await page.getByLabel('Option Mi., 07.10.2026, 19:00 Uhr').fill('2026-10-09T20:00')
+    await page.getByRole('button', { name: 'Änderungen speichern' }).click()
+    await page.waitForURL(/saved=1/)
+    const edited = await prisma.pollOption.findMany({ where: { pollId }, orderBy: { position: 'asc' } })
+    expect(edited.map(o => o.label)).toEqual(['Do., 08.10.2026, 18:30 Uhr', 'Fr., 09.10.2026, 20:00 Uhr'])
+  })
+
+  test('Tage ohne Uhrzeit', async ({ page }) => {
+    const owner = await createAccount()
+    await login(page, owner.email)
+    await page.goto('/erstellen')
+    await page.getByLabel('Frage / Titel').fill('Welcher Tag?')
+    await page.getByRole('radio', { name: 'Tage' }).check()
+    const inputs = page.locator('input[name="option"]')
+    await expect(inputs.first()).toHaveAttribute('type', 'date')
+    await inputs.nth(0).fill('2026-12-24')
+    await inputs.nth(1).fill('2026-12-24') // doppelt - fällt weg
+    await inputs.nth(2).fill('2026-12-31')
+    await page.getByRole('button', { name: 'Abstimmung erstellen' }).click()
+    await page.waitForURL(/created=1/)
+    const pollId = new URL(page.url()).pathname.split('/')[1]
+    const options = await prisma.pollOption.findMany({ where: { pollId }, orderBy: { position: 'asc' } })
+    expect(options.map(o => o.label)).toEqual(['Do., 24.12.2026', 'Do., 31.12.2026'])
+    // Mitternacht in Europe/Berlin (im Dezember UTC+1).
+    expect(options[0].startsAt?.toISOString()).toBe('2026-12-23T23:00:00.000Z')
+  })
+})

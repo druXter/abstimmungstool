@@ -8,6 +8,7 @@ import { updatePoll } from '../../../actions'
 import SubmitButton from '../../../ui/submit-button'
 import OptionsFieldList from '../../../erstellen/options-field-list'
 import PollSettingsFields from '../../../erstellen/poll-settings-fields'
+import { inputTypeFor, toInputValue } from '../../../lib/date-options'
 
 export const dynamic = 'force-dynamic'
 
@@ -88,7 +89,9 @@ export default async function BearbeitenPage({
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Bestehende Optionen</label>
+            <label className="block text-sm font-medium mb-1">
+              Bestehende Optionen{poll.optionKind !== 'TEXT' && ` (Terminabstimmung: ${poll.optionKind === 'DATE' ? 'Tage' : 'Termine mit Uhrzeit'})`}
+            </label>
             <div className="space-y-2">
               {poll.options.map(option => {
                 const hasVotes = option._count.votes > 0
@@ -96,11 +99,12 @@ export default async function BearbeitenPage({
                   <div key={option.id} className="flex items-center gap-2">
                     <input type="hidden" name="existingOptionId" value={option.id} />
                     <input
-                      type="text"
+                      type={inputTypeFor(poll.optionKind)}
                       name="existingOptionLabel"
-                      defaultValue={option.label}
+                      defaultValue={option.startsAt && poll.optionKind !== 'TEXT' ? toInputValue(option.startsAt, poll.optionKind) : option.label}
                       maxLength={200}
                       required
+                      aria-label={`Option ${option.label}`}
                       className="flex-1 border border-gray-300 p-2 rounded"
                     />
                     {hasVotes ? (
@@ -124,7 +128,7 @@ export default async function BearbeitenPage({
 
           <div>
             <label className="block text-sm font-medium mb-1">Weitere Optionen hinzufügen</label>
-            <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - poll.options.length, 0)} startCount={0} />
+            <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - poll.options.length, 0)} startCount={0} inputType={inputTypeFor(poll.optionKind)} />
           </div>
 
           <PollSettingsFields poll={poll} locked={poll.options.some(o => o._count.votes > 0)} />

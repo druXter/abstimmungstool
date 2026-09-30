@@ -58,7 +58,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
   - [ ] Ja / Vielleicht / Nein pro Option (Doodle-Stil)
   - [ ] Rangfolge (Borda oder Instant-Runoff)
   - [ ] Punkte verteilen (z.B. 10 Punkte auf beliebige Optionen)
-- [ ] **Terminoptionen:** Optionen als Datum/Uhrzeit mit Kalender-Eingabe statt Freitext.
+- [x] **Terminoptionen:** Optionen als Datum/Uhrzeit mit Kalender-Eingabe statt Freitext.
 - [ ] **Terminabstimmung → rsvp-app** **[rsvp-app]**: Das Endergebnis legt in rsvp-app ein Event an bzw. gibt
       einem bestehenden Event sein endgültiges Datum.
   - Baut auf der bestehenden Ergebnis-Meldung auf (`app/lib/rsvp-notify.ts`); Vertrag um das Gewinner-Datum

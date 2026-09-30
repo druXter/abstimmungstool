@@ -18,11 +18,14 @@ const START_COUNT = 4
 export default function OptionsFieldList({
   name = 'option',
   max = 25,
-  startCount = START_COUNT
+  startCount = START_COUNT,
+  inputType = 'text'
 }: {
   name?: string
   max?: number
   startCount?: number
+  /** Bei Terminabstimmungen Kalender-Eingabe statt Freitext (siehe app/lib/date-options.ts). */
+  inputType?: 'text' | 'date' | 'datetime-local'
 }) {
   const [count, setCount] = useState(startCount)
 
@@ -31,11 +34,12 @@ export default function OptionsFieldList({
       {Array.from({ length: count }).map((_, i) => (
         <input
           key={i}
-          type="text"
+          type={inputType}
           name={name}
           maxLength={200}
+          aria-label={`Option ${i + 1}`}
           className="w-full border border-gray-300 p-2 rounded"
-          placeholder={`Option ${i + 1}`}
+          placeholder={inputType === 'text' ? `Option ${i + 1}` : undefined}
         />
       ))}
       {count < max && (
@@ -44,7 +48,7 @@ export default function OptionsFieldList({
           onClick={() => setCount(c => Math.min(c + 1, max))}
           className="text-sm text-blue-600 hover:underline"
         >
-          + Weitere Option hinzufügen
+          {inputType === 'text' ? '+ Weitere Option hinzufügen' : '+ Weiteren Termin hinzufügen'}
         </button>
       )}
       <p className="text-xs text-gray-500">Maximal {max} Optionen insgesamt.</p>

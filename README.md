@@ -33,6 +33,12 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Hürden ohne starke Identität (optional, pro Abstimmung)** - siehe "Hürden" unten:
   Pflicht-Namensfeld im Cookie-Modus, Höchstzahl an Teilnehmenden, Zugangscode. Neue
   Cookie-Identitäten werden außerdem pro IP und Abstimmung gedrosselt.
+* **Terminabstimmungen** (`Poll.optionKind`: Freitext, Tage oder Termine mit Uhrzeit):
+  Kalender-Eingabe statt Freitext, Optionen chronologisch sortiert. Jede Option trägt dann
+  `startsAt`, das Label wird daraus formatiert ("Mi., 07.10.2026, 19:00 Uhr",
+  `app/lib/date-options.ts`) - Ergebnis, CSV, Mail und rsvp-app zeigen einfach das Label.
+  Eingabe und Anzeige in der Zeitzone des Servers (`TZ`), wie das Schließdatum. Die Art steht
+  nach dem Anlegen fest.
 * **Grenzen bei Mehrfachauswahl** (`Poll.minChoices`/`maxChoices`, optional): "wähle 1 bis
   3". Ohne JavaScript kann die Seite das nicht erzwingen - `castVote` prüft und lehnt mit
   Hinweis ab. Gelöschte Optionen machen ein Minimum nie unerfüllbar (`choiceLimits` in

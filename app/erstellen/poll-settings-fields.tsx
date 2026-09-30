@@ -3,6 +3,7 @@ import type { Poll, VoterIdentity } from '@prisma/client'
 import { offeredIdentities } from '../lib/voter-identity'
 import { MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import { isMailConfigured } from '../lib/mail'
+import { toInputValue } from '../lib/date-options'
 
 const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = {
   COOKIE: {
@@ -29,13 +30,6 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
 
 type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices'>
 
-/** Wert für <input type="datetime-local"> in der Zeitzone des Servers (TZ, siehe package.json/docker-compose.yml). */
-function toDateTimeLocal(date: Date | null): string {
-  if (!date) return ''
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
 /**
  * Die Einstellungen einer Abstimmung, gemeinsam für Anlegen und Bearbeiten (Gegenstück:
  * parsePollSettings/parseVoterIdentity in app/actions.ts). `locked`: Es gibt schon
@@ -52,7 +46,7 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
       <div>
         <label htmlFor="poll-closes-at" className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
         <input
-          id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={toDateTimeLocal(poll?.closesAt ?? null)}
+          id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={poll?.closesAt ? toInputValue(poll.closesAt, 'DATETIME') : ''}
           className="w-full border border-gray-300 p-2 rounded"
         />
       </div>

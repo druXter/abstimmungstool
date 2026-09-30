@@ -190,6 +190,8 @@ model Poll {
   // umfassen muss ("wähle 1 bis 3"). null = keine Grenze. Geprüft in castVote.
   minChoices           Int?
   maxChoices           Int?
+  // Art der Optionen: Freitext oder Termine (siehe OptionKind). Steht nach dem Anlegen fest.
+  optionKind           OptionKind        @default(TEXT)
   closesAt             DateTime?
   closedAt             DateTime?
   createdAt            DateTime          @default(now())
@@ -244,11 +246,13 @@ model EmailVoter {
 }
 
 model PollOption {
-  id       String @id @default(cuid())
+  id       String    @id @default(cuid())
   pollId   String
-  poll     Poll   @relation(fields: [pollId], references: [id])
+  poll     Poll      @relation(fields: [pollId], references: [id])
   label    String
   position Int
+  // Nur bei Terminoptionen (Poll.optionKind DATE/DATETIME), sonst null.
+  startsAt DateTime?
   votes    Vote[]
 }
 
@@ -256,6 +260,16 @@ model PollOption {
 // ALWAYS live, AFTER_VOTE erst nach der eigenen Stimme (oder nach dem Ende), AFTER_CLOSE erst
 // nach dem Ende, MANAGERS nie öffentlich - dann geht es auch nicht an rsvp-app (siehe
 // app/lib/rsvp-notify.ts), dort stünde es sonst auf der Event-Seite.
+// Art der Optionen (Poll.optionKind): TEXT frei, DATE ein Tag, DATETIME Tag mit Uhrzeit.
+// Bei Terminen trägt jede Option zusätzlich startsAt (Grundlage für die Sortierung und die
+// geplante Übergabe des Gewinner-Termins an rsvp-app); label ist daraus formatiert, siehe
+// app/lib/date-options.ts.
+enum OptionKind {
+  TEXT
+  DATE
+  DATETIME
+}
+
 enum ResultsVisibility {
   ALWAYS
   AFTER_VOTE

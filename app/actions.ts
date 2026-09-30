@@ -2,7 +2,8 @@
 'use server'
 
 import { redirect } from 'next/navigation'
-import type { ResultsVisibility } from '@prisma/client'
+import type { OptionKind, ResultsVisibility } from '@prisma/client'
+import { parseDateOption, parseOptionKind } from './lib/date-options'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
@@ -57,6 +58,26 @@ function parsePollSettings(formData: FormData) {
   }
 }
 
+type OptionInput = { label: string; startsAt: Date | null }
+
+/**
+ * Liest eine Option aus dem Formular - Freitext oder (bei Terminabstimmungen) ein Datum,
+ * aus dem das Label formatiert wird (app/lib/date-options.ts). Leer/ungültig -> null.
+ */
+function readOption(raw: FormDataEntryValue | undefined, kind: OptionKind): OptionInput | null {
+  const value = typeof raw === 'string' ? raw.trim().slice(0, MAX_TEXT_LENGTH) : ''
+  if (value === '') return null
+  if (kind === 'TEXT') return { label: value, startsAt: null }
+  return parseDateOption(value, kind)
+}
+
+/** Termine chronologisch, Freitext in der eingegebenen Reihenfolge. */
+function inDisplayOrder<T extends OptionInput>(options: T[]): T[] {
+  return options.every(o => o.startsAt)
+    ? [...options].sort((a, b) => a.startsAt!.getTime() - b.startsAt!.getTime())
+    : options
+}
+
 /**
  * Legt eine neue Abstimmung an - nur für eingeloggte Konten mit Creator- oder Admin-
  * Rolle. Die Prüfung passiert hier auf dem Server; ein direkter POST ohne gültige
@@ -71,16 +92,16 @@ export async function createPoll(formData: FormData) {
   const voterIdentity = parseVoterIdentity(formData.get('voterIdentity'))
   const secretBallot = voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
   const settings = parsePollSettings(formData)
+  const optionKind = parseOptionKind(formData.get('optionKind'))
 
-  const rawOptions = formData.getAll('option') as string[]
-  const options = rawOptions
-    .map(o => o.trim().slice(0, MAX_TEXT_LENGTH))
-    .filter(o => o !== '')
+  const options = formData.getAll('option')
+    .map(raw => readOption(raw, optionKind))
+    .filter((o): o is OptionInput => o !== null)
     .slice(0, MAX_OPTIONS)
 
-  // Doppelte Optionen entfernen (z.B. versehentlich zweimal "Pizza") - sonst könnten
-  // Stimmen für augenscheinlich dieselbe Option auf zwei Zeilen verteilt werden.
-  const uniqueOptions = [...new Set(options)]
+  // Doppelte Optionen entfernen (z.B. versehentlich zweimal "Pizza" oder derselbe Termin) -
+  // sonst könnten Stimmen für augenscheinlich dieselbe Option auf zwei Zeilen verteilt werden.
+  const uniqueOptions = inDisplayOrder(options.filter((o, i) => options.findIndex(other => other.label === o.label) === i))
 
   if (title === '' || uniqueOptions.length < 2) return
 
@@ -90,10 +111,11 @@ export async function createPoll(formData: FormData) {
       description,
       voterIdentity,
       secretBallot,
+      optionKind,
       ...settings,
       ownerId: user.id,
       options: {
-        create: uniqueOptions.map((label, position) => ({ label, position }))
+        create: uniqueOptions.map((option, position) => ({ ...option, position }))
       }
     }
   })
@@ -135,23 +157,25 @@ export async function updatePoll(formData: FormData) {
   // Geheime Wahl ebenso: Ein Umschalten würde bestehende Stimmen unauffindbar bzw. zuordenbar machen.
   const secretBallot = locked ? poll.secretBallot : voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
 
-  const keptOptions: { id: string; label: string }[] = []
+  // Die Optionsart steht seit dem Anlegen fest (sonst passten Labels und startsAt nicht zusammen).
+  const keptOptions: (OptionInput & { id: string })[] = []
   for (let i = 0; i < existingIds.length; i++) {
     const id = existingIds[i]
     if (!validExistingIds.has(id)) continue // gehört nicht zu diesem Poll - ignorieren
     if (deleteIds.has(id) && !optionsWithVotes.has(id)) continue // Löschen erlaubt, da keine Stimmen
 
-    const label = (existingLabels[i] || '').trim().slice(0, MAX_TEXT_LENGTH)
-    if (label === '') continue
-    keptOptions.push({ id, label })
+    const option = readOption(existingLabels[i], poll.optionKind)
+    if (!option) continue
+    keptOptions.push({ id, ...option })
   }
 
-  const newLabels = (formData.getAll('newOption') as string[])
-    .map(o => o.trim().slice(0, MAX_TEXT_LENGTH))
-    .filter(o => o !== '')
+  const newOptions = formData.getAll('newOption')
+    .map(raw => readOption(raw, poll.optionKind))
+    .filter((o): o is OptionInput => o !== null)
     .slice(0, MAX_OPTIONS - keptOptions.length)
 
-  if (keptOptions.length + newLabels.length < 2) return
+  if (keptOptions.length + newOptions.length < 2) return
+  const ordered: (OptionInput & { id?: string })[] = inDisplayOrder([...keptOptions, ...newOptions])
 
   await prisma.$transaction(async (tx) => {
     await tx.poll.update({
@@ -165,12 +189,9 @@ export async function updatePoll(formData: FormData) {
       await tx.pollOption.delete({ where: { id: opt.id } })
     }
 
-    for (let i = 0; i < keptOptions.length; i++) {
-      await tx.pollOption.update({ where: { id: keptOptions[i].id }, data: { label: keptOptions[i].label, position: i } })
-    }
-
-    for (let i = 0; i < newLabels.length; i++) {
-      await tx.pollOption.create({ data: { pollId, label: newLabels[i], position: keptOptions.length + i } })
+    for (const [position, { id, label, startsAt }] of ordered.entries()) {
+      if (id) await tx.pollOption.update({ where: { id }, data: { label, startsAt, position } })
+      else await tx.pollOption.create({ data: { pollId, label, startsAt, position } })
     }
   })
 
@@ -396,8 +417,9 @@ export async function duplicatePoll(formData: FormData) {
       resultsVisibility: source.resultsVisibility,
       minChoices: source.minChoices,
       maxChoices: source.maxChoices,
+      optionKind: source.optionKind,
       options: {
-        create: [...source.options].sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, position }))
+        create: [...source.options].sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, startsAt: o.startsAt, position }))
       }
     }
   })

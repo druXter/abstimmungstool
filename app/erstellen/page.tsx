@@ -5,7 +5,7 @@ import { canCreatePolls } from '../lib/permissions'
 import { createPoll } from '../actions'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
-import OptionsFieldList from './options-field-list'
+import OptionsEditor from './options-editor'
 import PollSettingsFields from './poll-settings-fields'
 
 export const dynamic = 'force-dynamic'
@@ -66,10 +66,7 @@ export default async function ErstellenPage() {
             ></textarea>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">Optionen</label>
-            <OptionsFieldList />
-          </div>
+          <OptionsEditor />
 
           <PollSettingsFields />
 
