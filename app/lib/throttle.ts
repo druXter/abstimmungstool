@@ -125,3 +125,18 @@ export function resetRules(ip: string, email: string): ThrottleRule[] {
 export function passwordChangeRule(userId: string): ThrottleRule {
   return { scope: 'pwchange:user', identifier: userId, limit: 10, windowMs: LOGIN_WINDOW_MS }
 }
+
+/**
+ * Regel gegen das massenhafte Erzeugen neuer Cookie-Identitäten (Modus COOKIE): zählt pro
+ * IP und Abstimmung nur ERSTE Stimmabgaben, Änderungen der eigenen Auswahl nicht. Bewusst
+ * großzügig, weil sich viele Menschen hinter einem NAT (Firmen-/Vereinsnetz, Mobilfunk) eine
+ * IP-Adresse teilen - das bremst Skripte, keine Gruppe am selben WLAN.
+ */
+export function newVoterRule(ip: string, pollId: string): ThrottleRule {
+  return { scope: 'vote:new:ip', identifier: `${pollId}\u0000${ip}`, limit: 30, windowMs: 60 * MINUTE }
+}
+
+/** Regel gegen das Durchprobieren von Zugangscodes (kurze PINs wären sonst schnell erraten). */
+export function accessCodeRule(ip: string, pollId: string): ThrottleRule {
+  return { scope: 'poll:code:ip', identifier: `${pollId}\u0000${ip}`, limit: 10, windowMs: LOGIN_WINDOW_MS }
+}

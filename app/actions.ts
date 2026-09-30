@@ -6,6 +6,8 @@ import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
 import { parseVoterIdentity, resolveVoter, type Voter } from './lib/voter-identity'
+import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENGTH } from './lib/access-code'
+import { accessCodeRule, clientIp, newVoterRule, reserve } from './lib/throttle'
 import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual, type PollLevel } from './lib/permissions'
@@ -13,6 +15,39 @@ import { formString, normalizeEmail } from './lib/form'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
+const MAX_VOTER_NAME_LENGTH = 60
+const MAX_VOTERS_LIMIT = 10_000
+
+/**
+ * Die Einstellungen, die Anlegen und Bearbeiten gemeinsam haben (alles außer Titel,
+ * Beschreibung, Optionen und Stimmmodus). Ungültiges fällt still auf "aus" zurück.
+ */
+function parsePollSettings(formData: FormData) {
+  const closesAtInput = formString(formData, 'closesAt', 30)
+  const closesAt = closesAtInput ? new Date(closesAtInput) : null
+  const maxVoters = Number.parseInt(formString(formData, 'maxVoters', 10), 10)
+  return {
+    closesAt: closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null,
+    showVoterNames: formData.get('showVoterNames') === 'on',
+    allowMultipleChoices: formData.get('allowMultipleChoices') === 'on',
+    requireVoterName: formData.get('requireVoterName') === 'on',
+    maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
+    accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null
+  }
+}
+
+/**
+ * Zurück auf die Abstimmungsseite, optional mit einem Hinweis (siehe NOTICES in
+ * app/[pollId]/page.tsx). Ein rsvp-Klick-Token wird mitgenommen, sonst verlöre die Seite
+ * im Modus RSVP die Identität.
+ */
+function pollUrl(pollId: string, verifyToken: string, notice?: string): string {
+  const params = new URLSearchParams()
+  if (verifyToken) params.set('verify', verifyToken)
+  if (notice) params.set('hinweis', notice)
+  const query = params.toString()
+  return `/${pollId}${query ? `?${query}` : ''}`
+}
 
 /**
  * Adresse der Verwaltungsseite. Bei Alt-Abstimmungen ohne Besitzer-Konto hängt daran
@@ -63,11 +98,8 @@ export async function createPoll(formData: FormData) {
 
   const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
-  const closesAtInput = formData.get('closesAt') as string
-  const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const voterIdentity = parseVoterIdentity(formData.get('voterIdentity'))
-  const showVoterNames = formData.get('showVoterNames') === 'on'
-  const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
+  const settings = parsePollSettings(formData)
 
   const rawOptions = formData.getAll('option') as string[]
   const options = rawOptions
@@ -85,10 +117,8 @@ export async function createPoll(formData: FormData) {
     data: {
       title,
       description,
-      closesAt,
       voterIdentity,
-      showVoterNames,
-      allowMultipleChoices,
+      ...settings,
       ownerId: user.id,
       options: {
         create: uniqueOptions.map((label, position) => ({ label, position }))
@@ -118,10 +148,7 @@ export async function updatePoll(formData: FormData) {
   if (title === '') return
 
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
-  const closesAtInput = formData.get('closesAt') as string
-  const closesAt = closesAtInput ? new Date(closesAtInput) : null
-  const showVoterNames = formData.get('showVoterNames') === 'on'
-  const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
+  const settings = parsePollSettings(formData)
 
   const existingIds = formData.getAll('existingOptionId') as string[]
   const existingLabels = formData.getAll('existingOptionLabel') as string[]
@@ -154,7 +181,7 @@ export async function updatePoll(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.poll.update({
       where: { id: pollId },
-      data: { title, description, closesAt, voterIdentity, showVoterNames, allowMultipleChoices }
+      data: { title, description, voterIdentity, ...settings }
     })
 
     const keptIds = new Set(keptOptions.map(o => o.id))
@@ -181,11 +208,19 @@ export async function updatePoll(formData: FormData) {
  * übergebene Options-Liste: entfernt nicht mehr gewählte Optionen, legt neu gewählte an,
  * lässt unveränderte unangetastet (kein Duplikat, siehe Vote.@@unique). Funktioniert
  * identisch für Einzel- und Mehrfachauswahl-Abstimmungen - der einzige Unterschied ist,
- * wie viele Einträge `optionIds` hat. In einer Transaktion, damit zwei gleichzeitige
- * Abgaben derselben Person nie eine Mischung beider Auswahlen hinterlassen.
+ * wie viele Einträge `optionIds` hat.
+ *
+ * In einer Transaktion: Zwei gleichzeitige Abgaben derselben Person hinterlassen nie eine
+ * Mischung beider Auswahlen, und die Höchstzahl (Poll.maxVoters) wird in derselben
+ * Transaktion geprüft, in der die neue Person dazukommt. Gibt false zurück, wenn sie voll ist.
  */
-async function replaceVotes(pollId: string, voter: Voter, optionIds: string[]) {
-  await prisma.$transaction(async (tx) => {
+async function replaceVotes(pollId: string, voter: Voter, optionIds: string[], maxVoters: number | null): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    if (maxVoters !== null && (await tx.vote.count({ where: { pollId, voterKey: voter.key } })) === 0) {
+      const voters = await tx.vote.groupBy({ by: ['voterKey'], where: { pollId } })
+      if (voters.length >= maxVoters) return false
+    }
+
     await tx.vote.deleteMany({
       where: { pollId, voterKey: voter.key, optionId: { notIn: optionIds } }
     })
@@ -196,6 +231,7 @@ async function replaceVotes(pollId: string, voter: Voter, optionIds: string[]) {
         create: { pollId, optionId, identityKind: voter.kind, voterKey: voter.key, voterName: voter.name }
       })
     }
+    return true
   })
 }
 
@@ -206,14 +242,16 @@ async function replaceVotes(pollId: string, voter: Voter, optionIds: string[]) {
  * resolveVoter (app/lib/voter-identity.ts) anhand von Poll.voterIdentity - blockiert es
  * (z.B. Modus RSVP ohne gültigen Token), wird die Stimme abgelehnt (fail-closed), es gibt
  * bewusst KEINEN anonymen Fallback, sonst wäre die "eine Stimme pro Person"-Garantie wertlos.
- * Bewusst als reines Formular ohne Client-JS gebaut (kein onSubmit-Handler) - daher
- * `void` statt eines Rückgabewerts mit Fehlermeldung; ungültige/verspätete Anfragen
- * werden wie an anderen Stellen dieses Projekts stillschweigend ignoriert statt
- * einer Fehlermeldung, das UI bietet ohnehin nur gültige Optionen an.
+ *
+ * Reihenfolge der Prüfungen: offen -> Zugangscode -> gültige Optionen -> Identität ->
+ * ggf. Pflichtname -> für NEUE Personen Drosselung (nur Cookie-Modus) und Höchstzahl.
+ * Was die Oberfläche ohnehin verhindert (geschlossen, kein Code, falsche Option), wird
+ * still ignoriert; Drosselung und Höchstzahl kann man nicht vorher sehen, daher dort ein
+ * Hinweis per Weiterleitung. Bewusst als reines Formular ohne Client-JS gebaut.
  */
 export async function castVote(formData: FormData): Promise<void> {
-  const pollId = formData.get('pollId') as string
-  const rawOptionIds = formData.getAll('optionId') as string[]
+  const pollId = formString(formData, 'pollId', 50)
+  const rawOptionIds = formData.getAll('optionId').filter((v): v is string => typeof v === 'string')
   if (!pollId || rawOptionIds.length === 0) return
 
   const poll = await prisma.poll.findUnique({ where: { id: pollId }, include: { options: true } })
@@ -221,6 +259,7 @@ export async function castVote(formData: FormData): Promise<void> {
 
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
   if (isClosed) return
+  if (!(await hasPollAccess(poll))) return
 
   // Nur Optionen akzeptieren, die tatsächlich zu diesem Poll gehören - schützt gegen
   // manipulierte optionId-Werte aus einem fremden Poll.
@@ -234,11 +273,49 @@ export async function castVote(formData: FormData): Promise<void> {
     selectedOptionIds = [selectedOptionIds[0]]
   }
 
-  const { voter, block } = await resolveVoter(poll, { verifyToken: formString(formData, 'verifyToken', 4000) }, { create: true })
+  const verifyToken = formString(formData, 'verifyToken', 4000)
+  const { voter, block } = await resolveVoter(poll, { verifyToken }, { create: true })
   if (block || !voter) return
 
-  await replaceVotes(pollId, voter, selectedOptionIds)
+  if (poll.voterIdentity === 'COOKIE' && poll.requireVoterName) {
+    const name = formString(formData, 'voterName', MAX_VOTER_NAME_LENGTH)
+    if (!name) return
+    voter.name = name
+  }
+
+  const isNewVoter = (await prisma.vote.count({ where: { pollId, voterKey: voter.key } })) === 0
+  if (isNewVoter && poll.voterIdentity === 'COOKIE') {
+    // Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt - sonst teilten sich alle
+    // Besucher EINEN Zähler. Wer den Proxy umgehen kann, könnte den Header ohnehin selbst setzen.
+    const ip = await clientIp()
+    if (ip !== 'unknown' && !(await reserve([newVoterRule(ip, pollId)]))) {
+      redirect(pollUrl(pollId, verifyToken, 'gedrosselt'))
+    }
+  }
+
+  if (!(await replaceVotes(pollId, voter, selectedOptionIds, poll.maxVoters))) {
+    redirect(pollUrl(pollId, verifyToken, 'voll'))
+  }
   revalidatePath(`/${pollId}`)
+}
+
+/**
+ * Zugangscode einer Abstimmung eingeben (siehe app/lib/access-code.ts). Gedrosselt pro IP
+ * und Abstimmung, damit sich kurze Codes nicht durchprobieren lassen.
+ */
+export async function unlockPoll(formData: FormData): Promise<void> {
+  const pollId = formString(formData, 'pollId', 50)
+  const verifyToken = formString(formData, 'verifyToken', 4000)
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, accessCode: true } })
+  if (!poll) return
+
+  if (!(await reserve([accessCodeRule(await clientIp(), poll.id)]))) redirect(pollUrl(poll.id, verifyToken, 'code-gesperrt'))
+  if (!accessCodeMatches(poll, formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH))) {
+    redirect(pollUrl(poll.id, verifyToken, 'code-falsch'))
+  }
+
+  await grantPollAccess(poll)
+  redirect(pollUrl(poll.id, verifyToken))
 }
 
 /**

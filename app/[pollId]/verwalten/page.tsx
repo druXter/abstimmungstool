@@ -86,6 +86,15 @@ export default async function VerwaltenPage({
           )}
 
           <CopyableField label="Link zum Teilen (zum Abstimmen)" value={publicLink} />
+          {poll.accessCode && (
+            <>
+              <CopyableField label="Zugangscode (getrennt vom Link weitergeben)" value={poll.accessCode} />
+              <CopyableField
+                label="Oder: Link inkl. Zugangscode (füllt das Code-Feld vor - wer ihn hat, kommt hinein)"
+                value={`${publicLink}?code=${encodeURIComponent(poll.accessCode)}`}
+              />
+            </>
+          )}
           {legacy && token && (
             <CopyableField
               label="Verwaltungs-Link (nur für dich - nicht teilen!)"
@@ -180,7 +189,7 @@ export default async function VerwaltenPage({
 
         <div className="bg-white p-6 rounded-lg shadow">
           <h2 className="font-bold text-gray-900 mb-4">
-            Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
+            Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'}{poll.maxVoters !== null ? ` von höchstens ${poll.maxVoters}` : ''})
           </h2>
           <PollResults
             options={poll.options}

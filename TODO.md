@@ -37,14 +37,14 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [ ] Erweiterung auf **Teilnehmendenkonten** aus dem Suite-Verbund, siehe Abschnitt D.
 
 ### A4. Zugangscode pro Abstimmung
-- [ ] Optionaler Code/PIN, mit jedem Modus kombinierbar. In der Oberfläche klar sagen: hält Fremde fern,
+- [x] Optionaler Code/PIN, mit jedem Modus kombinierbar. In der Oberfläche klar sagen: hält Fremde fern,
       verhindert keine Mehrfachabstimmung.
 
 ### A5. Hürden für den Cookie-Modus
-- [ ] Drosselung beim Abstimmen pro IP-Hash und Abstimmung (`LoginThrottle` wiederverwenden), großzügig wegen NAT
+- [x] Drosselung beim Abstimmen pro IP-Hash und Abstimmung (`LoginThrottle` wiederverwenden), großzügig wegen NAT
       (z.B. 30 neue Identitäten/Stunde). Schließt die README-Grenze "Kein Rate-Limiting beim Abstimmen".
-- [ ] Optionales Pflicht-Namensfeld (Namen im Ergebnis sichtbar → soziale Kontrolle).
-- [ ] Optionale Höchstzahl an Teilnehmenden.
+- [x] Optionales Pflicht-Namensfeld (Namen im Ergebnis sichtbar → soziale Kontrolle).
+- [x] Optionale Höchstzahl an Teilnehmenden.
 
 ---
 

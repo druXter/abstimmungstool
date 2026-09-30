@@ -64,6 +64,17 @@ export default function DatenschutzPage() {
             E-Mail-Adresse und ist nicht mit dir als Person verknüpft. Löschst du das Cookie, verlierst du den Bezug zu
             deiner bisherigen Stimme.
           </p>
+          <p className="mt-2">
+            <strong>Name (optional):</strong> Die Ersteller:in kann verlangen, dass du beim Abstimmen einen Namen
+            angibst. Wir speichern ihn dann zusammen mit deiner Stimme; er wird nicht überprüft. Wer die Abstimmung
+            verwaltet, sieht ihn - und, falls &quot;Abstimmende namentlich anzeigen&quot; aktiv ist, alle auf der
+            Ergebnisseite. Das Abstimmformular weist dich darauf hin.
+          </p>
+          <p className="mt-2">
+            <strong>Zugangscode (optional):</strong> Ist eine Abstimmung mit einem Zugangscode geschützt und du gibst
+            ihn richtig ein, merkt sich dein Browser das (Cookie <code>poll_access_…</code>, siehe Punkt 9). Es enthält
+            nur einen Prüfwert, weder den Code selbst noch Angaben zu dir.
+          </p>
         </div>
 
         <div>
@@ -125,13 +136,15 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">7. Schutz vor Missbrauch (Login-Drosselung)</h2>
+          <h2 className="font-bold text-lg">7. Schutz vor Missbrauch (Drosselung)</h2>
           <p className="mt-2">
-            Um das Erraten von Passwörtern und das massenhafte Auslösen von Mails zu verhindern, zählen wir
-            fehlgeschlagene Anmeldeversuche und Passwort-Reset-Anfragen. Dazu wird deine{' '}
-            <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse{' '}
-            <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster (15 Minuten bzw. 1 Stunde)
-            gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Rechtsgrundlage ist unser
+            Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
+            Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
+            Passwort-Reset-Anfragen, eingegebene Zugangscodes und erste Stimmabgaben in offenen Abstimmungen. Dazu wird
+            deine <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
+            Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
+            (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
+            deiner Stimme wird die IP-Adresse nicht verknüpft. Rechtsgrundlage ist unser
             berechtigtes Interesse an der Sicherheit der Anwendung (Art. 6 Abs. 1 lit. f DSGVO).
           </p>
         </div>
@@ -153,6 +166,7 @@ export default function DatenschutzPage() {
           </p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
             <li><code>voter_token</code> - zufällige Kennung für deine Stimme (1 Jahr)</li>
+            <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
             <li><code>__Host-session</code> - Anmeldung an deinem Konto (30 Tage)</li>
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
             <li><code>invite_link</code> - nur kurz (2 Minuten), wenn ein Konto einen Einladungslink zum Weitergeben angezeigt bekommt</li>

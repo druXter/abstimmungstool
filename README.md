@@ -23,6 +23,9 @@ anlegt und verwaltet (siehe "Konten" unten).
     verifizierte E-Mail als Identität genutzt - siehe "Verifizierte Abstimmungen"
     unten. Verhindert Mehrfachabstimmen auch über verschiedene Geräte/Browser hinweg.
   * Lässt sich mit der Mehrfachauswahl kombinieren.
+* **Hürden ohne starke Identität (optional, pro Abstimmung)** - siehe "Hürden" unten:
+  Pflicht-Namensfeld im Cookie-Modus, Höchstzahl an Teilnehmenden, Zugangscode. Neue
+  Cookie-Identitäten werden außerdem pro IP und Abstimmung gedrosselt.
 * **Live-Ergebnis:** Stimmenanzahl und Prozentanteil pro Option, in Echtzeit. Der
   Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
@@ -57,6 +60,34 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
 * **Der Modus ist gesperrt, sobald jemand abgestimmt hat** (Bearbeiten-Seite und
   `updatePoll`) - sonst stünden Stimmen verschiedener Arten nebeneinander, und die
   bisherigen könnte niemand mehr ändern.
+
+## Hürden (Zugangscode, Höchstzahl, Name, Drosselung)
+
+Ergänzungen, die mit jedem Modus (bzw. im Cookie-Modus) funktionieren, aber **keine
+Identität ersetzen** - die Oberfläche sagt das jeweils beim Einstellen:
+
+* **Zugangscode** (`Poll.accessCode`, `app/lib/access-code.ts`): Ohne Code zeigt die
+  Abstimmungsseite nichts - weder Titel noch Optionen noch Ergebnis -, und `castVote` lehnt
+  ab. Wer ihn eingibt, bekommt ein Cookie `poll_access_<pollId>` (nur für den Pfad dieser
+  Abstimmung, 30 Tage) mit einem Hash aus Abstimmung und Code; ein geänderter Code macht alte
+  Cookies wertlos. Groß-/Kleinschreibung zählt nicht. Eingaben sind pro IP und Abstimmung
+  gedrosselt (10 in 15 Minuten). Der Code liegt im Klartext in der Datenbank, weil die
+  Verwaltungsseite ihn zum Weitergeben anzeigt (dort auch ein Link mit `?code=`, der das Feld
+  nur vorausfüllt). **Verhindert keine Mehrfachabstimmung** - alle kennen denselben Code.
+* **Höchstzahl an Teilnehmenden** (`Poll.maxVoters`): Neue Personen werden abgewiesen, sobald
+  so viele verschiedene `voterKey`s abgestimmt haben; wer drin ist, kann weiter ändern. Die
+  Prüfung läuft in derselben Transaktion wie das Speichern der Stimme.
+* **Pflicht-Namensfeld** (`Poll.requireVoterName`, nur Modus `COOKIE`): Der Name landet in
+  `Vote.voterName` und wird nicht geprüft. Zusammen mit `showVoterNames` sieht die Gruppe, wer
+  wofür gestimmt hat (soziale Kontrolle).
+* **Drosselung neuer Cookie-Identitäten** (`newVoterRule` in `app/lib/throttle.ts`): höchstens
+  30 **erste** Stimmabgaben pro IP und Abstimmung und Stunde - großzügig, weil sich viele
+  Menschen hinter einem NAT eine Adresse teilen. Das Ändern der eigenen Auswahl zählt nicht.
+  Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt, sonst teilten sich alle einen
+  Zähler; wer den Proxy umgehen kann, könnte den Header ohnehin selbst setzen.
+
+Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Seite
+(`?hinweis=…`, feste Texte in `app/[pollId]/page.tsx`).
 
 ## Verifizierte Abstimmungen (Modus `RSVP`)
 
@@ -215,9 +246,10 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   basierte `voter_token` verhindert nur, im selben Browser mehrmals abzustimmen.
   Für eine kleine, vertraute Gruppe ist das ein bewusst akzeptierter Kompromiss,
   kein Sicherheitsversprechen für öffentliche Abstimmungen mit Fremden.
-* **Kein Rate-Limiting beim Abstimmen** - nur Anmeldung und Passwort-Reset sind
-  gedrosselt. Das Anlegen erfordert ein Konto, das Abstimmen selbst bleibt offen; bei
-  Erreichbarkeit übers offene Internet ggf. nachrüsten.
+* **Die Drosselung beim Abstimmen bremst, verhindert aber nichts** - 30 neue
+  Cookie-Identitäten pro IP und Stunde lassen sich mit wechselnden IPs umgehen. Wer
+  verlässlich "eine Stimme pro Person" braucht, nimmt einen Modus mit echter Identität
+  (siehe "Identität der Abstimmenden").
 * **Datenschutzerklärung ist ein Entwurf** (`app/datenschutz/page.tsx`): Sie beschreibt,
   was das Tool tatsächlich speichert, ersetzt aber keine juristische Prüfung - vor dem
   Einsatz mit Externen prüfen lassen und bei Änderungen der Datenverarbeitung mitpflegen.
@@ -254,7 +286,7 @@ fehlende oder ungültige Verifizierung blockiert rsvp-app nie.
 Bearbeiten) zeigt auf der öffentlichen Ergebnisseite zusätzlich zu den aggregierten
 Zahlen, wer für welche Option gestimmt hat (`Vote.voterName`, je nach Modus Name oder
 E-Mail, siehe `app/[pollId]/poll-results.tsx`). Standardmäßig aus. Im Modus `COOKIE` gibt
-es keine Namen - der Schalter bleibt dort ohne Wirkung.
+es Namen nur mit Pflicht-Namensfeld (siehe "Hürden"), sonst bleibt der Schalter ohne Wirkung.
 Der Ersteller/die Erstellerin und alle Konten mit Verwaltungs-Berechtigung (Freigabe) sehen
 die Namen auf der Verwaltungsseite immer, unabhängig von diesem Schalter. Das Abstimmformular
 weist in allen Modi mit Namen darauf hin, wer sie sieht.

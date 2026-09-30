@@ -7,7 +7,7 @@ import { getPollLevel } from '../../../lib/permissions'
 import { updatePoll } from '../../../actions'
 import SubmitButton from '../../../ui/submit-button'
 import OptionsFieldList from '../../../erstellen/options-field-list'
-import VoterIdentityFields from '../../../erstellen/voter-identity-fields'
+import PollSettingsFields from '../../../erstellen/poll-settings-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -47,12 +47,6 @@ export default async function BearbeitenPage({
   // Nur Alt-Abstimmungen tragen den Token weiter (bei Abstimmungen mit Konto käme er nie aus der URL).
   const legacyToken = !poll.ownerId && token ? token : ''
   const backHref = `/${poll.id}/verwalten${legacyToken ? `?token=${encodeURIComponent(legacyToken)}` : ''}`
-
-  const d = poll.closesAt ? new Date(poll.closesAt) : null
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  const formattedClosesAt = d
-    ? `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
-    : ''
 
   return (
     <main className="bg-gray-50 py-8 px-4">
@@ -133,21 +127,7 @@ export default async function BearbeitenPage({
             <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - poll.options.length, 0)} startCount={0} />
           </div>
 
-          <div>
-            <label htmlFor="poll-closes-at" className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
-            <input id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={formattedClosesAt} className="w-full border border-gray-300 p-2 rounded" />
-          </div>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll.allowMultipleChoices} className="w-4 h-4" />
-            <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
-          </label>
-
-          <VoterIdentityFields
-            identity={poll.voterIdentity}
-            showVoterNames={poll.showVoterNames}
-            locked={poll.options.some(o => o._count.votes > 0)}
-          />
+          <PollSettingsFields poll={poll} locked={poll.options.some(o => o._count.votes > 0)} />
 
           <SubmitButton>Änderungen speichern</SubmitButton>
         </form>

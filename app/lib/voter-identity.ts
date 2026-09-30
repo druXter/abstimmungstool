@@ -13,7 +13,7 @@ export type Voter = {
   kind: VoterIdentity
   /** Eindeutig pro Person und Abstimmung, mit der Art als Präfix (siehe voterKey). */
   key: string
-  /** Wird bei showVoterNames bzw. auf der Verwaltungsseite angezeigt, null im Cookie-Modus. */
+  /** Wird bei showVoterNames bzw. auf der Verwaltungsseite angezeigt. Im Cookie-Modus null (castVote setzt ggf. den Pflichtnamen). */
   name: string | null
 }
 

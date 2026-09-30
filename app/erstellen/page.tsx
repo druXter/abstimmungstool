@@ -6,7 +6,7 @@ import { createPoll } from '../actions'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
 import OptionsFieldList from './options-field-list'
-import VoterIdentityFields from './voter-identity-fields'
+import PollSettingsFields from './poll-settings-fields'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,17 +71,7 @@ export default async function ErstellenPage() {
             <OptionsFieldList />
           </div>
 
-          <div>
-            <label htmlFor="poll-closes-at" className="block text-sm font-medium mb-1">Automatisch schließen am (optional)</label>
-            <input id="poll-closes-at" type="datetime-local" name="closesAt" className="w-full border border-gray-300 p-2 rounded" />
-          </div>
-
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" name="allowMultipleChoices" className="w-4 h-4" />
-            <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar)</span>
-          </label>
-
-          <VoterIdentityFields />
+          <PollSettingsFields />
 
           <SubmitButton>Abstimmung erstellen</SubmitButton>
         </form>

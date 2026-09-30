@@ -146,7 +146,7 @@ model Poll {
   voterIdentity        VoterIdentity @default(COOKIE)
   // Zeigt auf der öffentlichen Ergebnisseite zusätzlich, WER für welche Option gestimmt
   // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
-  // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus gibt es keine).
+  // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus nur mit requireVoterName).
   showVoterNames       Boolean       @default(false)
   // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
   // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
@@ -156,6 +156,18 @@ model Poll {
   // Abstimmung geschickt hat (z.B. weil der Modus RSVP nie genutzt wurde).
   rsvpEventId          String?
   allowMultipleChoices Boolean       @default(false)
+  // Nur im Modus COOKIE: Wer abstimmt, muss einen Namen angeben (Vote.voterName). Keine
+  // echte Identität - nur soziale Kontrolle, zusammen mit showVoterNames sichtbar.
+  requireVoterName     Boolean       @default(false)
+  // Höchstzahl an Teilnehmenden (verschiedene voterKeys). Wer schon abgestimmt hat, kann
+  // seine Auswahl weiter ändern; neue Personen werden abgewiesen. null = unbegrenzt.
+  maxVoters            Int?
+  // Optionaler Zugangscode, mit jedem Modus kombinierbar: Ohne ihn sieht man weder
+  // Optionen noch Ergebnis und kann nicht abstimmen. Hält Fremde fern, verhindert aber
+  // KEINE Mehrfachabstimmung (alle Berechtigten kennen denselben Code). Im Klartext
+  // gespeichert, weil die Verwaltung ihn zum Weitergeben wieder anzeigen muss - er ist ein
+  // geteiltes Merkwort, kein Passwort. Siehe app/lib/access-code.ts.
+  accessCode           String?
   closesAt             DateTime?
   closedAt             DateTime?
   createdAt            DateTime      @default(now())
@@ -195,7 +207,7 @@ enum VoterIdentity {
 // app/lib/voter-identity.ts) - so können Schlüssel verschiedener Arten nie kollidieren.
 // identityKind wiederholt die Art als eigene Spalte, damit man ohne String-Zerlegung
 // danach filtern kann. voterName ist, was bei Poll.showVoterNames bzw. auf der
-// Verwaltungsseite angezeigt wird (im Cookie-Modus null).
+// Verwaltungsseite angezeigt wird (im Cookie-Modus nur mit Poll.requireVoterName).
 //
 // castVote (app/actions.ts) behandelt eine Stimmabgabe immer als "ersetze die
 // komplette Auswahl dieser Identität für diesen Poll" - überschreibt/löscht also
