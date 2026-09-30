@@ -13,7 +13,8 @@ async function issueLinks(page: Page, pollId: string, names: string[]): Promise<
   const result = new Map<string, string>()
   for (const name of names) {
     const label = name.replace(/\s*<.*>$/, '') // "Ben <ben@…>" heißt in der Liste "Ben"
-    result.set(label, await page.getByLabel(label, { exact: true }).inputValue())
+    // Mit eingetragener Adresse geht der Link zusätzlich per Mail raus (Test-Mailserver).
+    result.set(label, await page.getByLabel(new RegExp(`^${label}( \\(per Mail verschickt\\))?$`)).inputValue())
   }
   return result
 }

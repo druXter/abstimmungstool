@@ -27,9 +27,9 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
       (wer verteilt, kennt die Zuordnung Link → Person).
 
 ### A2. E-Mail-Bestätigung (Magic Link)
-- [ ] Offene Abstimmung, vor dem Abstimmen Bestätigungslink an die eigene Adresse (braucht SMTP).
-- [ ] Optional Domain-Allowlist (z.B. nur `@verein.de`) oder feste Adressliste.
-- [ ] Adressen per `normalizeEmail` vereinheitlichen, Anfragen über `app/lib/throttle.ts` drosseln
+- [x] Offene Abstimmung, vor dem Abstimmen Bestätigungslink an die eigene Adresse (braucht SMTP).
+- [x] Optional Domain-Allowlist (z.B. nur `@verein.de`) oder feste Adressliste.
+- [x] Adressen per `normalizeEmail` vereinheitlichen, Anfragen über `app/lib/throttle.ts` drosseln
       (sonst Mailschleuder).
 
 ### A3. Mit Konto abstimmen

@@ -15,7 +15,7 @@ const ACCOUNT_INACTIVITY_YEARS = 2
  * DSGVO - siehe Datenschutzerklärung Punkt 11), gleiches Muster wie rsvp-apps
  * /api/cron/cleanup. Läuft idempotent, einmal täglich reicht völlig.
  *
- * 1. Löscht Abstimmungen samt Optionen, Stimmen, Stimmlinks und Freigaben, die vor mehr als
+ * 1. Löscht Abstimmungen samt Optionen, Stimmen, Stimmlinks, bestätigten Adressen und Freigaben, die vor mehr als
  *    POLL_RETENTION_MONTHS zu Ende gegangen sind. "Zu Ende" ist der Schließzeitpunkt
  *    (manuell geschlossen, sonst das automatische Schließdatum); eine nie geschlossene
  *    Abstimmung ohne Frist zählt ab ihrer Anlage - sonst bliebe sie ewig liegen.
@@ -25,7 +25,7 @@ const ACCOUNT_INACTIVITY_YEARS = 2
  *    bleibt bestehen: Dass sie die Frist aus Punkt 1 überlebt haben, heißt, dass sie noch
  *    "leben" - ihre Stimmen anderer Leute sollen nicht stillschweigend ohne Besitzer enden.
  * 3. Räumt Technisches auf: abgelaufene Sitzungen, abgelaufene Einladungs-/Reset-Links,
- *    veraltete Drossel-Zähler.
+ *    veraltete Drossel-Zähler, nie bestätigte E-Mail-Anfragen.
  */
 export async function GET(request: Request) {
   const secret = new URL(request.url).searchParams.get('secret')
@@ -59,6 +59,7 @@ export async function GET(request: Request) {
     prisma.pollOption.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.pollAccess.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.voterLink.deleteMany({ where: { pollId: { in: pollIds } } }),
+    prisma.emailVoter.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.poll.deleteMany({ where: { id: { in: pollIds } } })
   ])
 
@@ -83,6 +84,9 @@ export async function GET(request: Request) {
     data: { resetTokenHash: null, resetTokenExpiresAt: null }
   })
   await prisma.loginThrottle.deleteMany({ where: { windowStart: { lt: new Date(now.getTime() - 24 * 60 * 60 * 1000) } } })
+  // Nie bestätigte E-Mail-Anfragen (Modus EMAIL) nach Ablauf ihres Links - sie tragen nur eine
+  // Adresse, zu der es keine Stimme gibt.
+  await prisma.emailVoter.deleteMany({ where: { confirmedAt: null, tokenExpiresAt: { lt: now } } })
 
   return NextResponse.json({
     success: true,

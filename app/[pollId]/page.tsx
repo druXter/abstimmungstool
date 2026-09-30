@@ -2,7 +2,7 @@
 import { notFound } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '../lib/prisma'
-import { castVote, unlockPoll } from '../actions'
+import { castVote, forgetVoteEmail, requestVoteEmail, unlockPoll } from '../actions'
 import { resolveVoter } from '../lib/voter-identity'
 import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import SubmitButton from '../ui/submit-button'
@@ -13,11 +13,17 @@ export const dynamic = 'force-dynamic'
 
 // Rückmeldungen der Server Actions (?hinweis=..., siehe pollUrl in app/actions.ts). Nur
 // feste Texte - ein unbekannter Wert zeigt nichts an.
-const NOTICES: Record<string, string> = {
-  gedrosselt: 'Von deinem Netzwerk aus haben in der letzten Stunde sehr viele neue Personen abgestimmt. Bitte versuche es später noch einmal.',
-  voll: 'Die Höchstzahl an Teilnehmenden ist inzwischen erreicht - deine Stimme wurde nicht gezählt.',
-  'code-falsch': 'Der Zugangscode stimmt nicht.',
-  'code-gesperrt': 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.'
+const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: string }> = {
+  gedrosselt: { tone: 'warning', text: 'Von deinem Netzwerk aus haben in der letzten Stunde sehr viele neue Personen abgestimmt. Bitte versuche es später noch einmal.' },
+  voll: { tone: 'warning', text: 'Die Höchstzahl an Teilnehmenden ist inzwischen erreicht - deine Stimme wurde nicht gezählt.' },
+  'code-falsch': { tone: 'error', text: 'Der Zugangscode stimmt nicht.' },
+  'code-gesperrt': { tone: 'error', text: 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.' },
+  'mail-gesendet': { tone: 'success', text: 'Wir haben dir einen Bestätigungslink geschickt. Öffne ihn in diesem Browser, um abzustimmen - er ist 24 Stunden gültig.' },
+  'mail-bestaetigt': { tone: 'success', text: 'Deine Adresse ist bestätigt. Du kannst jetzt abstimmen.' },
+  'mail-ungueltig': { tone: 'error', text: 'Bitte gib eine gültige E-Mail-Adresse ein.' },
+  'mail-nicht-zugelassen': { tone: 'error', text: 'Mit dieser Adresse kann bei dieser Abstimmung nicht abgestimmt werden.' },
+  'mail-gedrosselt': { tone: 'error', text: 'Für diese Adresse wurden gerade schon mehrere Links angefordert. Bitte schau in dein Postfach (auch in den Spam-Ordner) oder versuche es in einer Stunde erneut.' },
+  'mail-fehler': { tone: 'error', text: 'Die Mail konnte gerade nicht verschickt werden. Bitte versuche es später erneut.' }
 }
 
 function Hint({ children }: { children: React.ReactNode }) {
@@ -67,7 +73,7 @@ export default async function PollPage({
         <form action={unlockPoll} className="max-w-sm mx-auto bg-white p-6 rounded-lg shadow space-y-4 text-gray-900">
           <h1 className="text-xl font-bold">Zugangscode erforderlich</h1>
           <p className="text-sm text-gray-600">Diese Abstimmung ist mit einem Zugangscode geschützt. Du bekommst ihn von der Person, die dich eingeladen hat.</p>
-          {notice && <Notice tone="error">{notice}</Notice>}
+          {notice && <Notice tone="error">{notice.text}</Notice>}
           <input type="hidden" name="pollId" value={poll.id} />
           {identityInputs}
           <div>
@@ -120,7 +126,7 @@ export default async function PollPage({
           )}
         </div>
 
-        {notice && <Notice tone="warning">{notice}</Notice>}
+        {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
 
         {!isClosed && block === 'rsvp-missing' && (
           <Hint>
@@ -144,6 +150,35 @@ export default async function PollPage({
           </Hint>
         )}
 
+        {!isClosed && block === 'email-missing' && (
+          <form action={requestVoteEmail} className="bg-white p-6 rounded-lg shadow space-y-3">
+            <input type="hidden" name="pollId" value={poll.id} />
+            <h2 className="font-bold text-gray-900">Mit E-Mail-Adresse abstimmen</h2>
+            <p className="text-sm text-gray-600">
+              Damit jede Person nur einmal abstimmt, bestätigst du zuerst deine Adresse: Wir schicken dir einen Link,
+              danach kannst du in diesem Browser abstimmen.
+            </p>
+            <div>
+              <label htmlFor="vote-email" className="block text-sm font-medium text-gray-800 mb-1">E-Mail-Adresse</label>
+              <input
+                id="vote-email" type="email" name="email" required maxLength={254} autoComplete="email"
+                className="w-full border border-gray-300 p-2 rounded text-gray-900"
+              />
+            </div>
+            <SubmitButton>Bestätigungslink schicken</SubmitButton>
+          </form>
+        )}
+
+        {!isClosed && block === 'email-not-allowed' && (
+          <Hint>
+            Die bestätigte Adresse <strong>{voter?.name}</strong> ist für diese Abstimmung (inzwischen) nicht zugelassen.
+            <form action={forgetVoteEmail} className="mt-2">
+              <input type="hidden" name="pollId" value={poll.id} />
+              <button type="submit" className="underline font-medium">Andere Adresse verwenden</button>
+            </form>
+          </Hint>
+        )}
+
         {!isClosed && block === 'link-missing' && (
           <Hint>
             Für diese Abstimmung bekommt jede Person einen persönlichen Link. Öffne bitte den Link, den du erhalten
@@ -158,12 +193,6 @@ export default async function PollPage({
           </Hint>
         )}
 
-        {!isClosed && block === 'unavailable' && (
-          <Hint>
-            Für diese Abstimmung ist eine Art der Stimmabgabe eingestellt, die dieses Tool noch nicht anbietet.
-            Bitte wende dich an die Person, die die Abstimmung verwaltet.
-          </Hint>
-        )}
 
         {!isClosed && !block && isFull && (
           <Hint>Die Höchstzahl von {poll.maxVoters} Teilnehmenden ist erreicht - hier kann niemand mehr neu abstimmen.</Hint>
@@ -186,6 +215,12 @@ export default async function PollPage({
                 {voter.secret
                   ? 'Geheime Wahl: Gespeichert wird nur, dass du abgestimmt hast - nicht, wofür. Mit deinem Link kannst du deine Auswahl ändern.'
                   : <>Persönlicher Link für <strong>{voter.name}</strong> - bitte nicht weitergeben.</>}
+              </p>
+            )}
+            {voter?.kind === 'EMAIL' && (
+              <p className="text-xs text-gray-500">
+                Du stimmst mit deiner bestätigten Adresse ab: <strong>{voter.name}</strong> ·{' '}
+                <button type="submit" form="forget-email" className="underline">andere Adresse verwenden</button>
               </p>
             )}
             {voter?.kind === 'ACCOUNT' && (
@@ -234,6 +269,14 @@ export default async function PollPage({
               </label>
             ))}
             <SubmitButton>{hasVoted ? 'Auswahl speichern' : 'Abstimmen'}</SubmitButton>
+          </form>
+        )}
+
+        {voter?.kind === 'EMAIL' && (
+          // Eigenes Formular außerhalb des Abstimmformulars (Formulare dürfen nicht verschachtelt
+          // sein); der Knopf im Abstimmformular zeigt per form-Attribut hierher.
+          <form id="forget-email" action={forgetVoteEmail} className="hidden">
+            <input type="hidden" name="pollId" value={poll.id} />
           </form>
         )}
 

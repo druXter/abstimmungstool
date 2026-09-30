@@ -7,7 +7,9 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
 import { parseVoterIdentity, resolveVoter, type Voter } from './lib/voter-identity'
 import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENGTH } from './lib/access-code'
-import { accessCodeRule, clientIp, newVoterRule, reserve } from './lib/throttle'
+import { accessCodeRule, clientIp, newVoterRule, reserve, voteEmailRules } from './lib/throttle'
+import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
+import { sendVoteConfirmationEmail } from './lib/mail'
 import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
@@ -33,7 +35,8 @@ function parsePollSettings(formData: FormData) {
     allowMultipleChoices: formData.get('allowMultipleChoices') === 'on',
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
-    accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null
+    accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
+    allowedEmails: normalizeAllowedEmails(formString(formData, 'allowedEmails', 20_000))
   }
 }
 
@@ -282,6 +285,45 @@ export async function unlockPoll(formData: FormData): Promise<void> {
 }
 
 /**
+ * Modus EMAIL, Schritt 1: Bestätigungslink an die eingegebene Adresse schicken (siehe
+ * app/lib/email-voters.ts). Gedrosselt pro IP und pro Adresse+Abstimmung, sonst wäre das
+ * Formular eine Mailschleuder für fremde Postfächer. Die Rückmeldung verrät bewusst nicht,
+ * ob die Adresse schon bestätigt ist.
+ */
+export async function requestVoteEmail(formData: FormData): Promise<void> {
+  const pollId = formString(formData, 'pollId', 50)
+  const poll = await prisma.poll.findUnique({ where: { id: pollId } })
+  if (!poll || poll.voterIdentity !== 'EMAIL') return
+  const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
+  if (isClosed || !(await hasPollAccess(poll))) return
+
+  const email = normalizeEmail(formString(formData, 'email', 254))
+  if (!email) redirect(pollUrl(pollId, {}, 'mail-ungueltig'))
+  if (!isEmailAllowed(email, poll.allowedEmails)) redirect(pollUrl(pollId, {}, 'mail-nicht-zugelassen'))
+  if (!(await reserve(voteEmailRules(await clientIp(), email, pollId)))) redirect(pollUrl(pollId, {}, 'mail-gedrosselt'))
+
+  const link = await createEmailConfirmation(pollId, email)
+  const sent = await sendVoteConfirmationEmail(email, poll.title, link, CONFIRM_LINK_HOURS)
+  redirect(pollUrl(pollId, {}, sent ? 'mail-gesendet' : 'mail-fehler'))
+}
+
+/** Modus EMAIL, Schritt 2: Knopfdruck auf /[pollId]/bestaetigen löst den Einmal-Link ein. */
+export async function confirmVoteEmail(formData: FormData): Promise<void> {
+  const pollId = formString(formData, 'pollId', 50)
+  const row = await findPendingConfirmation(pollId, formString(formData, 'token', 100))
+  if (!row) redirect(`/${pollId}/bestaetigen`)
+  if (!(await confirmEmailVoter(row))) redirect(`/${pollId}/bestaetigen`)
+  redirect(pollUrl(pollId, {}, 'mail-bestaetigt'))
+}
+
+/** Modus EMAIL: "andere Adresse verwenden" - die bisherige Stimme bleibt der alten Adresse zugeordnet. */
+export async function forgetVoteEmail(formData: FormData): Promise<void> {
+  const pollId = formString(formData, 'pollId', 50)
+  await forgetConfirmedEmail(pollId)
+  redirect(`/${pollId}`)
+}
+
+/**
  * Schließt eine Abstimmung vorzeitig - für Owner, Admin und Moderator:innen mit Freigabe
  * (bei Alt-Abstimmungen mit dem creatorToken).
  */
@@ -310,6 +352,7 @@ export async function deletePoll(formData: FormData) {
   await prisma.vote.deleteMany({ where: { pollId } })
   await prisma.pollOption.deleteMany({ where: { pollId } })
   await prisma.voterLink.deleteMany({ where: { pollId } })
+  await prisma.emailVoter.deleteMany({ where: { pollId } })
   await prisma.poll.delete({ where: { id: pollId } })
 
   redirect('/meine-abstimmungen')

@@ -1,8 +1,8 @@
 // app/datenschutz/page.tsx
 import Link from 'next/link'
 
-// ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand der
-// Konten-/Föderations-Funktionen). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
+// Föderation und alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, 2026-09-30). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -92,6 +92,14 @@ export default function DatenschutzPage() {
             gelöscht, bleibt die Stimme gezählt, der Name wird aber entfernt.
           </p>
           <p className="mt-2">
+            <strong>Bestätigte E-Mail-Adresse:</strong> Bei einer so eingestellten Abstimmung gibst du deine
+            E-Mail-Adresse an und bekommst einen Bestätigungslink. Wir speichern die Adresse, den Zeitpunkt der
+            Anfrage und der Bestätigung sowie - nur als nicht umkehrbaren Hash - den Link und eine Kennung, die dein
+            Browser nach der Bestätigung als Cookie <code>poll_email_…</code> behält (siehe Punkt 9). Deine Stimme
+            wird mit der Adresse gespeichert. Nie bestätigte Anfragen löschen wir nach Ablauf des Links (24 Stunden),
+            spätestens beim nächsten täglichen Aufräumen.
+          </p>
+          <p className="mt-2">
             <strong>Persönliche Stimmlinks:</strong> Die Verwaltung einer Abstimmung kann für jede eingeladene Person
             einen eigenen Link ausstellen. Dafür speichern wir den von ihr eingetragenen Namen (oder eine laufende
             Nummer) und, falls angegeben, die E-Mail-Adresse, an die der Link verschickt wird - vom Link selbst nur einen
@@ -155,7 +163,8 @@ export default function DatenschutzPage() {
           <p className="mt-2">
             Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
-            Passwort-Reset-Anfragen, eingegebene Zugangscodes und erste Stimmabgaben in offenen Abstimmungen. Dazu wird
+            Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes und erste Stimmabgaben in
+            offenen Abstimmungen. Dazu wird
             deine <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
             (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
@@ -168,8 +177,9 @@ export default function DatenschutzPage() {
           <h2 className="font-bold text-lg">8. E-Mails</h2>
           <p className="mt-2">
             Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto und den auf Wunsch
-            angeforderten Passwort-Reset) und, wenn die Verwaltung einer Abstimmung das veranlasst, persönliche
-            Stimmlinks an die von ihr eingetragenen Adressen. Werbung oder Newsletter gibt es nicht.
+            angeforderten Passwort-Reset), auf deine Anforderung hin den Bestätigungslink einer Abstimmung und, wenn
+            die Verwaltung einer Abstimmung das veranlasst, persönliche Stimmlinks an die von ihr eingetragenen
+            Adressen. Werbung oder Newsletter gibt es nicht.
           </p>
         </div>
 
@@ -182,6 +192,7 @@ export default function DatenschutzPage() {
           </p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
             <li><code>voter_token</code> - zufällige Kennung für deine Stimme (1 Jahr)</li>
+            <li><code>poll_email_…</code> - nur bei Abstimmungen mit E-Mail-Bestätigung: merkt sich deine bestätigte Adresse (30 Tage, nur für diese Abstimmung)</li>
             <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
             <li><code>__Host-session</code> - Anmeldung an deinem Konto (30 Tage)</li>
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
@@ -198,7 +209,7 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">10. Empfänger und Auftragsverarbeiter</h2>
           <p className="mt-2">
-            <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset- und Stimmlink-Mails versenden wir über den
+            <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset-, Bestätigungs- und Stimmlink-Mails versenden wir über den
             E-Mail-Server <code>{smtpHost}</code>. Mit dem Betreiber dieses Servers besteht, soweit es sich um einen
             externen Anbieter handelt, ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
           </p>
@@ -216,7 +227,7 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">11. Speicherdauer</h2>
           <p className="mt-2">
-            Abstimmungen samt Optionen, Stimmen, Stimmlinks und Freigaben werden spätestens{' '}
+            Abstimmungen samt Optionen, Stimmen, Stimmlinks, bestätigten Adressen und Freigaben werden spätestens{' '}
             <strong>18 Monate, nachdem sie zu Ende gegangen sind</strong>, automatisch vollständig gelöscht
             (maßgeblich ist der Zeitpunkt des Schließens; eine nie geschlossene Abstimmung ohne Frist zählt ab ihrer
             Anlage). Die Ersteller:in kann sie jederzeit früher selbst löschen.

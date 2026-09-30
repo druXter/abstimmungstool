@@ -140,3 +140,14 @@ export function newVoterRule(ip: string, pollId: string): ThrottleRule {
 export function accessCodeRule(ip: string, pollId: string): ThrottleRule {
   return { scope: 'poll:code:ip', identifier: `${pollId}\u0000${ip}`, limit: 10, windowMs: LOGIN_WINDOW_MS }
 }
+
+/**
+ * Regeln für Bestätigungsmails im Modus EMAIL (jede Anfrage zählt): pro IP gegen das Fluten
+ * vieler fremder Postfächer, pro Adresse und Abstimmung gegen das Fluten eines einzelnen.
+ */
+export function voteEmailRules(ip: string, email: string, pollId: string): ThrottleRule[] {
+  return [
+    { scope: 'vote-mail:ip', identifier: ip, limit: 20, windowMs: 60 * MINUTE },
+    { scope: 'vote-mail:email', identifier: `${pollId}\u0000${email}`, limit: 3, windowMs: 60 * MINUTE }
+  ]
+}

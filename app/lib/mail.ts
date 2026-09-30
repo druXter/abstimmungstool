@@ -127,3 +127,24 @@ Solange die Abstimmung offen ist, kannst du deine Auswahl über denselben Link �
     )
   )
 }
+
+/** Bestätigungslink für den Modus EMAIL - wer die Adresse bestätigt, kann abstimmen. */
+export async function sendVoteConfirmationEmail(toEmail: string, pollTitle: string, link: string, validHours: number): Promise<boolean> {
+  return send(
+    toEmail,
+    `Bitte bestätige deine Adresse: ${pollTitle}`,
+    `Hallo,
+
+jemand (vermutlich du) möchte mit dieser Adresse bei der Abstimmung "${pollTitle}" abstimmen. Mit diesem Link bestätigst du die Adresse (${validHours} Stunden gültig, nur einmal nutzbar):
+${link}
+
+Falls du das nicht warst, ignoriere diese Mail einfach - ohne Bestätigung passiert nichts.`,
+    layout(
+      pollTitle,
+      `Jemand (vermutlich du) möchte mit dieser Adresse bei dieser Abstimmung abstimmen. Bestätige die Adresse mit dem Button - der Link ist ${validHours} Stunden gültig und nur einmal nutzbar.`,
+      'Adresse bestätigen',
+      link,
+      'Falls du das nicht warst, ignoriere diese Mail einfach - ohne Bestätigung passiert nichts.'
+    )
+  )
+}

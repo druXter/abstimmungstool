@@ -173,12 +173,17 @@ model Poll {
   // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
   // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
   secretBallot         Boolean       @default(false)
+  // Nur im Modus EMAIL: wer sich bestätigen darf, eine Angabe pro Zeile - "@verein.de" für
+  // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
+  // app/lib/email-voters.ts; wird auch beim Abstimmen erneut geprüft.
+  allowedEmails        String?
   closesAt             DateTime?
   closedAt             DateTime?
   createdAt            DateTime      @default(now())
   options              PollOption[]
   votes                Vote[]
   voterLinks           VoterLink[]
+  emailVoters          EmailVoter[]
 
   @@index([ownerId])
 }
@@ -206,6 +211,25 @@ model VoterLink {
   @@index([pollId])
 }
 
+// Bestätigte E-Mail-Adresse (Modus EMAIL, siehe app/lib/email-voters.ts). Jede Anfrage legt
+// eine Zeile an und verschickt einen Einmal-Link (tokenHash, nur als SHA-256-Hash, befristet).
+// Die Bestätigung selbst ist ein Knopfdruck auf der Link-Seite (kein reiner Aufruf - sonst
+// würden Mail-Scanner, die Links vorab öffnen, den Link verbrauchen); danach ist tokenHash
+// leer und der Browser hält ein Cookie, dessen Hash in sessionHash steht.
+model EmailVoter {
+  id             String    @id @default(cuid())
+  pollId         String
+  poll           Poll      @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  email          String
+  tokenHash      String?   @unique
+  tokenExpiresAt DateTime
+  sessionHash    String?   @unique
+  confirmedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([pollId])
+}
+
 model PollOption {
   id       String @id @default(cuid())
   pollId   String
@@ -216,9 +240,8 @@ model PollOption {
 }
 
 // Wie eine Stimme einer Person zugeordnet wird (Poll.voterIdentity, Vote.identityKind).
-// Umgesetzt sind COOKIE, LINK (persönlicher Stimmlink), ACCOUNT (Konto) und RSVP; EMAIL
-// (bestätigte Adresse) ist vorgesehen (siehe TODO.md, Abschnitt A) und wird bis dahin
-// fail-closed behandelt (niemand kann abstimmen, siehe app/lib/voter-identity.ts).
+// Alle Arten sind umgesetzt (siehe app/lib/voter-identity.ts): COOKIE, LINK (persönlicher
+// Stimmlink), EMAIL (per Mail bestätigte Adresse), ACCOUNT (Konto) und RSVP.
 enum VoterIdentity {
   COOKIE
   LINK

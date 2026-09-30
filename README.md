@@ -21,6 +21,9 @@ anlegt und verwaltet (siehe "Konten" unten).
     geändert werden, solange die Abstimmung offen ist.
   * **Persönliche Stimmlinks (`LINK`):** Pro Person ein eigener Link, Beteiligungsübersicht,
     optional geheime Wahl - siehe "Persönliche Stimmlinks" unten.
+  * **Mit bestätigter E-Mail-Adresse (`EMAIL`):** Adresse eingeben, per Link bestätigen,
+    abstimmen; optional nur bestimmte Adressen/Domains - siehe "Abstimmen mit bestätigter
+    E-Mail-Adresse" unten. Nur wählbar, wenn `SMTP_HOST` gesetzt ist.
   * **Nur mit Konto (`ACCOUNT`):** Eine Stimme pro Konto dieses Tools, geräteübergreifend -
     siehe "Abstimmen mit Konto" unten.
   * **Nur über rsvp-app (`RSVP`):** Statt des Cookies wird eine über `rsvp-app`
@@ -51,7 +54,7 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
 | `COOKIE` | zufälliges Browser-Cookie (Standard) | umgesetzt |
 | `RSVP` | von rsvp-app bestätigte E-Mail, nur Zusagende | umgesetzt |
 | `LINK` | persönlicher Stimmlink, optional geheime Wahl | umgesetzt |
-| `EMAIL` | selbst bestätigte E-Mail-Adresse | geplant (`TODO.md` A2) |
+| `EMAIL` | per Mail bestätigte Adresse, optional Adress-/Domainliste | umgesetzt (braucht `SMTP_HOST`) |
 | `ACCOUNT` | Konto dieses Tools (auch per Verbund angelegt) | umgesetzt |
 
 * Jede Stimme speichert `identityKind`, einen `voterKey` mit der Art als Präfix
@@ -59,8 +62,7 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
   ggf. einen `voterName` für die namentliche Anzeige. Eindeutig ist
   `(pollId, voterKey, optionId)`.
 * **Fail-closed:** Fehlt die geforderte Identität, kann nicht abgestimmt werden - es
-  gibt nie einen Rückfall auf das Cookie. Noch nicht umgesetzte Modi sind entsprechend
-  für niemanden abstimmbar (und werden beim Anlegen nicht angeboten).
+  gibt nie einen Rückfall auf das Cookie.
 * **Der Modus ist gesperrt, sobald jemand abgestimmt hat** (Bearbeiten-Seite und
   `updatePoll`) - sonst stünden Stimmen verschiedener Arten nebeneinander, und die
   bisherigen könnte niemand mehr ändern.
@@ -122,6 +124,28 @@ Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Se
   könnte damit nachsehen, wie eine Person gestimmt hat. Und wer Datenbank **und**
   Server-/Proxy-Logs (Zeitpunkte der Aufrufe mit `?k=`) hat, könnte Zeitpunkte abgleichen.
 * Gesperrt wie der Modus selbst, sobald abgestimmt wurde.
+
+## Abstimmen mit bestätigter E-Mail-Adresse (Modus `EMAIL`)
+
+* Nur wählbar mit Mailversand (`SMTP_HOST`), sonst käme nie ein Link an.
+* **Ablauf** (`app/lib/email-voters.ts`): Adresse auf der Abstimmungsseite eingeben
+  (`normalizeEmail`) → Einmal-Link per Mail (24 Stunden gültig, in der Datenbank nur als
+  SHA-256-Hash, `EmailVoter.tokenHash`) → auf `/[pollId]/bestaetigen` **per Knopfdruck**
+  bestätigen → der Browser bekommt ein Cookie `poll_email_<pollId>` (nur für den Pfad dieser
+  Abstimmung, 30 Tage, in der Datenbank als Hash in `sessionHash`).
+* Der bloße Aufruf des Links bestätigt bewusst nichts: Mail-Scanner (z.B. Outlook SafeLinks)
+  öffnen Links vorab und würden einen Einmal-Link sonst verbrauchen.
+* `voterKey = email:<Adresse>` - dieselbe Adresse auf einem anderen Gerät ist dieselbe
+  Person (dort einfach erneut bestätigen). "Andere Adresse verwenden" vergisst die
+  Bestätigung in diesem Browser; die Stimme bleibt der alten Adresse zugeordnet.
+* **Adress-/Domainliste** (`Poll.allowedEmails`, optional): eine Angabe pro Zeile,
+  `@verein.de` für eine ganze Domain, sonst einzelne Adressen. Geprüft beim Anfordern und
+  beim Abstimmen - wer nachträglich von der Liste fliegt, kann nicht mehr abstimmen (bereits
+  abgegebene Stimmen bleiben).
+* **Mailschleuder-Schutz** (`voteEmailRules` in `app/lib/throttle.ts`): höchstens 3 Links pro
+  Adresse und Abstimmung und 20 pro IP, jeweils pro Stunde.
+* **Grenze:** Wer mehrere Adressen hat, kann mehrfach abstimmen - dagegen hilft nur eine feste
+  Adressliste. Nie bestätigte Anfragen löscht der Cleanup-Cron nach Ablauf des Links.
 
 ## Abstimmen mit Konto (Modus `ACCOUNT`)
 
@@ -382,13 +406,14 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
 
 `GET https://vote.deine-domain.de/api/cron/cleanup?secret=DeinSehrGeheimesPasswort123`
 
-* **Abstimmungen** samt Optionen, Stimmen, Stimmlinks und Freigaben: 18 Monate nachdem sie zu Ende
+* **Abstimmungen** samt Optionen, Stimmen, Stimmlinks, bestätigten Adressen und Freigaben: 18 Monate nachdem sie zu Ende
   gingen (Schließzeitpunkt; sonst das automatische Schließdatum; eine nie geschlossene
   Abstimmung ohne Frist zählt ab Anlage).
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
   über ein verbundenes Tool). **Admin-Konten sind ausgenommen**, ebenso Konten, denen noch
   eine Abstimmung gehört.
-* Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links und veraltete Drossel-Zähler.
+* Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
+  bestätigte E-Mail-Anfragen (Modus `EMAIL`) nach Ablauf ihres Links.
 
 ## Setup
 
@@ -427,8 +452,10 @@ npm run test:e2e
 Abgedeckt sind der Konten-Verbund (`suite.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
 Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
-(`hurdles.spec.ts`) und die persönlichen Stimmlinks (`links.spec.ts`). Der Mailversand
-selbst ist nicht abgedeckt (die Tests laufen ohne `SMTP_HOST`).
+(`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`) und die
+E-Mail-Bestätigung samt Mailversand (`email.spec.ts`). Mails fängt ein kleiner
+Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
+nach `.e2e/mails.jsonl` schreibt.
 
 Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
 eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die

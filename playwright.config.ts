@@ -1,5 +1,6 @@
 import { defineConfig, devices } from '@playwright/test'
 import { TEST_SUITE_IDPS } from './tests/e2e/suite-server'
+import { MAIL_PORT } from './tests/e2e/mail-server'
 
 // E2E-Tests gegen eine echte, frisch gebaute Instanz (next build + next start) mit eigener
 // Datenbank (prisma/test.db) - nie gegen die Entwicklungs- oder Produktivdatenbank.
@@ -52,9 +53,14 @@ export default defineConfig({
       SUITE_IDPS: TEST_SUITE_IDPS,
       SUITE_APP_NAME: 'Abstimmungstool Test',
       RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
+      // Mailversand an den Test-Mailserver (tests/e2e/mail-server.ts): ohne TLS, ohne Anmeldung.
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: String(MAIL_PORT),
+      SMTP_USER: '',
+      SMTP_PASS: '',
+      SMTP_FROM: 'Abstimmungstool Test <test@example.test>',
       // Werte aus einer lokalen .env ausdrücklich leeren (gesetzte Variablen - auch leere - haben
-      // Vorrang vor .env): kein Mailversand, keine Anbieter-Rolle, keine echte rsvp-app.
-      SMTP_HOST: '',
+      // Vorrang vor .env): keine Anbieter-Rolle, keine echte rsvp-app.
       SUITE_SIGNING_KEY: '',
       SUITE_TRUSTED_APPS: '',
       RSVP_APP_BASE_URL: '',

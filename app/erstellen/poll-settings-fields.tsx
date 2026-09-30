@@ -1,6 +1,6 @@
 // app/erstellen/poll-settings-fields.tsx
 import type { Poll, VoterIdentity } from '@prisma/client'
-import { OFFERED_IDENTITIES } from '../lib/voter-identity'
+import { offeredIdentities } from '../lib/voter-identity'
 import { MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 
 const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = {
@@ -16,14 +16,17 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
     title: 'Persönliche Stimmlinks (1 Stimme pro Link)',
     text: 'Du stellst nach dem Anlegen auf der Verwaltungsseite für jede Person einen eigenen Link aus (Namensliste oder Anzahl) und verteilst ihn per Kopieren, QR-Code oder Mail. Du siehst, wer schon abgestimmt hat.'
   },
-  EMAIL: { title: 'Bestätigte E-Mail-Adresse', text: '' },
+  EMAIL: {
+    title: 'Mit bestätigter E-Mail-Adresse (1 Stimme pro Adresse)',
+    text: 'Wer abstimmen will, gibt seine Adresse ein und bestätigt sie über einen Link per Mail. Wer mehrere Adressen hat, kann mehrfach abstimmen - dagegen hilft eine feste Liste unten.'
+  },
   ACCOUNT: {
     title: 'Nur mit Konto (1 Stimme pro Konto)',
     text: 'Abstimmen kann, wer hier ein Konto hat - auch eines, das über ein verbundenes Tool entstanden ist. Angezeigt wird der Name, sonst die E-Mail des Kontos. Konten legst du unter "Nutzer" an (Rolle Moderator genügt).'
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails'>
 
 /** Wert für <input type="datetime-local"> in der Zeitzone des Servers (TZ, siehe package.json/docker-compose.yml). */
 function toDateTimeLocal(date: Date | null): string {
@@ -40,7 +43,8 @@ function toDateTimeLocal(date: Date | null): string {
 export default function PollSettingsFields({ poll, locked = false }: { poll?: Settings; locked?: boolean }) {
   const identity = poll?.voterIdentity ?? 'COOKIE'
   // Ein (künftig) nicht mehr angebotener Modus einer bestehenden Abstimmung bleibt sichtbar.
-  const kinds = OFFERED_IDENTITIES.includes(identity) ? OFFERED_IDENTITIES : [...OFFERED_IDENTITIES, identity]
+  const offered = offeredIdentities()
+  const kinds = offered.includes(identity) ? offered : [...offered, identity]
 
   return (
     <>
@@ -76,6 +80,20 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
                 {IDENTITY_LABELS[kind].text && <span className="block text-xs text-amber-700">{IDENTITY_LABELS[kind].text}</span>}
               </span>
             </label>
+            {kind === 'EMAIL' && (
+              <div className="ml-6 mt-2">
+                <label htmlFor="poll-allowed-emails" className="block text-sm text-amber-900">Nur diese Adressen bzw. Domains (optional)</label>
+                <textarea
+                  id="poll-allowed-emails" name="allowedEmails" rows={2} defaultValue={poll?.allowedEmails ?? ''}
+                  placeholder={'@verein.de\nanna@example.org'}
+                  className="w-full border border-amber-200 p-2 rounded text-sm bg-white"
+                />
+                <span className="block text-xs text-amber-700">
+                  Eine Angabe pro Zeile: &quot;@verein.de&quot; lässt alle Adressen dieser Domain zu, sonst einzelne Adressen.
+                  Leer = jede Adresse. Gilt auch nachträglich für schon bestätigte Adressen.
+                </span>
+              </div>
+            )}
             {kind === 'LINK' && (
               <label className={`flex items-start gap-2 ml-6 mt-2 ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
                 <input type="checkbox" name="secretBallot" defaultChecked={poll?.secretBallot} disabled={locked} className="w-4 h-4 mt-0.5" />
