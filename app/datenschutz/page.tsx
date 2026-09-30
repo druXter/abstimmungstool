@@ -92,6 +92,16 @@ export default function DatenschutzPage() {
             gelöscht, bleibt die Stimme gezählt, der Name wird aber entfernt.
           </p>
           <p className="mt-2">
+            <strong>Persönliche Stimmlinks:</strong> Die Verwaltung einer Abstimmung kann für jede eingeladene Person
+            einen eigenen Link ausstellen. Dafür speichern wir den von ihr eingetragenen Namen (oder eine laufende
+            Nummer) und, falls angegeben, die E-Mail-Adresse, an die der Link verschickt wird - vom Link selbst nur einen
+            nicht umkehrbaren Hash. Zu jedem Link merken wir uns, ob damit schon abgestimmt wurde (für die
+            Beteiligungsübersicht der Verwaltung). Normalerweise hängt deine Stimme an deinem Link, die Verwaltung
+            sieht also, wofür du gestimmt hast. Bei einer <strong>geheimen Wahl</strong> speichern wir nur, dass
+            abgestimmt wurde; die Stimme selbst lässt sich ohne deinen Link keiner Person zuordnen. Wer die Links
+            verteilt, kennt sie allerdings und könnte mit deinem Link nachsehen.
+          </p>
+          <p className="mt-2">
             Die E-Mail-Adressen bzw. Namen sehen die Ersteller:in und Personen mit Verwaltungs-Freigabe auf der Verwaltungsseite.
             Nur wenn die Ersteller:in die Option &quot;Abstimmende namentlich anzeigen&quot; aktiviert, sind sie auch
             auf der öffentlichen Ergebnisseite sichtbar. Die Abstimmungsseite weist dich darauf hin.
@@ -157,8 +167,9 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">8. E-Mails</h2>
           <p className="mt-2">
-            Wir verschicken E-Mails nur für Kontofunktionen: die Einladung zu einem neuen Konto und den auf Wunsch
-            angeforderten Passwort-Reset. Werbung oder Newsletter gibt es nicht.
+            Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto und den auf Wunsch
+            angeforderten Passwort-Reset) und, wenn die Verwaltung einer Abstimmung das veranlasst, persönliche
+            Stimmlinks an die von ihr eingetragenen Adressen. Werbung oder Newsletter gibt es nicht.
           </p>
         </div>
 
@@ -187,7 +198,7 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">10. Empfänger und Auftragsverarbeiter</h2>
           <p className="mt-2">
-            <strong>E-Mail-Versand:</strong> Einladungs- und Passwort-Reset-Mails versenden wir über den
+            <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset- und Stimmlink-Mails versenden wir über den
             E-Mail-Server <code>{smtpHost}</code>. Mit dem Betreiber dieses Servers besteht, soweit es sich um einen
             externen Anbieter handelt, ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
           </p>
@@ -205,7 +216,7 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">11. Speicherdauer</h2>
           <p className="mt-2">
-            Abstimmungen samt Optionen, Stimmen und Freigaben werden spätestens{' '}
+            Abstimmungen samt Optionen, Stimmen, Stimmlinks und Freigaben werden spätestens{' '}
             <strong>18 Monate, nachdem sie zu Ende gegangen sind</strong>, automatisch vollständig gelöscht
             (maßgeblich ist der Zeitpunkt des Schließens; eine nie geschlossene Abstimmung ohne Frist zählt ab ihrer
             Anlage). Die Ersteller:in kann sie jederzeit früher selbst löschen.

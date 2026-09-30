@@ -168,13 +168,42 @@ model Poll {
   // gespeichert, weil die Verwaltung ihn zum Weitergeben wieder anzeigen muss - er ist ein
   // geteiltes Merkwort, kein Passwort. Siehe app/lib/access-code.ts.
   accessCode           String?
+  // Nur im Modus LINK: "nur Teilnahme speichern, nicht wer was gewählt hat" (geheime Wahl).
+  // Die Stimme hängt dann an einem Schlüssel, der sich nur aus dem Link-Token ableiten lässt
+  // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
+  // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
+  secretBallot         Boolean       @default(false)
   closesAt             DateTime?
   closedAt             DateTime?
   createdAt            DateTime      @default(now())
   options              PollOption[]
   votes                Vote[]
+  voterLinks           VoterLink[]
 
   @@index([ownerId])
+}
+
+// Persönlicher Stimmlink (Modus LINK): /[pollId]?k=<token>, eine Person pro Link. Wie bei
+// Sessions und Einladungen liegt nur der SHA-256-Hash des Tokens in der Datenbank - ein
+// Datenbank-Leak ergibt keine benutzbaren Links, dafür zeigt die Verwaltung einen Link nur
+// direkt nach dem Ausstellen an (danach nur noch "neu ausstellen", das den alten ungültig
+// macht und die bisherige Stimme behält). Siehe app/lib/voter-links.ts.
+//
+// label ist der Name der Person (oder "Link 3", wenn nur eine Anzahl gewünscht war), email
+// nur gesetzt, wenn der Link per Mail verschickt werden soll. hasVoted ist bewusst ein
+// Boolean ohne Zeitpunkt: Bei secretBallot soll sich eine Stimme nicht über gleiche
+// Zeitstempel einem Link zuordnen lassen.
+model VoterLink {
+  id        String   @id @default(cuid())
+  pollId    String
+  poll      Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  label     String
+  email     String?
+  hasVoted  Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([pollId])
 }
 
 model PollOption {
@@ -187,9 +216,9 @@ model PollOption {
 }
 
 // Wie eine Stimme einer Person zugeordnet wird (Poll.voterIdentity, Vote.identityKind).
-// Umgesetzt sind COOKIE und RSVP; LINK (persönlicher Stimmlink), EMAIL (bestätigte
-// Adresse) und ACCOUNT (Konto) sind vorgesehen (siehe TODO.md, Abschnitt A) und werden
-// bis dahin fail-closed behandelt (niemand kann abstimmen, siehe app/lib/voter-identity.ts).
+// Umgesetzt sind COOKIE, LINK (persönlicher Stimmlink), ACCOUNT (Konto) und RSVP; EMAIL
+// (bestätigte Adresse) ist vorgesehen (siehe TODO.md, Abschnitt A) und wird bis dahin
+// fail-closed behandelt (niemand kann abstimmen, siehe app/lib/voter-identity.ts).
 enum VoterIdentity {
   COOKIE
   LINK

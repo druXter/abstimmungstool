@@ -12,7 +12,10 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
     title: 'Nur über rsvp-app (max. 1 Stimme pro Person)',
     text: 'Identität ist die über rsvp-app verifizierte E-Mail - die Abstimmung muss über einen entsprechend eingerichteten Link/Button in rsvp-app aufgerufen werden, direkter Zugriff kann nicht abstimmen. Nur Zusagende stimmen ab. Nur sinnvoll, sobald diese Verknüpfung eingerichtet ist (siehe README).'
   },
-  LINK: { title: 'Persönliche Stimmlinks', text: '' },
+  LINK: {
+    title: 'Persönliche Stimmlinks (1 Stimme pro Link)',
+    text: 'Du stellst nach dem Anlegen auf der Verwaltungsseite für jede Person einen eigenen Link aus (Namensliste oder Anzahl) und verteilst ihn per Kopieren, QR-Code oder Mail. Du siehst, wer schon abgestimmt hat.'
+  },
   EMAIL: { title: 'Bestätigte E-Mail-Adresse', text: '' },
   ACCOUNT: {
     title: 'Nur mit Konto (1 Stimme pro Konto)',
@@ -20,7 +23,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot'>
 
 /** Wert für <input type="datetime-local"> in der Zeitzone des Servers (TZ, siehe package.json/docker-compose.yml). */
 function toDateTimeLocal(date: Date | null): string {
@@ -73,6 +76,18 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
                 {IDENTITY_LABELS[kind].text && <span className="block text-xs text-amber-700">{IDENTITY_LABELS[kind].text}</span>}
               </span>
             </label>
+            {kind === 'LINK' && (
+              <label className={`flex items-start gap-2 ml-6 mt-2 ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
+                <input type="checkbox" name="secretBallot" defaultChecked={poll?.secretBallot} disabled={locked} className="w-4 h-4 mt-0.5" />
+                <span>
+                  <span className="block text-sm text-amber-900">Geheime Wahl: nur Teilnahme speichern, nicht wer was gewählt hat</span>
+                  <span className="block text-xs text-amber-700">
+                    Die Verwaltung sieht dann nur, wer schon abgestimmt hat. Ehrliche Grenze: Wer die Links verteilt, kennt sie
+                    und könnte mit einem Link nachsehen, wie diese Person gestimmt hat. Nach der ersten Stimme nicht mehr änderbar.
+                  </span>
+                </span>
+              </label>
+            )}
             {kind === 'COOKIE' && (
               <label className="flex items-start gap-2 cursor-pointer ml-6 mt-2">
                 <input type="checkbox" name="requireVoterName" defaultChecked={poll?.requireVoterName} className="w-4 h-4 mt-0.5" />

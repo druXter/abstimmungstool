@@ -1,16 +1,20 @@
 // app/ui/copyable-field.tsx
 'use client'
 
+import { useId } from 'react'
+
 /**
  * Read-only Eingabefeld, das seinen Inhalt beim Anklicken markiert (zum einfachen
  * Kopieren). Muss eine Client-Komponente sein - Next.js 16 lässt keine
  * Event-Handler mehr an Elemente in Server Components (siehe AGENTS.md).
  */
 export default function CopyableField({ label, value }: { label: string; value: string }) {
+  const id = useId()
   return (
     <div>
-      <label className="block text-xs text-gray-500 mb-1">{label}</label>
+      <label htmlFor={id} className="block text-xs text-gray-500 mb-1">{label}</label>
       <input
+        id={id}
         type="text"
         readOnly
         value={value}

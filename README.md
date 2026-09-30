@@ -19,6 +19,8 @@ anlegt und verwaltet (siehe "Konten" unten).
   * **Offen für alle (Standard, `COOKIE`):** Identifikation über ein zufälliges
     Browser-Cookie (`voter_token`), kein Konto. Die eigene Auswahl kann jederzeit
     geändert werden, solange die Abstimmung offen ist.
+  * **Persönliche Stimmlinks (`LINK`):** Pro Person ein eigener Link, Beteiligungsübersicht,
+    optional geheime Wahl - siehe "Persönliche Stimmlinks" unten.
   * **Nur mit Konto (`ACCOUNT`):** Eine Stimme pro Konto dieses Tools, geräteübergreifend -
     siehe "Abstimmen mit Konto" unten.
   * **Nur über rsvp-app (`RSVP`):** Statt des Cookies wird eine über `rsvp-app`
@@ -48,8 +50,8 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
 | --- | --- | --- |
 | `COOKIE` | zufälliges Browser-Cookie (Standard) | umgesetzt |
 | `RSVP` | von rsvp-app bestätigte E-Mail, nur Zusagende | umgesetzt |
-| `LINK` | persönlicher Stimmlink | geplant (`TODO.md` A1) |
-| `EMAIL` | selbst bestätigte E-Mail-Adresse | geplant (A2) |
+| `LINK` | persönlicher Stimmlink, optional geheime Wahl | umgesetzt |
+| `EMAIL` | selbst bestätigte E-Mail-Adresse | geplant (`TODO.md` A2) |
 | `ACCOUNT` | Konto dieses Tools (auch per Verbund angelegt) | umgesetzt |
 
 * Jede Stimme speichert `identityKind`, einen `voterKey` mit der Art als Präfix
@@ -90,6 +92,36 @@ Identität ersetzen** - die Oberfläche sagt das jeweils beim Einstellen:
 
 Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Seite
 (`?hinweis=…`, feste Texte in `app/[pollId]/page.tsx`).
+
+## Persönliche Stimmlinks (Modus `LINK`)
+
+* **Ausstellen** auf der Verwaltungsseite (Owner, Admin, Moderator:innen mit Freigabe): eine
+  Namensliste - eine Person pro Zeile, optional mit E-Mail (`Anna`, `Ben <ben@…>`,
+  `Cem; cem@…`) - oder nur eine Anzahl (`Link 1`, `Link 2`, …). Höchstens 200 auf einmal,
+  500 pro Abstimmung. Jeder Link ist `/[pollId]?k=<token>`.
+* **Nur der SHA-256-Hash** des Tokens liegt in der Datenbank (`VoterLink.tokenHash`, wie
+  Sitzungen und Einladungen). Deshalb zeigt die Seite frisch ausgestellte Links **nur einmal**
+  an (Ergebnis der Server Action per `useActionState`, nirgends gespeichert) - danach geht nur
+  noch **neu ausstellen**: neuer Token, der alte wird ungültig, die Stimme bleibt.
+* **Verteilen** per Kopieren (einzeln oder alle als Text), QR-Code (im Browser erzeugt, der
+  Link geht an keinen weiteren Dienst) oder - bei gesetztem `SMTP_HOST` - direkt per Mail an
+  die eingetragenen Adressen.
+* **Widerrufen** entfernt den Link samt seiner Stimme. Nach dem Ende der Abstimmung nicht mehr
+  für Links mit Stimme (das Ergebnis soll sich nicht nachträglich ändern).
+* **Beteiligung:** "7 von 12 haben abgestimmt" und wer fehlt (`VoterLink.hasVoted`).
+* Normalfall: `voterKey = link:<VoterLink.id>`, `voterName` = Name aus der Liste - die
+  Verwaltung sieht, wer was gewählt hat.
+* **Geheime Wahl** (`Poll.secretBallot`, "nur Teilnahme speichern"): Die Stimme hängt an
+  `link:` + SHA-256("ballot" + Token) - eine andere Ableitung als `tokenHash`, aus der
+  Datenbank also nicht berechenbar. Am Link steht nur `hasVoted` (ein Boolean ohne
+  Zeitpunkt), die Stimme bekommt keine zeitlich sortierbare cuid und keinen echten
+  Zeitstempel (`createdAt` = 1970), damit sie sich nicht über Zeitpunkte zuordnen lässt.
+  Folgen: Nach einer Neuausstellung kann eine schon abgegebene Stimme nicht mehr geändert
+  werden (sie zählt aber, ein zweites Abstimmen ist gesperrt), und Links mit Stimme lassen
+  sich nicht widerrufen. **Ehrliche Grenzen:** Wer die Links verteilt, kennt die Tokens und
+  könnte damit nachsehen, wie eine Person gestimmt hat. Und wer Datenbank **und**
+  Server-/Proxy-Logs (Zeitpunkte der Aufrufe mit `?k=`) hat, könnte Zeitpunkte abgleichen.
+* Gesperrt wie der Modus selbst, sobald abgestimmt wurde.
 
 ## Abstimmen mit Konto (Modus `ACCOUNT`)
 
@@ -350,7 +382,7 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
 
 `GET https://vote.deine-domain.de/api/cron/cleanup?secret=DeinSehrGeheimesPasswort123`
 
-* **Abstimmungen** samt Optionen, Stimmen und Freigaben: 18 Monate nachdem sie zu Ende
+* **Abstimmungen** samt Optionen, Stimmen, Stimmlinks und Freigaben: 18 Monate nachdem sie zu Ende
   gingen (Schließzeitpunkt; sonst das automatische Schließdatum; eine nie geschlossene
   Abstimmung ohne Frist zählt ab Anlage).
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
@@ -392,9 +424,11 @@ npx playwright install chromium   # einmalig
 npm run test:e2e
 ```
 
-Abgedeckt sind der Konten-Verbund (`suite.spec.ts`) und die Stimmabgabe samt
+Abgedeckt sind der Konten-Verbund (`suite.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
-Klick-Tokens und Webhooks mit einem Test-Secret signieren).
+Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
+(`hurdles.spec.ts`) und die persönlichen Stimmlinks (`links.spec.ts`). Der Mailversand
+selbst ist nicht abgedeckt (die Tests laufen ohne `SMTP_HOST`).
 
 Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
 eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die

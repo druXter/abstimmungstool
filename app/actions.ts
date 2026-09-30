@@ -10,7 +10,8 @@ import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENG
 import { accessCodeRule, clientIp, newVoterRule, reserve } from './lib/throttle'
 import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
 import { getCurrentUser, requireUser } from './lib/auth'
-import { canCreatePolls, getPollLevel, isAtLeast, safeEqual, type PollLevel } from './lib/permissions'
+import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
+import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
 import { formString, normalizeEmail } from './lib/form'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
@@ -37,57 +38,6 @@ function parsePollSettings(formData: FormData) {
 }
 
 /**
- * Zurück auf die Abstimmungsseite, optional mit einem Hinweis (siehe NOTICES in
- * app/[pollId]/page.tsx). Ein rsvp-Klick-Token wird mitgenommen, sonst verlöre die Seite
- * im Modus RSVP die Identität.
- */
-function pollUrl(pollId: string, verifyToken: string, notice?: string): string {
-  const params = new URLSearchParams()
-  if (verifyToken) params.set('verify', verifyToken)
-  if (notice) params.set('hinweis', notice)
-  const query = params.toString()
-  return `/${pollId}${query ? `?${query}` : ''}`
-}
-
-/**
- * Adresse der Verwaltungsseite. Bei Alt-Abstimmungen ohne Besitzer-Konto hängt daran
- * weiterhin der creatorToken (das ist dort die Berechtigung), bei Abstimmungen mit Konto
- * bewusst nicht - die Berechtigung kommt dort aus der Sitzung, nie aus der URL.
- */
-function manageUrl(pollId: string, token: string, flag?: string): string {
-  const params = new URLSearchParams()
-  if (token) params.set('token', token)
-  if (flag) params.set(flag, '1')
-  const query = params.toString()
-  return `/${pollId}/verwalten${query ? `?${query}` : ''}`
-}
-
-/**
- * Lädt eine Abstimmung und prüft serverseitig, ob die aktuelle Anfrage sie mindestens auf
- * der geforderten Stufe verwalten darf (siehe app/lib/permissions.ts). Gibt null zurück,
- * wenn nicht - die Aufrufer ignorieren die Anfrage dann stillschweigend, wie im ganzen
- * Projekt. Jede verwaltende Server Action MUSS hierüber laufen: Eine Prüfung nur auf der
- * Seite schützt nicht vor einem direkt abgeschickten Formular.
- */
-async function loadManageablePoll(formData: FormData, required: PollLevel) {
-  const pollId = formString(formData, 'pollId', 50)
-  const token = formString(formData, 'creatorToken', 100)
-  if (!pollId) return null
-
-  const poll = await prisma.poll.findUnique({
-    where: { id: pollId },
-    include: { options: { include: { _count: { select: { votes: true } } } } }
-  })
-  if (!poll) return null
-
-  const level = await getPollLevel(poll, { user: await getCurrentUser(), token })
-  if (!isAtLeast(level, required)) return null
-
-  // Nur bei Alt-Abstimmungen wird der Token weitergereicht (siehe manageUrl).
-  return { poll, token: poll.ownerId ? '' : token }
-}
-
-/**
  * Legt eine neue Abstimmung an - nur für eingeloggte Konten mit Creator- oder Admin-
  * Rolle. Die Prüfung passiert hier auf dem Server; ein direkter POST ohne gültige
  * Sitzung darf niemals etwas anlegen (die Seite /erstellen blendet das Formular nur aus).
@@ -99,6 +49,7 @@ export async function createPoll(formData: FormData) {
   const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
   const voterIdentity = parseVoterIdentity(formData.get('voterIdentity'))
+  const secretBallot = voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
   const settings = parsePollSettings(formData)
 
   const rawOptions = formData.getAll('option') as string[]
@@ -118,6 +69,7 @@ export async function createPoll(formData: FormData) {
       title,
       description,
       voterIdentity,
+      secretBallot,
       ...settings,
       ownerId: user.id,
       options: {
@@ -158,7 +110,10 @@ export async function updatePoll(formData: FormData) {
   const optionsWithVotes = new Set(poll.options.filter(o => o._count.votes > 0).map(o => o.id))
   // Der Stimmmodus ist gesperrt, sobald jemand abgestimmt hat - sonst stünden Stimmen
   // verschiedener Identitätsarten nebeneinander, und die bisherigen könnte niemand mehr ändern.
-  const voterIdentity = optionsWithVotes.size > 0 ? poll.voterIdentity : parseVoterIdentity(formData.get('voterIdentity'))
+  const locked = optionsWithVotes.size > 0
+  const voterIdentity = locked ? poll.voterIdentity : parseVoterIdentity(formData.get('voterIdentity'))
+  // Geheime Wahl ebenso: Ein Umschalten würde bestehende Stimmen unauffindbar bzw. zuordenbar machen.
+  const secretBallot = locked ? poll.secretBallot : voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
 
   const keptOptions: { id: string; label: string }[] = []
   for (let i = 0; i < existingIds.length; i++) {
@@ -181,7 +136,7 @@ export async function updatePoll(formData: FormData) {
   await prisma.$transaction(async (tx) => {
     await tx.poll.update({
       where: { id: pollId },
-      data: { title, description, voterIdentity, ...settings }
+      data: { title, description, voterIdentity, secretBallot, ...settings }
     })
 
     const keptIds = new Set(keptOptions.map(o => o.id))
@@ -228,8 +183,16 @@ async function replaceVotes(pollId: string, voter: Voter, optionIds: string[], m
       await tx.vote.upsert({
         where: { pollId_voterKey_optionId: { pollId, voterKey: voter.key, optionId } },
         update: { voterName: voter.name },
-        create: { pollId, optionId, identityKind: voter.kind, voterKey: voter.key, voterName: voter.name }
+        create: {
+          pollId, optionId, identityKind: voter.kind, voterKey: voter.key, voterName: voter.name,
+          // Geheime Wahl: weder Zeitstempel noch zeitlich sortierbare cuid, sonst ließe sich die
+          // Stimme über den Zeitpunkt doch wieder einem Link zuordnen (siehe app/lib/voter-links.ts).
+          ...(voter.secret ? { id: randomUUID(), createdAt: new Date(0) } : {})
+        }
       })
+    }
+    if (voter.linkId) {
+      await tx.voterLink.updateMany({ where: { id: voter.linkId, hasVoted: false }, data: { hasVoted: true } })
     }
     return true
   })
@@ -273,8 +236,8 @@ export async function castVote(formData: FormData): Promise<void> {
     selectedOptionIds = [selectedOptionIds[0]]
   }
 
-  const verifyToken = formString(formData, 'verifyToken', 4000)
-  const { voter, block } = await resolveVoter(poll, { verifyToken }, { create: true })
+  const identity = identityFromForm(formData)
+  const { voter, block } = await resolveVoter(poll, identity, { create: true })
   if (block || !voter) return
 
   if (poll.voterIdentity === 'COOKIE' && poll.requireVoterName) {
@@ -289,12 +252,12 @@ export async function castVote(formData: FormData): Promise<void> {
     // Besucher EINEN Zähler. Wer den Proxy umgehen kann, könnte den Header ohnehin selbst setzen.
     const ip = await clientIp()
     if (ip !== 'unknown' && !(await reserve([newVoterRule(ip, pollId)]))) {
-      redirect(pollUrl(pollId, verifyToken, 'gedrosselt'))
+      redirect(pollUrl(pollId, identity, 'gedrosselt'))
     }
   }
 
   if (!(await replaceVotes(pollId, voter, selectedOptionIds, poll.maxVoters))) {
-    redirect(pollUrl(pollId, verifyToken, 'voll'))
+    redirect(pollUrl(pollId, identity, 'voll'))
   }
   revalidatePath(`/${pollId}`)
 }
@@ -305,17 +268,17 @@ export async function castVote(formData: FormData): Promise<void> {
  */
 export async function unlockPoll(formData: FormData): Promise<void> {
   const pollId = formString(formData, 'pollId', 50)
-  const verifyToken = formString(formData, 'verifyToken', 4000)
+  const identity = identityFromForm(formData)
   const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, accessCode: true } })
   if (!poll) return
 
-  if (!(await reserve([accessCodeRule(await clientIp(), poll.id)]))) redirect(pollUrl(poll.id, verifyToken, 'code-gesperrt'))
+  if (!(await reserve([accessCodeRule(await clientIp(), poll.id)]))) redirect(pollUrl(poll.id, identity, 'code-gesperrt'))
   if (!accessCodeMatches(poll, formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH))) {
-    redirect(pollUrl(poll.id, verifyToken, 'code-falsch'))
+    redirect(pollUrl(poll.id, identity, 'code-falsch'))
   }
 
   await grantPollAccess(poll)
-  redirect(pollUrl(poll.id, verifyToken))
+  redirect(pollUrl(poll.id, identity))
 }
 
 /**
@@ -346,6 +309,7 @@ export async function deletePoll(formData: FormData) {
 
   await prisma.vote.deleteMany({ where: { pollId } })
   await prisma.pollOption.deleteMany({ where: { pollId } })
+  await prisma.voterLink.deleteMany({ where: { pollId } })
   await prisma.poll.delete({ where: { id: pollId } })
 
   redirect('/meine-abstimmungen')

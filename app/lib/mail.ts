@@ -106,3 +106,24 @@ Falls du das nicht warst, ignoriere diese Mail - dein Passwort bleibt unverände
     )
   )
 }
+
+/** Persönlicher Stimmlink (Modus LINK) - jede Person bekommt ihren eigenen. */
+export async function sendVoterLinkEmail(toEmail: string, pollTitle: string, link: string): Promise<boolean> {
+  return send(
+    toEmail,
+    `Deine Einladung zur Abstimmung: ${pollTitle}`,
+    `Hallo,
+
+du bist eingeladen, bei der Abstimmung "${pollTitle}" mitzumachen. Das ist dein persönlicher Link - bitte gib ihn nicht weiter, er zählt als deine Stimme:
+${link}
+
+Solange die Abstimmung offen ist, kannst du deine Auswahl über denselben Link ändern.`,
+    layout(
+      pollTitle,
+      'Du bist eingeladen, bei dieser Abstimmung mitzumachen. Das ist dein persönlicher Link - bitte gib ihn nicht weiter, er zählt als deine Stimme. Solange die Abstimmung offen ist, kannst du deine Auswahl über denselben Link ändern.',
+      'Zur Abstimmung',
+      link,
+      'Du hast diese Mail bekommen, weil dich jemand zu dieser Abstimmung eingeladen hat.'
+    )
+  )
+}

@@ -15,7 +15,7 @@ const ACCOUNT_INACTIVITY_YEARS = 2
  * DSGVO - siehe Datenschutzerklärung Punkt 11), gleiches Muster wie rsvp-apps
  * /api/cron/cleanup. Läuft idempotent, einmal täglich reicht völlig.
  *
- * 1. Löscht Abstimmungen samt Optionen, Stimmen und Freigaben, die vor mehr als
+ * 1. Löscht Abstimmungen samt Optionen, Stimmen, Stimmlinks und Freigaben, die vor mehr als
  *    POLL_RETENTION_MONTHS zu Ende gegangen sind. "Zu Ende" ist der Schließzeitpunkt
  *    (manuell geschlossen, sonst das automatische Schließdatum); eine nie geschlossene
  *    Abstimmung ohne Frist zählt ab ihrer Anlage - sonst bliebe sie ewig liegen.
@@ -58,6 +58,7 @@ export async function GET(request: Request) {
     prisma.vote.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.pollOption.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.pollAccess.deleteMany({ where: { pollId: { in: pollIds } } }),
+    prisma.voterLink.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.poll.deleteMany({ where: { id: { in: pollIds } } })
   ])
 

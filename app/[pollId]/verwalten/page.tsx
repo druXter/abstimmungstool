@@ -11,6 +11,8 @@ import CopyableField from '../../ui/copyable-field'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
 import DeletePollButton from './delete-poll-button'
+import VoterLinksPanel from './voter-links-panel'
+import { isMailConfigured } from '../../lib/mail'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,7 +43,8 @@ export default async function VerwaltenPage({
       },
       votes: { select: { voterKey: true, voterName: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
-      owner: { select: { email: true, name: true } }
+      owner: { select: { email: true, name: true } },
+      voterLinks: { select: { id: true, label: true, email: true, hasVoted: true }, orderBy: { createdAt: 'asc' } }
     }
   })
   if (!poll) notFound()
@@ -126,6 +129,16 @@ export default async function VerwaltenPage({
             {isOwner && <DeletePollButton pollId={poll.id} creatorToken={legacy ? token : undefined} />}
           </div>
         </div>
+
+        {poll.voterIdentity === 'LINK' && (
+          <VoterLinksPanel
+            pollId={poll.id}
+            legacyToken={legacy && token ? token : ''}
+            links={poll.voterLinks}
+            secretBallot={poll.secretBallot}
+            mailConfigured={isMailConfigured()}
+          />
+        )}
 
         {legacy && user && canCreatePolls(user) && token && (
           <div className="bg-white p-6 rounded-lg shadow space-y-3">

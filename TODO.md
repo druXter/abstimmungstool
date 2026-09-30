@@ -19,11 +19,11 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [x] `showVoterNames` auf alle Modi mit Namen/E-Mail verallgemeinern (heute nur mit RSVP wirksam).
 
 ### A1. Persönliche Stimmlinks
-- [ ] Verwaltung gibt eine Namensliste (oder nur eine Anzahl) ein, pro Person ein Link `/[pollId]?k=…`.
-- [ ] In der DB nur der SHA-256-Hash (wie Sessions/Einladungen). Links einzeln widerrufen/neu ausstellen.
-- [ ] Verteilen per Kopieren, QR-Code oder - bei gesetztem `SMTP_HOST` - direkt per Mail.
-- [ ] Beteiligungsübersicht auf der Verwaltungsseite ("7 von 12 haben abgestimmt", wer fehlt).
-- [ ] Option "nur Teilnahme speichern, nicht wer was gewählt hat". README: ehrliche Grenze dokumentieren
+- [x] Verwaltung gibt eine Namensliste (oder nur eine Anzahl) ein, pro Person ein Link `/[pollId]?k=…`.
+- [x] In der DB nur der SHA-256-Hash (wie Sessions/Einladungen). Links einzeln widerrufen/neu ausstellen.
+- [x] Verteilen per Kopieren, QR-Code oder - bei gesetztem `SMTP_HOST` - direkt per Mail.
+- [x] Beteiligungsübersicht auf der Verwaltungsseite ("7 von 12 haben abgestimmt", wer fehlt).
+- [x] Option "nur Teilnahme speichern, nicht wer was gewählt hat". README: ehrliche Grenze dokumentieren
       (wer verteilt, kennt die Zuordnung Link → Person).
 
 ### A2. E-Mail-Bestätigung (Magic Link)

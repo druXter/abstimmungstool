@@ -3,6 +3,8 @@ import type { VoterIdentity } from '@prisma/client'
 import { getOrCreateVoterToken, getVoterToken } from './voter'
 import { verifyRsvpToken } from './rsvp-verification'
 import { getCurrentUser } from './auth'
+import { prisma } from './prisma'
+import { findVoterLink, secretBallotKey } from './voter-links'
 
 /**
  * Die EINE Stelle, die aus einer Anfrage die Identität einer abstimmenden Person macht -
@@ -16,6 +18,10 @@ export type Voter = {
   key: string
   /** Wird bei showVoterNames bzw. auf der Verwaltungsseite angezeigt. Im Cookie-Modus null (castVote setzt ggf. den Pflichtnamen). */
   name: string | null
+  /** Nur Modus LINK: der zugehörige VoterLink (für hasVoted). */
+  linkId?: string
+  /** Nur geheime Wahl: Stimme ohne Zeitstempel/zeitlich sortierbare ID speichern (siehe replaceVotes). */
+  secret?: boolean
 }
 
 /**
@@ -23,9 +29,13 @@ export type Voter = {
  * - rsvp-missing:  Modus RSVP, aber kein gültiger Token (direkter Aufruf ohne rsvp-app)
  * - rsvp-declined: Modus RSVP, Person hat für den Termin abgesagt
  * - account-missing: Modus ACCOUNT, niemand angemeldet
+ * - link-missing:  Modus LINK, kein gültiger persönlicher Link
+ * - link-used:     geheime Wahl, mit diesem Link wurde schon abgestimmt, aber mit einem
+ *                  inzwischen neu ausgestellten Token - die alte Stimme ist nicht mehr
+ *                  auffindbar und darf nicht verdoppelt werden
  * - unavailable:   Modus ist vorgesehen, aber noch nicht umgesetzt (fail-closed)
  */
-export type VoterBlock = 'rsvp-missing' | 'rsvp-declined' | 'account-missing' | 'unavailable'
+export type VoterBlock = 'rsvp-missing' | 'rsvp-declined' | 'account-missing' | 'link-missing' | 'link-used' | 'unavailable'
 
 export type VoterState = {
   /** Bereits bekannte Identität - für "deine Auswahl" und die Stimmabgabe. */
@@ -35,7 +45,7 @@ export type VoterState = {
 }
 
 /** Die Modi, die man beim Anlegen/Bearbeiten wählen kann (die übrigen sind noch nicht umgesetzt). */
-export const OFFERED_IDENTITIES: readonly VoterIdentity[] = ['COOKIE', 'ACCOUNT', 'RSVP']
+export const OFFERED_IDENTITIES: readonly VoterIdentity[] = ['COOKIE', 'LINK', 'ACCOUNT', 'RSVP']
 
 /** Liest den gewählten Modus aus einem Formular - alles Unbekannte fällt auf den Cookie-Standard zurück. */
 export function parseVoterIdentity(value: FormDataEntryValue | null): VoterIdentity {
@@ -51,6 +61,9 @@ export function voterKey(kind: VoterIdentity, raw: string): string {
   return `${kind.toLowerCase()}:${raw}`
 }
 
+/** Was eine Anfrage an Identitäts-Nachweisen mitbringt (URL-Parameter bzw. versteckte Formularfelder). */
+export type IdentityParams = { verifyToken?: string | null; linkToken?: string | null }
+
 /**
  * Löst die Identität der aktuellen Anfrage für eine Abstimmung auf.
  *
@@ -60,8 +73,8 @@ export function voterKey(kind: VoterIdentity, raw: string): string {
  * dort ist `voter` im Cookie-Modus null, solange noch nicht abgestimmt wurde.
  */
 export async function resolveVoter(
-  poll: { id: string; voterIdentity: VoterIdentity },
-  input: { verifyToken?: string | null },
+  poll: { id: string; voterIdentity: VoterIdentity; secretBallot: boolean },
+  input: IdentityParams,
   { create }: { create: boolean }
 ): Promise<VoterState> {
   switch (poll.voterIdentity) {
@@ -85,7 +98,16 @@ export async function resolveVoter(
       if (!user) return { voter: null, block: 'account-missing' }
       return { voter: { kind: 'ACCOUNT', key: voterKey('ACCOUNT', user.id), name: user.name || user.email }, block: null }
     }
-    case 'LINK':
+    case 'LINK': {
+      const link = await findVoterLink(poll.id, input.linkToken)
+      if (!link || !input.linkToken) return { voter: null, block: 'link-missing' }
+      if (!poll.secretBallot) {
+        return { voter: { kind: 'LINK', key: voterKey('LINK', link.id), name: link.label, linkId: link.id }, block: null }
+      }
+      const voter: Voter = { kind: 'LINK', key: secretBallotKey(input.linkToken), name: null, linkId: link.id, secret: true }
+      const reissuedAfterVoting = link.hasVoted && (await prisma.vote.count({ where: { pollId: poll.id, voterKey: voter.key } })) === 0
+      return { voter, block: reissuedAfterVoting ? 'link-used' : null }
+    }
     case 'EMAIL':
       return { voter: null, block: 'unavailable' }
   }

@@ -29,10 +29,18 @@ export default async function PollPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ verify?: string; hinweis?: string; code?: string }>
+  searchParams: Promise<{ verify?: string; k?: string; hinweis?: string; code?: string }>
 }) {
   const { pollId } = await params
-  const { verify, hinweis, code } = await searchParams
+  const { verify, k, hinweis, code } = await searchParams
+  // Identitäts-Nachweise aus der URL wandern als versteckte Felder in jedes Formular (und von
+  // dort per pollUrl zurück in die URL) - siehe IdentityParams in app/lib/voter-identity.ts.
+  const identityInputs = (
+    <>
+      {verify && <input type="hidden" name="verifyToken" value={verify} />}
+      {k && <input type="hidden" name="linkToken" value={k} />}
+    </>
+  )
   const notice = hinweis && Object.hasOwn(NOTICES, hinweis) ? NOTICES[hinweis] : null
 
   const poll = await prisma.poll.findUnique({
@@ -61,7 +69,7 @@ export default async function PollPage({
           <p className="text-sm text-gray-600">Diese Abstimmung ist mit einem Zugangscode geschützt. Du bekommst ihn von der Person, die dich eingeladen hat.</p>
           {notice && <Notice tone="error">{notice}</Notice>}
           <input type="hidden" name="pollId" value={poll.id} />
-          {verify && <input type="hidden" name="verifyToken" value={verify} />}
+          {identityInputs}
           <div>
             <label htmlFor="access-code" className="block text-sm font-medium mb-1">Zugangscode</label>
             <input
@@ -83,7 +91,7 @@ export default async function PollPage({
 
   // Wer hier abstimmt (und ob überhaupt), entscheidet allein resolveVoter anhand von
   // poll.voterIdentity - siehe app/lib/voter-identity.ts.
-  const { voter, block } = await resolveVoter(poll, { verifyToken: verify }, { create: false })
+  const { voter, block } = await resolveVoter(poll, { verifyToken: verify, linkToken: k }, { create: false })
   const myVotes = voter
     ? await prisma.vote.findMany({ where: { pollId: poll.id, voterKey: voter.key }, select: { optionId: true, voterName: true } })
     : []
@@ -94,7 +102,8 @@ export default async function PollPage({
   const isFull = poll.maxVoters !== null && distinctVoters >= poll.maxVoters && !hasVoted
   const canVote = !isClosed && !block && !isFull
   const asksForName = poll.voterIdentity === 'COOKIE' && poll.requireVoterName
-  const namesVisible = poll.voterIdentity !== 'COOKIE' || asksForName
+  const secretLinks = poll.voterIdentity === 'LINK' && poll.secretBallot
+  const namesVisible = (poll.voterIdentity !== 'COOKIE' && !secretLinks) || asksForName
 
   return (
     <main className="min-h-screen bg-gray-50 py-10 px-4">
@@ -135,6 +144,20 @@ export default async function PollPage({
           </Hint>
         )}
 
+        {!isClosed && block === 'link-missing' && (
+          <Hint>
+            Für diese Abstimmung bekommt jede Person einen persönlichen Link. Öffne bitte den Link, den du erhalten
+            hast - ohne ihn kannst du hier nicht abstimmen.
+          </Hint>
+        )}
+
+        {!isClosed && block === 'link-used' && (
+          <Hint>
+            Mit deinem Link wurde bereits abgestimmt, bevor er neu ausgestellt wurde. Weil die Wahl geheim ist, lässt
+            sich diese Stimme nicht mehr zuordnen und daher auch nicht ändern - sie zählt aber.
+          </Hint>
+        )}
+
         {!isClosed && block === 'unavailable' && (
           <Hint>
             Für diese Abstimmung ist eine Art der Stimmabgabe eingestellt, die dieses Tool noch nicht anbietet.
@@ -149,13 +172,20 @@ export default async function PollPage({
         {canVote && (
           <form action={castVote} className="bg-white p-6 rounded-lg shadow space-y-3">
             <input type="hidden" name="pollId" value={poll.id} />
-            {verify && <input type="hidden" name="verifyToken" value={verify} />}
+            {identityInputs}
             <h2 className="font-bold text-gray-900 mb-2">
               {hasVoted ? 'Deine Auswahl ändern' : 'Jetzt abstimmen'}
             </h2>
             {voter?.kind === 'RSVP' && (
               <p className="text-xs text-gray-500">
                 Angemeldet als <strong>{voter.name}</strong> (über rsvp-app verifiziert)
+              </p>
+            )}
+            {voter?.kind === 'LINK' && (
+              <p className="text-xs text-gray-500">
+                {voter.secret
+                  ? 'Geheime Wahl: Gespeichert wird nur, dass du abgestimmt hast - nicht, wofür. Mit deinem Link kannst du deine Auswahl ändern.'
+                  : <>Persönlicher Link für <strong>{voter.name}</strong> - bitte nicht weitergeben.</>}
               </p>
             )}
             {voter?.kind === 'ACCOUNT' && (
