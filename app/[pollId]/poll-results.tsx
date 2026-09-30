@@ -17,15 +17,32 @@ export default function PollResults({
   options,
   distinctVoters,
   myVoteOptionIds = [],
-  showVoterNames = false
+  showVoterNames = false,
+  quorum = null,
+  closed = false
 }: {
   options: { id: string; label: string; _count: { votes: number }; votes?: { voterName: string | null }[] }[]
   distinctVoters: number
   myVoteOptionIds?: string[]
   showVoterNames?: boolean
+  /** Poll.quorum - Mindestbeteiligung, siehe app/lib/results.ts. */
+  quorum?: number | null
+  closed?: boolean
 }) {
+  const quorumMissing = quorum !== null ? Math.max(quorum - distinctVoters, 0) : 0
   return (
     <div className="space-y-3">
+      {quorum !== null && (
+        closed && quorumMissing > 0 ? (
+          <p className="text-sm font-medium text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+            Nicht beschlussfähig: {distinctVoters} von mindestens {quorum} Teilnehmenden.
+          </p>
+        ) : (
+          <p className="text-xs text-gray-500">
+            Mindestbeteiligung: {quorum} Teilnehmende{quorumMissing > 0 ? ` - es fehlen noch ${quorumMissing}.` : ' - erreicht.'}
+          </p>
+        )
+      )}
       {options.map(option => {
         const count = option._count.votes
         const pct = distinctVoters > 0 ? Math.round((count / distinctVoters) * 100) : 0

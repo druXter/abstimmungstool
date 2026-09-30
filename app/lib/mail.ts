@@ -148,3 +148,37 @@ Falls du das nicht warst, ignoriere diese Mail einfach - ohne Bestätigung passi
     )
   )
 }
+
+/** Ergebnis beim Schließen an das besitzende Konto (Poll.notifyOwnerOnClose, siehe app/lib/poll-closed.ts). */
+export async function sendPollResultEmail(
+  toEmail: string,
+  result: { title: string; lines: string[]; summary: string },
+  link: string
+): Promise<boolean> {
+  const listHtml = result.lines.map(line => `<li>${esc(line)}</li>`).join('')
+  return send(
+    toEmail,
+    `Abstimmung beendet: ${result.title}`,
+    `Hallo,
+
+die Abstimmung "${result.title}" ist beendet.
+
+${result.summary}
+
+${result.lines.map(line => `- ${line}`).join('\n')}
+
+Alle Details und den CSV-Export findest du auf der Verwaltungsseite:
+${link}`,
+    `
+      <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
+        <h2>Abstimmung beendet: ${esc(result.title)}</h2>
+        <p><strong>${esc(result.summary)}</strong></p>
+        <ul>${listHtml}</ul>
+        <p style="text-align: center; margin: 30px 0;">
+          <a href="${esc(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Zur Verwaltungsseite</a>
+        </p>
+        <p style="font-size: 12px; color: #666;">Du bekommst diese Mail, weil bei dieser Abstimmung "Ergebnis beim Schließen mailen" eingeschaltet ist.</p>
+      </div>
+    `
+  )
+}

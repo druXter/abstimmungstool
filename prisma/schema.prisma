@@ -177,6 +177,12 @@ model Poll {
   // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
   // app/lib/email-voters.ts; wird auch beim Abstimmen erneut geprüft.
   allowedEmails        String?
+  // Mindestbeteiligung: Das Ergebnis gilt erst ab so vielen Teilnehmenden (verschiedene
+  // voterKeys), sonst "nicht beschlussfähig" (siehe app/lib/results.ts). null = kein Quorum.
+  quorum               Int?
+  // Beim Schließen (manuell oder per Cron) das Ergebnis an das besitzende Konto mailen
+  // (app/lib/poll-closed.ts). Nur mit SMTP_HOST wirksam.
+  notifyOwnerOnClose   Boolean       @default(false)
   closesAt             DateTime?
   closedAt             DateTime?
   createdAt            DateTime      @default(now())

@@ -59,9 +59,9 @@ export function startMailServer(): Promise<Server> {
 
 /** Entfernt die Quoted-Printable-Kodierung (weiche Umbrüche, =XX), damit Links am Stück lesbar sind. */
 function decodeQuotedPrintable(text: string): string {
-  return text
-    .replace(/=\r\n/g, '')
-    .replace(/=([0-9A-F]{2})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+  // Byteweise sammeln und erst am Ende als UTF-8 lesen - ein "ä" steht dort als zwei Bytes (=C3=A4).
+  const bytes = text.replace(/=\r\n/g, '').replace(/=([0-9A-F]{2})/g, (_, hex: string) => String.fromCharCode(Number.parseInt(hex, 16)))
+  return Buffer.from(bytes, 'latin1').toString('utf8')
 }
 
 /** Wartet auf die jüngste Mail an eine Adresse und gibt ihren (dekodierten) Rohtext zurück. */

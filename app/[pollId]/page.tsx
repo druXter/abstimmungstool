@@ -289,6 +289,8 @@ export default async function PollPage({
             distinctVoters={distinctVoters}
             myVoteOptionIds={myVoteOptionIds}
             showVoterNames={poll.showVoterNames}
+            quorum={poll.quorum}
+            closed={isClosed}
           />
         </div>
 

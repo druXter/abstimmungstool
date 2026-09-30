@@ -2,6 +2,7 @@
 import type { Poll, VoterIdentity } from '@prisma/client'
 import { offeredIdentities } from '../lib/voter-identity'
 import { MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
+import { isMailConfigured } from '../lib/mail'
 
 const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = {
   COOKIE: {
@@ -26,7 +27,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose'>
 
 /** Wert für <input type="datetime-local"> in der Zeitzone des Servers (TZ, siehe package.json/docker-compose.yml). */
 function toDateTimeLocal(date: Date | null): string {
@@ -161,6 +162,24 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
             Danach kann niemand mehr neu abstimmen; wer schon abgestimmt hat, kann seine Auswahl weiter ändern.
           </p>
         </div>
+        <div>
+          <label htmlFor="poll-quorum" className="block text-sm font-medium mb-1">Mindestbeteiligung (Quorum)</label>
+          <input
+            id="poll-quorum" type="number" name="quorum" min={1} max={10000}
+            defaultValue={poll?.quorum ?? ''} placeholder="keine"
+            className="w-40 border border-gray-300 p-2 rounded"
+          />
+          <p className="text-xs text-gray-500 mt-1">
+            Das Ergebnis gilt erst ab so vielen Teilnehmenden, sonst heißt es &quot;nicht beschlussfähig&quot;.
+          </p>
+        </div>
+        {/* Neue Abstimmungen: an; bestehende behalten ihre Einstellung. */}
+        {isMailConfigured() && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" name="notifyOwnerOnClose" defaultChecked={poll ? poll.notifyOwnerOnClose : true} className="w-4 h-4" />
+            <span className="text-sm">Ergebnis beim Schließen an das Konto mailen, dem die Abstimmung gehört</span>
+          </label>
+        )}
       </fieldset>
     </>
   )

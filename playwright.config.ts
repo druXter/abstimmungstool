@@ -19,6 +19,7 @@ process.env.BASE_URL = BASE_URL
 // Klick-Tokens und Webhooks selbst (app/lib/rsvp-verification.ts). Nur ein Testwert.
 export const TEST_RSVP_SECRET = 'nur-fuer-e2e-tests-kein-echtes-secret'
 process.env.RSVP_VERIFICATION_SECRET = TEST_RSVP_SECRET
+export const TEST_CRON_SECRET = 'nur-fuer-e2e-tests-cron'
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -64,7 +65,8 @@ export default defineConfig({
       SUITE_SIGNING_KEY: '',
       SUITE_TRUSTED_APPS: '',
       RSVP_APP_BASE_URL: '',
-      CRON_SECRET: '',
+      // Cron-Endpunkte (Auto-Schließen) rufen die Tests selbst auf.
+      CRON_SECRET: TEST_CRON_SECRET,
       TZ: 'Europe/Berlin'
     }
   }

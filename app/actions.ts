@@ -9,8 +9,8 @@ import { parseVoterIdentity, resolveVoter, type Voter } from './lib/voter-identi
 import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENGTH } from './lib/access-code'
 import { accessCodeRule, clientIp, newVoterRule, reserve, voteEmailRules } from './lib/throttle'
 import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
-import { sendVoteConfirmationEmail } from './lib/mail'
-import { notifyRsvpAppOfResult } from './lib/rsvp-notify'
+import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
+import { afterPollClosed } from './lib/poll-closed'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
@@ -29,6 +29,7 @@ function parsePollSettings(formData: FormData) {
   const closesAtInput = formString(formData, 'closesAt', 30)
   const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const maxVoters = Number.parseInt(formString(formData, 'maxVoters', 10), 10)
+  const quorum = Number.parseInt(formString(formData, 'quorum', 10), 10)
   return {
     closesAt: closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null,
     showVoterNames: formData.get('showVoterNames') === 'on',
@@ -36,7 +37,10 @@ function parsePollSettings(formData: FormData) {
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
     accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
-    allowedEmails: normalizeAllowedEmails(formString(formData, 'allowedEmails', 20_000))
+    allowedEmails: normalizeAllowedEmails(formString(formData, 'allowedEmails', 20_000)),
+    quorum: Number.isInteger(quorum) && quorum >= 1 ? Math.min(quorum, MAX_VOTERS_LIMIT) : null,
+    // Ohne Mailversand fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
+    notifyOwnerOnClose: isMailConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined
   }
 }
 
@@ -332,10 +336,48 @@ export async function closePoll(formData: FormData) {
   if (!ctx) return
   const { poll, token } = ctx
 
-  await prisma.poll.update({ where: { id: poll.id }, data: { closedAt: new Date() } })
-  await notifyRsvpAppOfResult(poll.id).catch(() => {})
+  // Bedingung im WHERE: Nur wer die Abstimmung tatsächlich schließt, löst Meldung und Mail aus -
+  // ein doppelt abgeschicktes Formular oder der gleichzeitige Cron nicht noch einmal.
+  const closed = await prisma.poll.updateMany({ where: { id: poll.id, closedAt: null }, data: { closedAt: new Date() } })
+  if (closed.count > 0) await afterPollClosed(poll.id)
   revalidatePath(`/${poll.id}`)
   redirect(manageUrl(poll.id, token))
+}
+
+/**
+ * Legt eine Kopie als neue Abstimmung des eingeloggten Kontos an (wiederkehrende Runden):
+ * Titel, Beschreibung, Optionen und Einstellungen - ohne Stimmen, Stimmlinks, bestätigte
+ * Adressen, Freigaben und ohne Schließdatum (das alte läge meist in der Vergangenheit). Wer
+ * die Vorlage mindestens moderieren darf und selbst Abstimmungen anlegen darf.
+ */
+export async function duplicatePoll(formData: FormData) {
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const user = await getCurrentUser()
+  if (!user || !canCreatePolls(user)) return
+  const source = ctx.poll
+
+  const copy = await prisma.poll.create({
+    data: {
+      title: `${source.title} (Kopie)`.slice(0, MAX_TEXT_LENGTH),
+      description: source.description,
+      ownerId: user.id,
+      voterIdentity: source.voterIdentity,
+      secretBallot: source.secretBallot,
+      showVoterNames: source.showVoterNames,
+      allowMultipleChoices: source.allowMultipleChoices,
+      requireVoterName: source.requireVoterName,
+      maxVoters: source.maxVoters,
+      accessCode: source.accessCode,
+      allowedEmails: source.allowedEmails,
+      quorum: source.quorum,
+      notifyOwnerOnClose: source.notifyOwnerOnClose,
+      options: {
+        create: [...source.options].sort((a, b) => a.position - b.position).map((o, position) => ({ label: o.label, position }))
+      }
+    }
+  })
+  redirect(manageUrl(copy.id, '', 'duplicated'))
 }
 
 /**

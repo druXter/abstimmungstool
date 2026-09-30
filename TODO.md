@@ -87,12 +87,15 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 
 ## C. Verwaltung & Komfort
 
-- [ ] CSV-Export der Ergebnisse auf der Verwaltungsseite.
-- [ ] QR-Code zum Abstimmungslink.
-- [ ] Abstimmung duplizieren / als Vorlage nutzen (wiederkehrende Runden).
-- [ ] Mail an die Erstellerin/den Ersteller beim Schließen mit Ergebnis (manuell und per Cron
+- [x] CSV-Export der Ergebnisse auf der Verwaltungsseite.
+- [x] QR-Code zum Abstimmungslink.
+- [x] Abstimmung duplizieren / als Vorlage nutzen (wiederkehrende Runden).
+- [x] Mail an die Erstellerin/den Ersteller beim Schließen mit Ergebnis (manuell und per Cron
       `app/api/cron/close-expired-polls`).
-- [ ] Quorum / Mindestbeteiligung: Ergebnis erst ab N Stimmen gültig, sonst "nicht beschlussfähig".
+- [x] Quorum / Mindestbeteiligung: Ergebnis erst ab N Stimmen gültig, sonst "nicht beschlussfähig".
+  - [ ] **[rsvp-app]** Folgepunkt: rsvp-app kennt "nicht beschlussfähig" nicht (leere Gewinnerliste heißt dort
+        "keine Stimme abgegeben"). Bis dahin meldet dieses Tool ein verfehltes Quorum gar nicht. Vertrag um ein
+        Feld wie `quorumMet` erweitern und `app/ui/poll-result-banner.tsx` in rsvp-app anpassen.
 - [ ] Web-Push-Benachrichtigungen als Grundlage (für die Terminabstimmung unter B, aber auch z.B. "Abstimmung
       geschlossen"). Löst die bisherige Entscheidung "keine Push-Benachrichtigungen" ab - README und
       Datenschutzerklärung (Push-Abos sind personenbezogen) anpassen.

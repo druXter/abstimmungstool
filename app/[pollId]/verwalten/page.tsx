@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getCurrentUser } from '../../lib/auth'
 import { canCreatePolls, getPollLevel } from '../../lib/permissions'
-import { claimPoll, closePoll, sharePoll, unsharePoll } from '../../actions'
+import { claimPoll, closePoll, duplicatePoll, sharePoll, unsharePoll } from '../../actions'
 import { baseUrl } from '../../lib/base-url'
 import PollResults from '../poll-results'
 import CopyableField from '../../ui/copyable-field'
@@ -12,6 +12,7 @@ import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
 import DeletePollButton from './delete-poll-button'
 import VoterLinksPanel from './voter-links-panel'
+import QrCode from '../../ui/qr-code'
 import { isMailConfigured } from '../../lib/mail'
 
 export const dynamic = 'force-dynamic'
@@ -26,10 +27,10 @@ export default async function VerwaltenPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ token?: string; created?: string; saved?: string; shared?: string; claimed?: string; shareError?: string }>
+  searchParams: Promise<{ token?: string; created?: string; saved?: string; shared?: string; claimed?: string; duplicated?: string; shareError?: string }>
 }) {
   const { pollId } = await params
-  const { token, created, saved, shared, claimed, shareError } = await searchParams
+  const { token, created, saved, shared, claimed, duplicated, shareError } = await searchParams
 
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
@@ -70,6 +71,9 @@ export default async function VerwaltenPage({
   // öffentlich nur mit showVoterNames.
   const hasVoterNames = poll.votes.some(v => v.voterName)
   const isClosed = !!poll.closedAt
+  // Für die Ergebnis-Anzeige zählt auch ein abgelaufenes Schließdatum, das der Cron noch nicht
+  // verarbeitet hat (der Schließen-Knopf bleibt dann bewusst da - er löst die Meldungen aus).
+  const ended = isClosed || (poll.closesAt !== null && poll.closesAt < new Date())
   const publicLink = `${baseUrl()}/${poll.id}`
 
   return (
@@ -79,6 +83,7 @@ export default async function VerwaltenPage({
         {saved === '1' && <Notice tone="success">✅ Änderungen gespeichert.</Notice>}
         {claimed === '1' && <Notice tone="success">Die Abstimmung gehört jetzt zu deinem Konto. Alte Verwaltungs-Links sind ungültig.</Notice>}
         {shared === '1' && <Notice tone="success">Freigabe hinzugefügt.</Notice>}
+        {duplicated === '1' && <Notice tone="success">Kopie angelegt - ohne Stimmen und ohne Schließdatum. Passe sie unter &quot;Bearbeiten&quot; an.</Notice>}
 
         <div className="bg-white p-6 rounded-lg shadow space-y-4">
           <h1 className="text-2xl font-bold text-gray-900">{poll.title}</h1>
@@ -89,6 +94,10 @@ export default async function VerwaltenPage({
           )}
 
           <CopyableField label="Link zum Teilen (zum Abstimmen)" value={publicLink} />
+          <details className="text-xs text-gray-600">
+            <summary className="cursor-pointer">QR-Code zum Link</summary>
+            <div className="mt-2"><QrCode value={publicLink} label="QR-Code zum Abstimmungslink" /></div>
+          </details>
           {poll.accessCode && (
             <>
               <CopyableField label="Zugangscode (getrennt vom Link weitergeben)" value={poll.accessCode} />
@@ -125,6 +134,21 @@ export default async function VerwaltenPage({
               </form>
             ) : (
               <span className="text-sm text-gray-500 px-1 py-1.5">Abstimmung ist geschlossen.</span>
+            )}
+            <a
+              href={`/${poll.id}/verwalten/export${tokenQuery}`}
+              className="text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 px-3 py-1.5 rounded transition"
+            >
+              ⬇️ CSV-Export
+            </a>
+            {user && canCreatePolls(user) && (
+              <form action={duplicatePoll}>
+                <input type="hidden" name="pollId" value={poll.id} />
+                {legacy && token && <input type="hidden" name="creatorToken" value={token} />}
+                <button type="submit" className="text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 px-3 py-1.5 rounded transition">
+                  📋 Duplizieren
+                </button>
+              </form>
             )}
             {isOwner && <DeletePollButton pollId={poll.id} creatorToken={legacy ? token : undefined} />}
           </div>
@@ -208,6 +232,8 @@ export default async function VerwaltenPage({
             options={poll.options}
             distinctVoters={distinctVoters}
             showVoterNames
+            quorum={poll.quorum}
+            closed={ended}
           />
           {hasVoterNames && !poll.showVoterNames && (
             <p className="text-xs text-gray-400 mt-3">

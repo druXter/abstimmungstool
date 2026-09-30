@@ -42,6 +42,9 @@ anlegt und verwaltet (siehe "Konten" unten).
   Einstellungen), vorzeitig Schließen, Löschen und Teilen - siehe "Konten".
 * **Gemeinsam moderieren:** Eine Abstimmung lässt sich mit anderen Konten teilen; diese
   können sie bearbeiten und schließen.
+* **Komfort auf der Verwaltungsseite:** CSV-Export, QR-Code zum Abstimmungslink,
+  Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
+  optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
 
 ## Identität der Abstimmenden
 
@@ -362,6 +365,26 @@ Der Ersteller/die Erstellerin und alle Konten mit Verwaltungs-Berechtigung (Frei
 die Namen auf der Verwaltungsseite immer, unabhängig von diesem Schalter. Das Abstimmformular
 weist in allen Modi mit Namen darauf hin, wer sie sieht.
 
+## Verwaltung & Komfort
+
+* **CSV-Export** (`app/[pollId]/verwalten/export/route.ts`): für alle, die die Abstimmung
+  verwalten dürfen (bei Alt-Abstimmungen mit `?token=`). Semikolon, UTF-8 mit BOM (öffnet sich
+  in einem deutschen Excel direkt). Enthält Zählstand, Teilnehmende, Ergebnis und - nur wenn
+  die Stimmen Namen tragen - wer was gewählt hat. Werte, die mit `= + - @` beginnen, bekommen
+  ein `'` vorangestellt (Schutz vor CSV-/Formel-Injection über frei eingegebene Namen).
+* **QR-Code** zum Abstimmungslink, im Browser erzeugt (`app/ui/qr-code.tsx`, Paket `qrcode`).
+* **Duplizieren** (`duplicatePoll`): neue Abstimmung des eingeloggten Kontos mit Titel
+  "(Kopie)", Optionen und Einstellungen - ohne Stimmen, Stimmlinks, bestätigte Adressen,
+  Freigaben und ohne Schließdatum.
+* **Ergebnis-Mail beim Schließen** (`Poll.notifyOwnerOnClose`, bei neuen Abstimmungen
+  vorausgewählt, nur mit `SMTP_HOST`): geht an das besitzende Konto, egal ob manuell
+  geschlossen oder per Cron. Schließen ist jetzt bedingt (`closedAt IS NULL` im WHERE), sodass
+  ein doppelt abgeschicktes Formular oder der gleichzeitige Cron Meldung und Mail nicht
+  wiederholen (`app/lib/poll-closed.ts`).
+* **Mindestbeteiligung** (`Poll.quorum`): Während der Abstimmung steht "es fehlen noch N",
+  danach bei Verfehlen "nicht beschlussfähig" (Seiten, CSV, Mail). Die Auswertung liegt an
+  einer Stelle (`app/lib/results.ts`).
+
 ## Ergebnis-Meldung an rsvp-app
 
 Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
@@ -370,7 +393,10 @@ gemeldet (`app/lib/rsvp-notify.ts`, `notifyRsvpAppOfResult`) - sowohl beim manue
 Schließen (`closePoll`) als auch beim automatischen Schließen-Cronjob (siehe unten).
 Gewinner = alle Optionen mit der höchsten Stimmenzahl (kann mehrere bei Gleichstand
 sein, oder keine bei 0 Stimmen). Best-effort mit 5s-Timeout - ein nicht erreichbares
-rsvp-app verhindert nie das Schließen der Abstimmung selbst.
+rsvp-app verhindert nie das Schließen der Abstimmung selbst. Ist die Mindestbeteiligung
+verfehlt, unterbleibt die Meldung: rsvp-app kennt "nicht beschlussfähig" noch nicht und
+würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen (Folgepunkt in
+`TODO.md`).
 
 ## Automatisches Schließen (Cronjob / Uptime Kuma)
 
@@ -452,8 +478,9 @@ npm run test:e2e
 Abgedeckt sind der Konten-Verbund (`suite.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
 Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
-(`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`) und die
-E-Mail-Bestätigung samt Mailversand (`email.spec.ts`). Mails fängt ein kleiner
+(`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`), die
+E-Mail-Bestätigung samt Mailversand (`email.spec.ts`) und Export, Duplizieren, Ergebnis-Mail,
+Auto-Schließen und Quorum (`comfort.spec.ts`). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt.
 

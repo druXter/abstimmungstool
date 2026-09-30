@@ -2,14 +2,14 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { safeEqual } from '../../../lib/permissions'
-import { notifyRsvpAppOfResult } from '../../../lib/rsvp-notify'
+import { afterPollClosed } from '../../../lib/poll-closed'
 
 /**
  * Automatischer Cron-Endpoint, gleiches Muster wie rsvp-apps /api/cron/reminders -
  * von einem externen Scheduler (Uptime Kuma) periodisch aufgerufen. Schließt jede
  * Abstimmung, deren closesAt erreicht ist, aber die noch niemand manuell geschlossen
- * hat, und löst danach dieselbe Ergebnis-Meldung an rsvp-app aus wie das manuelle
- * Schließen (siehe app/actions.ts closePoll).
+ * hat, und löst danach dasselbe aus wie das manuelle Schließen (Meldung an rsvp-app,
+ * ggf. Ergebnis-Mail - siehe app/lib/poll-closed.ts).
  */
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
@@ -24,13 +24,18 @@ export async function GET(request: Request) {
 
   const now = new Date()
   const expired = await prisma.poll.findMany({
-    where: { closedAt: null, closesAt: { not: null, lt: now } }
+    where: { closedAt: null, closesAt: { not: null, lt: now } },
+    select: { id: true }
   })
 
+  let closedCount = 0
   for (const poll of expired) {
-    await prisma.poll.update({ where: { id: poll.id }, data: { closedAt: now } })
-    await notifyRsvpAppOfResult(poll.id)
+    // Wie closePoll: nur schließen (und melden), wenn nicht gerade jemand anderes schneller war.
+    const closed = await prisma.poll.updateMany({ where: { id: poll.id, closedAt: null }, data: { closedAt: now } })
+    if (closed.count === 0) continue
+    closedCount++
+    await afterPollClosed(poll.id)
   }
 
-  return NextResponse.json({ success: true, closedCount: expired.length })
+  return NextResponse.json({ success: true, closedCount })
 }

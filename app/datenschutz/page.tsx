@@ -176,8 +176,9 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">8. E-Mails</h2>
           <p className="mt-2">
-            Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto und den auf Wunsch
-            angeforderten Passwort-Reset), auf deine Anforderung hin den Bestätigungslink einer Abstimmung und, wenn
+            Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto, den auf Wunsch
+            angeforderten Passwort-Reset und - falls eingeschaltet - das Ergebnis einer eigenen Abstimmung beim
+            Schließen), auf deine Anforderung hin den Bestätigungslink einer Abstimmung und, wenn
             die Verwaltung einer Abstimmung das veranlasst, persönliche Stimmlinks an die von ihr eingetragenen
             Adressen. Werbung oder Newsletter gibt es nicht.
           </p>
