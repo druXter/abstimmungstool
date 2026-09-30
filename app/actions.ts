@@ -12,6 +12,7 @@ import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENG
 import { accessCodeRule, clientIp, newVoterRule, reserve, suggestionRule, voteEmailRules } from './lib/throttle'
 import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
+import { isPushConfigured } from './lib/push'
 import { afterPollClosed } from './lib/poll-closed'
 import { choiceLimits } from './lib/results'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
@@ -56,8 +57,8 @@ function parsePollSettings(formData: FormData) {
     accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
     allowedEmails: normalizeAllowedEmails(formString(formData, 'allowedEmails', 20_000)),
     quorum: Number.isInteger(quorum) && quorum >= 1 ? Math.min(quorum, MAX_VOTERS_LIMIT) : null,
-    // Ohne Mailversand fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
-    notifyOwnerOnClose: isMailConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined
+    // Ohne Mail und Push fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
+    notifyOwnerOnClose: isMailConfigured() || isPushConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined
   }
 }
 

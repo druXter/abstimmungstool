@@ -7,6 +7,8 @@ import { changePassword, unlinkIdentity } from '../auth-actions'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
 import ConfirmForm from '../ui/confirm-form'
+import { vapidPublicKey } from '../lib/push'
+import PushToggle from './push-toggle'
 
 export const dynamic = 'force-dynamic'
 
@@ -41,6 +43,7 @@ export default async function KontoPage({
     orderBy: { createdAt: 'asc' }
   })
   const linkable = getIdps().filter(idp => !identities.some(i => i.issuer === idp.issuer))
+  const pushKey = vapidPublicKey()
 
   return (
     <main className="bg-gray-50 py-8 px-4">
@@ -117,6 +120,17 @@ export default async function KontoPage({
                 Mit {idpLabel(idp)} verknüpfen
               </a>
             ))}
+          </div>
+        )}
+
+        {pushKey && (
+          <div className="bg-white p-6 rounded-lg shadow space-y-3">
+            <h2 className="font-bold">Mitteilungen</h2>
+            <p className="text-sm text-gray-600">
+              Push-Mitteilung auf diesem Gerät, wenn eine deiner Abstimmungen endet (bei &quot;Ergebnis beim Schließen
+              mitteilen&quot;). Gilt nur, solange du hier angemeldet bist.
+            </p>
+            <PushToggle publicKey={pushKey} />
           </div>
         )}
       </div>

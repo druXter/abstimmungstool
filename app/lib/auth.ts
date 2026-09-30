@@ -118,6 +118,14 @@ export const getCurrentUser = cache(async (): Promise<CurrentUser | null> => {
   return { ...user, hasPassword: passwordHash !== null }
 })
 
+/** ID der aktuellen (gültigen) Sitzung - z.B. um ein Push-Abo an genau dieses Gerät zu binden. */
+export async function getCurrentSessionId(): Promise<string | null> {
+  const token = (await cookies()).get(SESSION_COOKIE)?.value
+  if (!token) return null
+  const session = await prisma.session.findUnique({ where: { tokenHash: hashToken(token) }, select: { id: true, expiresAt: true } })
+  return session && session.expiresAt >= new Date() ? session.id : null
+}
+
 /**
  * Für Seiten UND Server Actions: leitet auf die Anmeldung um, wenn niemand eingeloggt
  * ist, und kehrt danach an `next` zurück. Jede Server Action muss selbst prüfen - eine

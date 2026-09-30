@@ -205,6 +205,16 @@ export default function DatenschutzPage() {
             (&quot;Du bist offline&quot;) zwischen - keine deiner Abstimmungen, keine Konto- oder Verwaltungsseiten und
             keine personenbezogenen Daten.
           </p>
+          <p className="mt-2">
+            <strong>Push-Mitteilungen (nur mit Konto, freiwillig):</strong> Schaltest du unter &quot;Mein Konto&quot;
+            Mitteilungen auf einem Gerät ein, speichern wir das Push-Abo deines Browsers (eine Adresse beim Push-Dienst
+            des Browser-Herstellers und zwei Schlüssel) verknüpft mit deinem Konto und deiner aktuellen Anmeldung.
+            Meldest du dich ab, läuft die Anmeldung ab oder schaltest du Mitteilungen aus, wird das Abo gelöscht.
+            Mitteilungen werden über den Push-Dienst deines Browsers zugestellt (z.B. Google, Mozilla oder Apple, ggf.
+            auch außerhalb der EU). Ihr Inhalt ist Ende-zu-Ende verschlüsselt - der Push-Dienst sieht nur, dass eine
+            Nachricht an dein Gerät geht, nicht was darin steht. Rechtsgrundlage ist deine Einwilligung (Art. 6 Abs.
+            1 lit. a DSGVO), die du jederzeit durch Ausschalten widerrufen kannst.
+          </p>
         </div>
 
         <div>
@@ -213,6 +223,10 @@ export default function DatenschutzPage() {
             <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset-, Bestätigungs- und Stimmlink-Mails versenden wir über den
             E-Mail-Server <code>{smtpHost}</code>. Mit dem Betreiber dieses Servers besteht, soweit es sich um einen
             externen Anbieter handelt, ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
+          </p>
+          <p className="mt-2">
+            <strong>Push-Dienste:</strong> Nur wenn du Mitteilungen einschaltest, geht eine verschlüsselte Nachricht an
+            den Push-Dienst deines Browser-Herstellers (siehe Punkt 9). Welcher das ist, bestimmt dein Browser.
           </p>
           <p className="mt-2">
             <strong>Verbundene Tools:</strong> Die in Punkt 4 und 6 beschriebene Übermittlung erfolgt nur an Tools, die

@@ -3,6 +3,7 @@ import type { Poll, VoterIdentity } from '@prisma/client'
 import { offeredIdentities } from '../lib/voter-identity'
 import { MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import { isMailConfigured } from '../lib/mail'
+import { isPushConfigured } from '../lib/push'
 import { toInputValue } from '../lib/date-options'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, POLL_TYPE_LABELS, POLL_TYPES } from '../lib/poll-types'
 
@@ -230,10 +231,10 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
           </p>
         </div>
         {/* Neue Abstimmungen: an; bestehende behalten ihre Einstellung. */}
-        {isMailConfigured() && (
+        {(isMailConfigured() || isPushConfigured()) && (
           <label className="flex items-center gap-2 cursor-pointer">
             <input type="checkbox" name="notifyOwnerOnClose" defaultChecked={poll ? poll.notifyOwnerOnClose : true} className="w-4 h-4" />
-            <span className="text-sm">Ergebnis beim Schließen an das Konto mailen, dem die Abstimmung gehört</span>
+            <span className="text-sm">Ergebnis beim Schließen dem Konto mitteilen, dem die Abstimmung gehört (Mail bzw. Push)</span>
           </label>
         )}
       </fieldset>

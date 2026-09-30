@@ -29,6 +29,7 @@
     "autoprefixer": "^10.5.4",
     "eslint": "^9",
     "eslint-config-next": "^16.3.8",
+    "http_ece": "^1.2.0",
     "postcss": "^8.5.23",
     "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",

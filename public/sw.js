@@ -10,6 +10,9 @@
 //   - Alles andere (Server Actions/POST, /api/*, RSC-Anfragen, fremde Herkunft) fasst dieser
 //     Worker gar nicht an - der Browser verhält sich wie ohne Service Worker.
 // Im Cache liegt ausschließlich die statische Offline-Seite. Ändert sich /offline.html, VERSION erhöhen.
+//
+// Push-Mitteilungen (app/lib/push.ts): Der Worker zeigt sie nur an und öffnet beim Antippen die
+// mitgeschickte Adresse - ausschließlich auf dieser Herkunft, fremde Adressen werden ignoriert.
 
 const VERSION = 'v1'
 const CACHE = `abstimmungstool-offline-${VERSION}`
@@ -46,5 +49,31 @@ self.addEventListener('fetch', (event) => {
     } catch {
       return (await caches.match(OFFLINE_URL)) || Response.error()
     }
+  })())
+})
+
+self.addEventListener('push', (event) => {
+  let message = {}
+  try {
+    message = event.data ? event.data.json() : {}
+  } catch {
+    // Unlesbarer Inhalt: trotzdem eine (neutrale) Mitteilung zeigen - Browser verlangen das bei userVisibleOnly.
+  }
+  event.waitUntil(self.registration.showNotification(message.title || 'Abstimmungstool', {
+    body: message.body || '',
+    icon: '/icons/icon-192.png',
+    data: { url: typeof message.url === 'string' ? message.url : '/' }
+  }))
+})
+
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const target = new URL(event.notification.data && event.notification.data.url || '/', self.location.origin)
+  if (target.origin !== self.location.origin) return
+  event.waitUntil((async () => {
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const open = windows.find((client) => client.url === target.href)
+    if (open) return open.focus()
+    return self.clients.openWindow(target.href)
   })())
 })

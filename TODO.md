@@ -98,9 +98,11 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
   - [ ] **[rsvp-app]** Folgepunkt: rsvp-app kennt "nicht beschlussfähig" nicht (leere Gewinnerliste heißt dort
         "keine Stimme abgegeben"). Bis dahin meldet dieses Tool ein verfehltes Quorum gar nicht. Vertrag um ein
         Feld wie `quorumMet` erweitern und `app/ui/poll-result-banner.tsx` in rsvp-app anpassen.
-- [ ] Web-Push-Benachrichtigungen als Grundlage (für die Terminabstimmung unter B, aber auch z.B. "Abstimmung
+- [x] Web-Push-Benachrichtigungen als Grundlage (für die Terminabstimmung unter B, aber auch z.B. "Abstimmung
       geschlossen"). Löst die bisherige Entscheidung "keine Push-Benachrichtigungen" ab - README und
       Datenschutzerklärung (Push-Abos sind personenbezogen) anpassen.
+  - Umgesetzt für Konten ("Abstimmung beendet"), ohne Zusatzpaket. Noch offen: Push für Abstimmende ohne
+    Konto - hängt an der Terminabstimmung (Abschnitt B), dort erst entscheiden.
 
 ---
 

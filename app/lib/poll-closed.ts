@@ -3,6 +3,7 @@ import { prisma } from './prisma'
 import { baseUrl } from './base-url'
 import { isMailConfigured, sendPollResultEmail } from './mail'
 import { notifyRsvpAppOfResult } from './rsvp-notify'
+import { sendPushToUser } from './push'
 import { formatScore, loadResult, type PollResult } from './results'
 
 /** Eine Zeile Zusammenfassung für Mail und Seiten: Gewinner, Gleichstand oder nicht beschlussfähig. */
@@ -16,8 +17,8 @@ export function resultSummary(result: PollResult): string {
 /**
  * Alles, was nach dem Schließen einer Abstimmung passiert - vom manuellen closePoll
  * (app/actions.ts) und vom Cron (app/api/cron/close-expired-polls) gleichermaßen aufgerufen:
- * Ergebnis an rsvp-app melden und, falls gewünscht, an das besitzende Konto mailen. Beides
- * best-effort: Ein Fehler darf das Schließen selbst nie rückgängig machen oder verhindern.
+ * Ergebnis an rsvp-app melden und, falls gewünscht, dem besitzenden Konto mitteilen (Mail
+ * und Push auf den Geräten, auf denen es Mitteilungen eingeschaltet hat). Alles best-effort: Ein Fehler darf das Schließen selbst nie rückgängig machen oder verhindern.
  */
 export async function afterPollClosed(pollId: string): Promise<void> {
   await notifyRsvpAppOfResult(pollId).catch(() => {})
@@ -25,10 +26,9 @@ export async function afterPollClosed(pollId: string): Promise<void> {
 }
 
 async function notifyOwnerOfResult(pollId: string): Promise<void> {
-  if (!isMailConfigured()) return
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
-    select: { id: true, notifyOwnerOnClose: true, owner: { select: { email: true } } }
+    select: { id: true, notifyOwnerOnClose: true, owner: { select: { id: true, email: true } } }
   })
   // Alt-Abstimmungen ohne Konto bekommen nichts: Ihr Verwaltungslink hängt am creatorToken,
   // den eine Mail nicht im Klartext verschicken soll.
@@ -36,6 +36,9 @@ async function notifyOwnerOfResult(pollId: string): Promise<void> {
 
   const result = await loadResult(poll.id)
   if (!result) return
+  const link = `${baseUrl()}/${poll.id}/verwalten`
+  await sendPushToUser(poll.owner.id, { title: `Abstimmung beendet: ${result.poll.title}`, body: resultSummary(result), url: `/${poll.id}/verwalten` })
+  if (!isMailConfigured()) return
   await sendPollResultEmail(
     poll.owner.email,
     {
@@ -46,6 +49,6 @@ async function notifyOwnerOfResult(pollId: string): Promise<void> {
         `Teilnehmende: ${result.voters}`
       ]
     },
-    `${baseUrl()}/${poll.id}/verwalten`
+    link
   )
 }

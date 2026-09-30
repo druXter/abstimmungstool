@@ -472,7 +472,32 @@ Browserleiste starten. Das Abstimmen selbst braucht das nicht - jeder Abstimmung
   erhöhen.
 * `sw.js` wird nie zwischengespeichert (Header in `next.config.ts`), damit Änderungen sofort ankommen - das gilt auch für
   Cloudflare/Proxys davor. Registriert wird der Worker nur in der Produktion (`app/ui/pwa-register.tsx`).
-* Es gibt bewusst **keine Push-Benachrichtigungen** und kein Offline-Abstimmen.
+* Es gibt bewusst **kein Offline-Abstimmen**. Push-Mitteilungen siehe unten.
+
+## Push-Mitteilungen (optional)
+
+Konten können unter "Mein Konto" Mitteilungen auf einem Gerät einschalten - bisher für "deine
+Abstimmung ist beendet" (zusammen mit der Ergebnis-Mail, Schalter `Poll.notifyOwnerOnClose`).
+Das löst die frühere Entscheidung "keine Push-Benachrichtigungen" ab und ist die Grundlage für
+die geplante Terminabstimmung mit rsvp-app (`TODO.md`).
+
+* **Konfiguration:** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` (siehe
+  `.env.example`), Schlüssel erzeugen mit `node scripts/generate-vapid-keys.js`. Ohne sie gibt
+  es keinen Bereich "Mitteilungen" und keinen Versand. Ein Schlüsselwechsel macht alle Abos
+  ungültig - danach muss jedes Gerät Mitteilungen neu einschalten.
+* **Ohne Zusatzpaket** (`app/lib/push.ts`, bewusst an einer Stelle auditierbar): VAPID nach
+  RFC 8292 (ES256-JWT mit `node:crypto`), Inhalt Ende-zu-Ende verschlüsselt nach RFC 8291
+  (`aes128gcm`) - der Push-Dienst des Browser-Herstellers sieht nur Empfänger und Größe.
+* **Abo pro Gerät und Sitzung** (`PushSubscription`, hängt per Cascade an der `Session`):
+  Abmelden, Ablauf der Sitzung oder ein neuer Login ohne erneutes Öffnen von "Mein Konto"
+  beenden die Mitteilungen dieses Geräts - wichtig auf geteilten Geräten. Beim Öffnen von "Mein
+  Konto" wird ein im Browser noch vorhandenes Abo an die aktuelle Sitzung gebunden. Abos, die der
+  Push-Dienst als erloschen meldet (404/410), werden gelöscht.
+* **Service Worker** (`public/sw.js`): zeigt Mitteilungen an und öffnet beim Antippen die
+  mitgeschickte Adresse - nur auf dieser Herkunft.
+* iPhone/iPad: Push nur, wenn das Tool als App installiert ist (iOS 16.4+).
+* Noch nicht: Mitteilungen an Abstimmende ohne Konto - das hängt an den offenen Entscheidungen
+  zur Terminabstimmung (`TODO.md`, Abschnitt B).
 
 ## Automatische Löschung (Löschfristen)
 
@@ -532,7 +557,11 @@ Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
 E-Mail-Bestätigung samt Mailversand (`email.spec.ts`) und Export, Duplizieren, Ergebnis-Mail,
 Auto-Schließen und Quorum (`comfort.spec.ts`). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
-nach `.e2e/mails.jsonl` schreibt.
+nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
+(`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den
+Inhalt mit einer unabhängigen RFC-8291-Implementierung (Dev-Paket `http_ece`). Nicht automatisch
+getestet ist das Einschalten im Browser selbst: Headless-Chromium meldet Mitteilungen immer als
+verweigert.
 
 Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
 eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die

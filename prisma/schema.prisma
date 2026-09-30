@@ -45,21 +45,42 @@ model User {
   resetTokenHash      String?   @unique
   resetTokenExpiresAt DateTime?
 
-  sessions   Session[]
-  identities ExternalIdentity[]
-  ownedPolls Poll[]             @relation("PollOwner")
-  pollAccess PollAccess[]
+  sessions          Session[]
+  identities        ExternalIdentity[]
+  pushSubscriptions PushSubscription[]
+  ownedPolls        Poll[]             @relation("PollOwner")
+  pollAccess        PollAccess[]
 }
 
 // Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
 // liegt ausschließlich dessen SHA-256-Hash - ein Leak der Datenbank ergibt also keine
 // übernehmbaren Sitzungen.
 model Session {
+  id                String             @id @default(cuid())
+  tokenHash         String             @unique
+  userId            String
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt         DateTime
+  createdAt         DateTime           @default(now())
+  pushSubscriptions PushSubscription[]
+
+  @@index([userId])
+}
+
+// Web-Push-Abo eines Geräts (siehe app/lib/push.ts). Hängt an der SITZUNG, nicht nur am Konto:
+// Wer sich auf einem Gerät abmeldet (oder dessen Sitzung abläuft), bekommt dort auch keine
+// Mitteilungen mehr - wichtig auf geteilten Geräten. endpoint ist die Adresse beim Push-Dienst
+// des Browsers (Google, Mozilla, Apple), p256dh/auth die Schlüssel, mit denen jede Nachricht
+// Ende-zu-Ende verschlüsselt wird - der Push-Dienst sieht den Inhalt nicht.
+model PushSubscription {
   id        String   @id @default(cuid())
-  tokenHash String   @unique
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  expiresAt DateTime
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
   createdAt DateTime @default(now())
 
   @@index([userId])
@@ -180,8 +201,8 @@ model Poll {
   // Mindestbeteiligung: Das Ergebnis gilt erst ab so vielen Teilnehmenden (verschiedene
   // voterKeys), sonst "nicht beschlussfähig" (siehe app/lib/results.ts). null = kein Quorum.
   quorum                   Int?
-  // Beim Schließen (manuell oder per Cron) das Ergebnis an das besitzende Konto mailen
-  // (app/lib/poll-closed.ts). Nur mit SMTP_HOST wirksam.
+  // Beim Schließen (manuell oder per Cron) das Ergebnis dem besitzenden Konto mitteilen
+  // (Mail bzw. Push, app/lib/poll-closed.ts). Nur mit SMTP_HOST bzw. VAPID_* wirksam.
   notifyOwnerOnClose       Boolean           @default(false)
   // Wann die öffentliche Seite das Ergebnis zeigt (siehe ResultsVisibility). Die Verwaltung
   // sieht es immer.

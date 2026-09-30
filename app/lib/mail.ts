@@ -177,7 +177,7 @@ ${link}`,
         <p style="text-align: center; margin: 30px 0;">
           <a href="${esc(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Zur Verwaltungsseite</a>
         </p>
-        <p style="font-size: 12px; color: #666;">Du bekommst diese Mail, weil bei dieser Abstimmung "Ergebnis beim Schließen mailen" eingeschaltet ist.</p>
+        <p style="font-size: 12px; color: #666;">Du bekommst diese Mail, weil bei dieser Abstimmung "Ergebnis beim Schließen mitteilen" eingeschaltet ist.</p>
       </div>
     `
   )

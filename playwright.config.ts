@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { TEST_SUITE_IDPS } from './tests/e2e/suite-server'
 import { MAIL_PORT } from './tests/e2e/mail-server'
+import { createECDH, createHash } from 'node:crypto'
 
 // E2E-Tests gegen eine echte, frisch gebaute Instanz (next build + next start) mit eigener
 // Datenbank (prisma/test.db) - nie gegen die Entwicklungs- oder Produktivdatenbank.
@@ -20,6 +21,12 @@ process.env.BASE_URL = BASE_URL
 export const TEST_RSVP_SECRET = 'nur-fuer-e2e-tests-kein-echtes-secret'
 process.env.RSVP_VERIFICATION_SECRET = TEST_RSVP_SECRET
 export const TEST_CRON_SECRET = 'nur-fuer-e2e-tests-cron'
+// Feste VAPID-Schlüssel für Push (app/lib/push.ts) - aus einem Namen abgeleitet, damit Server
+// und Testprozesse (die diese Datei jeweils selbst laden) dieselben haben. Nur für Tests.
+const vapid = createECDH('prime256v1')
+vapid.setPrivateKey(createHash('sha256').update('e2e-vapid').digest())
+export const TEST_VAPID_PUBLIC_KEY = vapid.getPublicKey().toString('base64url')
+const TEST_VAPID_PRIVATE_KEY = vapid.getPrivateKey().toString('base64url')
 
 export default defineConfig({
   testDir: './tests/e2e',
@@ -65,6 +72,10 @@ export default defineConfig({
       SUITE_SIGNING_KEY: '',
       SUITE_TRUSTED_APPS: '',
       RSVP_APP_BASE_URL: '',
+      // Push-Mitteilungen gehen an den Test-Push-Dienst (tests/e2e/push-server.ts).
+      VAPID_PUBLIC_KEY: TEST_VAPID_PUBLIC_KEY,
+      VAPID_PRIVATE_KEY: TEST_VAPID_PRIVATE_KEY,
+      VAPID_SUBJECT: 'mailto:test@example.test',
       // Cron-Endpunkte (Auto-Schließen) rufen die Tests selbst auf.
       CRON_SECRET: TEST_CRON_SECRET,
       TZ: 'Europe/Berlin'
