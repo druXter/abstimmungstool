@@ -58,7 +58,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
   - [x] Ja / Vielleicht / Nein pro Option (Doodle-Stil)
   - [x] Rangfolge (Borda oder Instant-Runoff)
   - [x] Punkte verteilen (z.B. 10 Punkte auf beliebige Optionen)
-  - [ ] **[rsvp-app]** Folgepunkt: Die Ergebnis-Meldung schickt bei anderen Arten die Wertung als `votes`, rsvp-app
+  - [x] **[rsvp-app]** Folgepunkt: Die Ergebnis-Meldung schickt bei anderen Arten die Wertung als `votes`, rsvp-app
         schreibt dazu "Stimmen". Vertrag um die Art/Einheit erweitern (z.B. `unit: "votes" | "points"`).
 - [x] **Terminoptionen:** Optionen als Datum/Uhrzeit mit Kalender-Eingabe statt Freitext.
 - [x] **Terminabstimmung → rsvp-app** **[rsvp-app]**: Das Endergebnis legt in rsvp-app ein Event an bzw. gibt
@@ -90,7 +90,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [x] Mail an die Erstellerin/den Ersteller beim Schließen mit Ergebnis (manuell und per Cron
       `app/api/cron/close-expired-polls`).
 - [x] Quorum / Mindestbeteiligung: Ergebnis erst ab N Stimmen gültig, sonst "nicht beschlussfähig".
-  - [ ] **[rsvp-app]** Folgepunkt: rsvp-app kennt "nicht beschlussfähig" nicht (leere Gewinnerliste heißt dort
+  - [x] **[rsvp-app]** Folgepunkt: rsvp-app kennt "nicht beschlussfähig" nicht (leere Gewinnerliste heißt dort
         "keine Stimme abgegeben"). Bis dahin meldet dieses Tool ein verfehltes Quorum gar nicht. Vertrag um ein
         Feld wie `quorumMet` erweitern und `app/ui/poll-result-banner.tsx` in rsvp-app anpassen.
 - [x] Web-Push-Benachrichtigungen als Grundlage (für die Terminabstimmung unter B, aber auch z.B. "Abstimmung

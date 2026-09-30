@@ -94,7 +94,7 @@ Option. Eingabe: `parseBallot` in `app/lib/poll-types.ts` (Formularfelder:
   Art etwas anderes.
 * Ergebnis, CSV-Export (Spalten je Art, bei Namen zusätzlich die Angabe wie "ja" oder
   "Platz 2") und Ergebnis-Mail zeigen die passende Wertung. An rsvp-app geht als `votes` die
-  Wertung (score) - dort steht dazu "Stimmen", eine bekannte Unschärfe (`TODO.md`).
+  Wertung (score) mit `unit: "points"`, dort steht dann "Punkte".
 
 ## Identität der Abstimmenden
 
@@ -432,8 +432,8 @@ weist in allen Modi mit Namen darauf hin, wer sie sieht.
   ein doppelt abgeschicktes Formular oder der gleichzeitige Cron Meldung und Mail nicht
   wiederholen (`app/lib/poll-closed.ts`).
 * **Mindestbeteiligung** (`Poll.quorum`): Während der Abstimmung steht "es fehlen noch N",
-  danach bei Verfehlen "nicht beschlussfähig" (Seiten, CSV, Mail). Die Auswertung liegt an
-  einer Stelle (`app/lib/results.ts`).
+  danach bei Verfehlen "nicht beschlussfähig" (Seiten, CSV, Mail, rsvp-app). Die Auswertung liegt
+  an einer Stelle (`app/lib/results.ts`).
 
 ## Ergebnis-Meldung an rsvp-app
 
@@ -444,9 +444,11 @@ Schließen (`closePoll`) als auch beim automatischen Schließen-Cronjob (siehe u
 Gewinner = alle Optionen mit der höchsten Stimmenzahl (kann mehrere bei Gleichstand
 sein, oder keine bei 0 Stimmen). Best-effort mit 5s-Timeout - ein nicht erreichbares
 rsvp-app verhindert nie das Schließen der Abstimmung selbst. Ist die Mindestbeteiligung
-verfehlt oder ist das Ergebnis auf "nur Verwaltung" gestellt, unterbleibt die Meldung. Zum Quorum: rsvp-app kennt "nicht beschlussfähig" noch nicht und
-würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen (Folgepunkt in
-`TODO.md`).
+Ist das Ergebnis auf "nur Verwaltung" gestellt, unterbleibt die Meldung. Zusätzliche Felder der
+Meldung: `quorumMet` (false = Mindestbeteiligung verfehlt, dann ohne Gewinner - rsvp-app zeigt
+"nicht beschlussfähig") und `unit` (`votes` bei Auswahl, sonst `points` - die Zahl ist dann die
+Wertung, rsvp-app schreibt "Punkte"). rsvp-app-Versionen ohne diese Felder ignorieren sie; bei einem
+Update daher zuerst rsvp-app aktualisieren.
 
 ## Terminabstimmung: Termin festlegen und an rsvp-app übergeben
 

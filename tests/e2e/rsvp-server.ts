@@ -59,3 +59,13 @@ export function pollDateMessages(pollId: string): { payload: Record<string, unkn
     .map(entry => ({ token: entry.body, payload: JSON.parse(Buffer.from(entry.body.split('.')[0], 'base64url').toString('utf8')) }))
     .filter(message => message.payload.pollId === pollId)
 }
+
+/** Mitgeschriebene Ergebnis-Meldungen (POST /api/poll-result-webhook), Payload dekodiert. */
+export function resultMessages(pollId: string): Record<string, unknown>[] {
+  if (!existsSync(LOG)) return []
+  return readFileSync(LOG, 'utf8').trim().split('\n').filter(Boolean)
+    .map(line => JSON.parse(line) as { path: string; body: string })
+    .filter(entry => entry.path === '/api/poll-result-webhook')
+    .map(entry => JSON.parse(Buffer.from(entry.body.split('.')[0], 'base64url').toString('utf8')) as Record<string, unknown>)
+    .filter(payload => payload.pollId === pollId)
+}

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { createAccount, createPoll, login, prisma, uniqueEmail } from './helpers'
 import { mailsTo, waitForMail } from './mail-server'
+import { resultMessages } from './rsvp-server'
 import { TEST_CRON_SECRET } from '../../playwright.config'
 
 // Verwaltung & Komfort (TODO.md C): CSV-Export, QR-Code, Duplizieren, Ergebnis-Mail, Quorum.
@@ -110,4 +111,24 @@ test('Quorum während der Abstimmung: es fehlen noch …', async ({ page }) => {
   await addVote(poll.id, poll.options[0].id, `q-${poll.id}`)
   await page.goto(`/${poll.id}`)
   await expect(page.getByText('Mindestbeteiligung: 3 Teilnehmende - es fehlen noch 2.')).toBeVisible()
+})
+
+test('Ergebnis-Meldung an rsvp-app: nicht beschlussfähig bzw. Punkte - bei "nur Verwaltung" gar nicht', async ({ request }) => {
+  const owner = await createAccount()
+  const cron = () => request.get(`/api/cron/close-expired-polls?secret=${TEST_CRON_SECRET}`)
+  const expired = { rsvpEventId: 'ev-rsvp', closesAt: new Date(Date.now() - 1000) }
+
+  const quorum = await createPoll(owner.id, { ...expired, quorum: 3 })
+  await addVote(quorum.id, quorum.options[0].id, `rq-${quorum.id}`)
+  const points = await createPoll(owner.id, { ...expired, pollType: 'POINTS', pointsBudget: 10 })
+  await prisma.vote.create({ data: { pollId: points.id, optionId: points.options[1].id, identityKind: 'COOKIE', voterKey: `cookie:rp-${points.id}`, value: 7 } })
+  const hidden = await createPoll(owner.id, { ...expired, resultsVisibility: 'MANAGERS' })
+  await addVote(hidden.id, hidden.options[0].id, `rh-${hidden.id}`)
+
+  expect((await cron()).ok()).toBe(true)
+  await expect.poll(() => resultMessages(quorum.id).length).toBe(1)
+  expect(resultMessages(quorum.id)[0]).toMatchObject({ eventId: 'ev-rsvp', quorumMet: false, winners: [], unit: 'votes' })
+  await expect.poll(() => resultMessages(points.id).length).toBe(1)
+  expect(resultMessages(points.id)[0]).toMatchObject({ quorumMet: true, unit: 'points', winners: [{ label: 'Sushi', votes: 7 }] })
+  expect(resultMessages(hidden.id)).toHaveLength(0)
 })

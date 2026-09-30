@@ -15,10 +15,8 @@ import { rsvpAppBaseUrl } from './rsvp-date'
  * No-op ohne poll.rsvpEventId (noch nie ein rsvp-webhook für diese Abstimmung
  * empfangen, siehe app/api/rsvp-webhook/route.ts - z.B. weil der Modus RSVP nie
  * genutzt wurde) oder ohne konfiguriertes RSVP_APP_BASE_URL/
- * RSVP_VERIFICATION_SECRET. Gewinner siehe app/lib/results.ts. Ebenfalls no-op, wenn
- * die Mindestbeteiligung (Poll.quorum) verfehlt ist: rsvp-app kennt "nicht beschlussfähig"
- * noch nicht und würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen - und
- * bei Poll.resultsVisibility = MANAGERS, weil das Ergebnis dann nicht öffentlich ist. Bewusst
+ * RSVP_VERIFICATION_SECRET. Gewinner siehe app/lib/results.ts. Ebenfalls no-op bei
+ * Poll.resultsVisibility = MANAGERS, weil das Ergebnis dann nicht öffentlich ist. Bewusst
  * best-effort mit kurzem Timeout, wie das Gegenstück in rsvp-app - ein nicht
  * erreichbares rsvp-app darf das Schließen der Abstimmung selbst nie verhindern.
  */
@@ -31,18 +29,21 @@ export async function notifyRsvpAppOfResult(pollId: string): Promise<void> {
   if (!base) return
 
   const result = await loadResult(poll.id)
-  if (!result || !result.quorumMet) return
+  if (!result) return
   // "votes" ist im Vertrag mit rsvp-app die Zahl hinter dem Gewinner. Bei anderen Arten als
-  // Auswahl ist das der score (Ja-gewichtet, Borda- bzw. verteilte Punkte) - rsvp-app zeigt
-  // dazu "Stimmen", das ist dort eine bekannte Unschärfe (siehe TODO.md).
-  const winners = result.winners.map(o => ({ label: o.label, votes: o.score }))
+  // Auswahl ist das der score (Ja-gewichtet, Borda- bzw. verteilte Punkte) - dann mit unit
+  // "points", rsvp-app schreibt dazu "Punkte". Bei verfehltem Quorum keine Gewinner, dafür
+  // quorumMet: false ("nicht beschlussfähig").
+  const winners = result.quorumMet ? result.winners.map(o => ({ label: o.label, votes: o.score })) : []
 
   const signed = signResultWebhookPayload({
     eventId: poll.rsvpEventId,
     pollId: poll.id,
     pollTitle: poll.title,
     winners,
-    closedAt: poll.closedAt.toISOString()
+    closedAt: poll.closedAt.toISOString(),
+    quorumMet: result.quorumMet,
+    unit: result.pollType === 'CHOICE' ? 'votes' : 'points'
   })
   if (!signed) return
 

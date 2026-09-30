@@ -110,7 +110,7 @@ export function verifyRsvpWebhookPayload(token: string | undefined | null): Rsvp
  * (Gegenstück zu dessen `verifyResultWebhookPayload`) - siehe app/lib/rsvp-notify.ts
  * für den Aufrufer.
  */
-export function signResultWebhookPayload(payload: { eventId: string; pollId: string; pollTitle: string; winners: { label: string; votes: number }[]; closedAt: string }): string | null {
+export function signResultWebhookPayload(payload: { eventId: string; pollId: string; pollTitle: string; winners: { label: string; votes: number }[]; closedAt: string; quorumMet: boolean; unit: 'votes' | 'points' }): string | null {
   const secret = process.env.RSVP_VERIFICATION_SECRET
   if (!secret) return null
   return sign({ ...payload, exp: Math.floor(Date.now() / 1000) + 600 }, secret)
