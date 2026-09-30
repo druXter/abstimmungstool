@@ -115,6 +115,15 @@ export default function DatenschutzPage() {
             auf der öffentlichen Ergebnisseite sichtbar. Die Abstimmungsseite weist dich darauf hin.
           </p>
           <p className="mt-2">
+            <strong>Terminabstimmungen:</strong> Legt die Verwaltung nach einer Terminabstimmung den Termin fest,
+            informieren wir alle Abstimmenden, die wir erreichen können (Push-Mitteilung bei Konten mit eingeschalteten
+            Mitteilungen, sonst eine Mail an die bestätigte bzw. beim Stimmlink hinterlegte Adresse; bei anonymer
+            Abstimmung niemanden). Ist die Abstimmung mit rsvp-app verbunden, melden wir dorthin den Termin, den Titel
+            und die Konto-Kennung der Person, der die Abstimmung gehört (damit dort ggf. ein Event für sie entsteht),
+            sowie nicht umkehrbare Prüfwerte (SHA-256-Hashes) der Adressen, die wir selbst informieren - nur damit
+            niemand dieselbe Nachricht doppelt bekommt.
+          </p>
+          <p className="mt-2">
             Schließt sich eine solche Abstimmung, melden wir das Ergebnis (Titel der Abstimmung, Gewinner-Optionen,
             Stimmenzahl) an rsvp-app zurück. Personenbezogene Daten sind darin nicht enthalten.
           </p>

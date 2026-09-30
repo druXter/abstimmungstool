@@ -30,7 +30,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   }
 }
 
-type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices' | 'allowVoterOptions' | 'voterOptionsNeedApproval' | 'pollType' | 'pointsBudget'>
+type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity' | 'showVoterNames' | 'requireVoterName' | 'maxVoters' | 'accessCode' | 'secretBallot' | 'allowedEmails' | 'quorum' | 'notifyOwnerOnClose' | 'resultsVisibility' | 'minChoices' | 'maxChoices' | 'allowVoterOptions' | 'voterOptionsNeedApproval' | 'pollType' | 'pointsBudget' | 'confirmDate'>
 
 /**
  * Die Einstellungen einer Abstimmung, gemeinsam für Anlegen und Bearbeiten (Gegenstück:
@@ -90,6 +90,18 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
           <input id="poll-max-choices" type="number" name="maxChoices" min={1} max={25} defaultValue={poll?.maxChoices ?? ''} placeholder="alle" className="w-20 border border-gray-300 p-1.5 rounded" />
           <span className="text-xs text-gray-500">Optionen pro Stimme (optional, nur bei Mehrfachauswahl)</span>
         </div>
+      </div>
+
+      <div>
+        <label className="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" name="confirmDate" defaultChecked={poll ? poll.confirmDate : true} className="w-4 h-4" />
+          <span className="text-sm font-medium">Terminabstimmung: nach dem Ende Termin festlegen (nur bei Tagen/Terminen)</span>
+        </label>
+        <p className="text-xs text-gray-500 ml-6">
+          Nach dem Ende bestätigst du den Termin (bei Gleichstand wählst du einen der gleichauf liegenden). Dann werden alle
+          Abstimmenden benachrichtigt, die erreichbar sind (nicht bei &quot;Offen für alle&quot;), und der Termin geht an rsvp-app:
+          Events dort mit Link auf diese Abstimmung und offenem Datum übernehmen ihn, sonst kann ein neues Event entstehen.
+        </p>
       </div>
 
       <div>

@@ -11,6 +11,8 @@ import Notice from '../ui/notice'
 import PollResults from './poll-results'
 import { choiceLimits, loadResult, loadVoterNames, resultsVisible } from '../lib/results'
 import BallotInputs from './ballot-inputs'
+import { finalDateLabel } from '../lib/final-date'
+import { parseTransfer } from '../lib/rsvp-date'
 import { POLL_TYPE_LABELS } from '../lib/poll-types'
 
 export const dynamic = 'force-dynamic'
@@ -98,6 +100,9 @@ export default async function PollPage({
   const result = (await loadResult(poll.id))!
   const distinctVoters = result.voters
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
+  // Terminabstimmung festgelegt: Link auf das rsvp-app-Event, falls eins den Termin übernommen hat.
+  const transfer = parseTransfer(poll.rsvpTransfer)
+  const finalEventUrl = transfer?.created?.url ?? transfer?.updated?.[0]?.url ?? null
 
   // Wer hier abstimmt (und ob überhaupt), entscheidet allein resolveVoter anhand von
   // poll.voterIdentity - siehe app/lib/voter-identity.ts.
@@ -128,6 +133,12 @@ export default async function PollPage({
           {isClosed && (
             <p className="mt-3 text-sm font-medium text-orange-700 bg-orange-50 inline-block px-3 py-1 rounded">
               Diese Abstimmung ist beendet.
+            </p>
+          )}
+          {poll.finalStartsAt && (
+            <p className="mt-3 text-sm font-medium text-green-800 bg-green-50 border border-green-200 px-3 py-2 rounded">
+              📅 Termin steht fest: {finalDateLabel(poll.finalStartsAt)}
+              {finalEventUrl && <> · <a href={finalEventUrl} className="underline">zur Veranstaltung (Zu-/Absage)</a></>}
             </p>
           )}
         </div>

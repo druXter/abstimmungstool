@@ -126,3 +126,14 @@ export function signRsvpTokenForTesting(email: string, pollId: string, attending
   if (!secret) throw new Error('RSVP_VERIFICATION_SECRET nicht gesetzt (nur für rsvp-app-Testzwecke relevant)')
   return sign({ email, pollId, attending, exp: Math.floor(Date.now() / 1000) + ttlSeconds }, secret)
 }
+
+/**
+ * Signiert eine Nachricht der Terminabstimmung an rsvp-app (Gegenstück zu dessen
+ * verifyPollDateMessage) - gleiches Format und Secret, aber immer mit `typ`, damit sie drüben
+ * nie mit einer anderen Nachrichtenart verwechselt werden kann. 5 Minuten gültig.
+ */
+export function signPollDateMessage(payload: { typ: 'poll-date-status' | 'poll-date-set' } & Record<string, unknown>): string | null {
+  const secret = process.env.RSVP_VERIFICATION_SECRET
+  if (!secret) return null
+  return sign({ ...payload, exp: Math.floor(Date.now() / 1000) + 300 }, secret)
+}

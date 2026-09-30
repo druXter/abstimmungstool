@@ -61,7 +61,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
   - [ ] **[rsvp-app]** Folgepunkt: Die Ergebnis-Meldung schickt bei anderen Arten die Wertung als `votes`, rsvp-app
         schreibt dazu "Stimmen". Vertrag um die Art/Einheit erweitern (z.B. `unit: "votes" | "points"`).
 - [x] **Terminoptionen:** Optionen als Datum/Uhrzeit mit Kalender-Eingabe statt Freitext.
-- [ ] **Terminabstimmung → rsvp-app** **[rsvp-app]**: Das Endergebnis legt in rsvp-app ein Event an bzw. gibt
+- [x] **Terminabstimmung → rsvp-app** **[rsvp-app]**: Das Endergebnis legt in rsvp-app ein Event an bzw. gibt
       einem bestehenden Event sein endgültiges Datum.
   - Baut auf der bestehenden Ergebnis-Meldung auf (`app/lib/rsvp-notify.ts`); Vertrag um das Gewinner-Datum
     erweitern, rsvp-app braucht einen Endpunkt dafür und einen Zustand "Datum noch offen".
@@ -73,16 +73,11 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
     - Benachrichtigungen:
       1. Offene Entscheidung/Bestätigung → an das Verwaltungskonto (Push, wenn verfügbar; sonst Mail).
       2. Nach Festlegung → an alle Abstimmenden und an die Gäste des Events (Push, wenn verfügbar; sonst Mail).
-  - Offen/zu beachten:
-    - Push gibt es bisher bewusst nicht (README, Abschnitt PWA) - braucht Web Push (VAPID-Schlüssel,
-      Push-Abos pro Konto/Gerät, Service Worker `public/sw.js` erweitern) in beiden Tools. Mail als Fallback.
-    - Abstimmende sind nur erreichbar, wenn eine Kontaktmöglichkeit existiert (Modi `EMAIL`, `ACCOUNT`, `RSVP`,
-      `LINK` mit hinterlegter Mail, oder Push-Abo). Im Cookie-Modus ist niemand benachrichtigbar - in der
-      Oberfläche so kennzeichnen.
-    - Wo wird bestätigt/entschieden - in rsvp-app oder im Abstimmungstool? Vorschlag: im Abstimmungstool
-      (dort liegt das Ergebnis), rsvp-app bekommt nur das endgültige Datum.
-    - Gäste des Events benachrichtigt rsvp-app selbst (dort liegen die Kontakte), das Abstimmungstool nur
-      die Abstimmenden - Doppel-Benachrichtigungen bei Personen, die beides sind, vermeiden.
+    - (Nachtrag 2026-09-30) Bestätigt/entschieden wird im Abstimmungstool, rsvp-app bekommt nur das Datum. Push
+      nur mit Konto (Abstimmende ohne Konto per Mail, im Cookie-Modus niemand). rsvp-app durfte angepasst werden.
+  - Umgesetzt: Abstimmungstool `app/lib/final-date.ts`, `app/lib/rsvp-date.ts` (Abschnitt "Terminabstimmung" im
+    README); rsvp-app `Event.datePending`, `POST /api/poll-date`, `app/lib/poll-date.ts`. Doppel-Benachrichtigungen:
+    SHA-256-Hashes der Adressen, die das Abstimmungstool selbst benachrichtigt. Push-Grundlage siehe C.
 - [x] **Optionen von Teilnehmenden:** Vorschläge ergänzen, optional erst nach Freigabe durch die Verwaltung.
 
 ---

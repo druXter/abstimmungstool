@@ -13,6 +13,7 @@ import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
 import DeletePollButton from './delete-poll-button'
 import VoterLinksPanel from './voter-links-panel'
+import FinalDateSection from './final-date-section'
 import QrCode from '../../ui/qr-code'
 import { isMailConfigured } from '../../lib/mail'
 
@@ -28,10 +29,10 @@ export default async function VerwaltenPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ token?: string; created?: string; saved?: string; shared?: string; claimed?: string; duplicated?: string; shareError?: string }>
+  searchParams: Promise<{ token?: string; created?: string; saved?: string; shared?: string; claimed?: string; duplicated?: string; shareError?: string; festgelegt?: string; terminFehler?: string }>
 }) {
   const { pollId } = await params
-  const { token, created, saved, shared, claimed, duplicated, shareError } = await searchParams
+  const { token, created, saved, shared, claimed, duplicated, shareError, festgelegt, terminFehler } = await searchParams
 
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
@@ -79,6 +80,7 @@ export default async function VerwaltenPage({
         {saved === '1' && <Notice tone="success">✅ Änderungen gespeichert.</Notice>}
         {claimed === '1' && <Notice tone="success">Die Abstimmung gehört jetzt zu deinem Konto. Alte Verwaltungs-Links sind ungültig.</Notice>}
         {shared === '1' && <Notice tone="success">Freigabe hinzugefügt.</Notice>}
+        {festgelegt === '1' && <Notice tone="success">Termin festgelegt. Die erreichbaren Abstimmenden wurden benachrichtigt.</Notice>}
         {duplicated === '1' && <Notice tone="success">Kopie angelegt - ohne Stimmen und ohne Schließdatum. Passe sie unter &quot;Bearbeiten&quot; an.</Notice>}
 
         <div className="bg-white p-6 rounded-lg shadow space-y-4">
@@ -149,6 +151,8 @@ export default async function VerwaltenPage({
             {isOwner && <DeletePollButton pollId={poll.id} creatorToken={legacy ? token : undefined} />}
           </div>
         </div>
+
+        <FinalDateSection poll={poll} result={result} legacyToken={legacy && token ? token : ''} error={terminFehler} />
 
         {poll._count.options > 0 && <PendingSuggestions pollId={poll.id} legacyToken={legacy && token ? token : ''} />}
 

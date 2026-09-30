@@ -3,7 +3,7 @@
 
 import { redirect } from 'next/navigation'
 import type { OptionKind, ResultsVisibility } from '@prisma/client'
-import { parseDateOption, parseOptionKind } from './lib/date-options'
+import { parseDateOption, parseOptionKind, toInputValue } from './lib/date-options'
 import { revalidatePath } from 'next/cache'
 import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
@@ -14,7 +14,9 @@ import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPen
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
 import { isPushConfigured } from './lib/push'
 import { afterPollClosed } from './lib/poll-closed'
-import { choiceLimits } from './lib/results'
+import { choiceLimits, loadResult } from './lib/results'
+import { needsDecision, notifyVoters, voterContacts } from './lib/final-date'
+import { emailHash, parseTransfer, transferFinalDate } from './lib/rsvp-date'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
@@ -51,6 +53,7 @@ function parsePollSettings(formData: FormData) {
     maxChoices: max,
     resultsVisibility: visibility,
     allowVoterOptions: formData.get('allowVoterOptions') === 'on',
+    confirmDate: formData.get('confirmDate') === 'on',
     voterOptionsNeedApproval: formData.get('voterOptionsNeedApproval') === 'on',
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
@@ -380,6 +383,71 @@ export async function reviewSuggestion(formData: FormData): Promise<void> {
 }
 
 /**
+ * Terminabstimmung festlegen (siehe app/lib/final-date.ts) - Owner, Admin und Moderator:innen.
+ * Nie vollautomatisch: Bei eindeutigem Ergebnis ist nur der Gewinner wählbar (bestätigen), bei
+ * Gleichstand einer der gleichauf liegenden (entscheiden). Bei Tagen ohne Uhrzeit gehört die
+ * Uhrzeit dazu. Danach: Übergabe an rsvp-app, dann Benachrichtigung der Abstimmenden - ohne
+ * die, die rsvp-app selbst benachrichtigt (siehe app/lib/rsvp-date.ts).
+ */
+export async function confirmPollDate(formData: FormData): Promise<void> {
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const { poll, token } = ctx
+  const result = await loadResult(poll.id)
+  if (!result || !needsDecision(poll, result)) return
+
+  const winner = result.winners.find(w => w.id === formString(formData, 'optionId', 50))
+  const option = winner && poll.options.find(o => o.id === winner.id)
+  if (!option?.startsAt) return
+
+  let startsAt = option.startsAt
+  if (poll.optionKind === 'DATE') {
+    const time = formString(formData, 'time', 5)
+    if (!/^\d{2}:\d{2}$/.test(time)) redirect(`${manageUrl(poll.id, token)}${token ? '&' : '?'}terminFehler=uhrzeit`)
+    startsAt = new Date(`${toInputValue(option.startsAt, 'DATE')}T${time}`)
+    if (Number.isNaN(startsAt.getTime())) return
+  }
+
+  // Bedingung im WHERE: Zwei gleichzeitige Klicks legen nicht zweimal fest (und benachrichtigen nicht doppelt).
+  const claimed = await prisma.poll.updateMany({
+    where: { id: poll.id, finalizedAt: null },
+    data: { finalOptionId: option.id, finalStartsAt: startsAt, finalizedAt: new Date() }
+  })
+  if (claimed.count === 0) return
+
+  const contacts = await voterContacts(poll.id)
+  // Wen wir selbst benachrichtigen, lässt rsvp-app aus - RSVP-Abstimmende gehören nicht dazu,
+  // um die kümmert sich rsvp-app, sobald eines seiner Events den Termin übernimmt.
+  const skipEmailHashes = [...new Set([...contacts.mail, ...contacts.accounts.map(a => a.email)])].map(emailHash)
+  const transfer = await transferFinalDate(poll, startsAt, { create: formData.get('createRsvpEvent') === 'on', skipEmailHashes })
+  if (transfer) await prisma.poll.update({ where: { id: poll.id }, data: { rsvpTransfer: JSON.stringify(transfer) } })
+
+  const eventUrl = transfer?.created?.url ?? transfer?.updated?.[0]?.url ?? null
+  await notifyVoters(poll, startsAt, contacts, { rsvpCovered: (transfer?.updated?.length ?? 0) > 0, eventUrl })
+
+  revalidatePath(`/${poll.id}`)
+  redirect(manageUrl(poll.id, token, 'festgelegt'))
+}
+
+/**
+ * Übergabe an rsvp-app wiederholen, wenn sie beim Festlegen nicht geklappt hat (rsvp-app nicht
+ * erreichbar). Benachrichtigt die Abstimmenden NICHT erneut - das ist beim Festlegen passiert.
+ */
+export async function retryRsvpTransfer(formData: FormData): Promise<void> {
+  const ctx = await loadManageablePoll(formData, 'moderator')
+  if (!ctx) return
+  const { poll, token } = ctx
+  const previous = parseTransfer(poll.rsvpTransfer)
+  if (!poll.finalizedAt || !poll.finalStartsAt || previous?.error !== 'unreachable') return
+
+  const contacts = await voterContacts(poll.id)
+  const skipEmailHashes = [...new Set([...contacts.mail, ...contacts.accounts.map(a => a.email)])].map(emailHash)
+  const transfer = await transferFinalDate(poll, poll.finalStartsAt, { create: previous.create, skipEmailHashes })
+  if (transfer) await prisma.poll.update({ where: { id: poll.id }, data: { rsvpTransfer: JSON.stringify(transfer) } })
+  redirect(manageUrl(poll.id, token))
+}
+
+/**
  * Zugangscode einer Abstimmung eingeben (siehe app/lib/access-code.ts). Gedrosselt pro IP
  * und Abstimmung, damit sich kurze Codes nicht durchprobieren lassen.
  */
@@ -484,6 +552,7 @@ export async function duplicatePoll(formData: FormData) {
       notifyOwnerOnClose: source.notifyOwnerOnClose,
       resultsVisibility: source.resultsVisibility,
       allowVoterOptions: source.allowVoterOptions,
+      confirmDate: source.confirmDate,
       voterOptionsNeedApproval: source.voterOptionsNeedApproval,
       minChoices: source.minChoices,
       maxChoices: source.maxChoices,

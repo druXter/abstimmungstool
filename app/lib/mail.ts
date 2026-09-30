@@ -182,3 +182,48 @@ ${link}`,
     `
   )
 }
+
+/** Terminabstimmung: der festgelegte Termin an eine abstimmende Person (app/lib/final-date.ts). */
+export async function sendFinalDateEmail(toEmail: string, pollTitle: string, dateLabel: string, pollLink: string, eventUrl: string | null): Promise<boolean> {
+  const link = eventUrl ?? pollLink
+  return send(
+    toEmail,
+    `Termin steht fest: ${pollTitle}`,
+    `Hallo,
+
+die Terminabstimmung "${pollTitle}" ist entschieden: ${dateLabel}.
+${eventUrl ? `\nZur Veranstaltung (Zu-/Absage): ${eventUrl}\n` : ''}
+Ergebnis der Abstimmung: ${pollLink}
+
+Du bekommst diese Mail, weil du bei der Abstimmung mitgemacht hast.`,
+    layout(
+      `Termin steht fest: ${pollTitle}`,
+      `Die Terminabstimmung ist entschieden: ${dateLabel}.${eventUrl ? ' Über den Button kannst du direkt zu- oder absagen.' : ''}`,
+      eventUrl ? 'Zur Veranstaltung' : 'Zum Ergebnis',
+      link,
+      'Du bekommst diese Mail, weil du bei der Abstimmung mitgemacht hast.'
+    )
+  )
+}
+
+/** Terminabstimmung: Bitte an die Verwaltung, den Termin zu bestätigen bzw. bei Gleichstand zu entscheiden. */
+export async function sendDecisionRequestEmail(toEmail: string, pollTitle: string, summary: string, link: string, tie: boolean): Promise<boolean> {
+  const ask = tie ? 'Es gibt einen Gleichstand - bitte entscheide dich für einen der Termine.' : 'Bitte bestätige den Termin.'
+  return send(
+    toEmail,
+    `${tie ? 'Termin entscheiden' : 'Termin bestätigen'}: ${pollTitle}`,
+    `Hallo,
+
+die Terminabstimmung "${pollTitle}" ist beendet. ${summary}
+
+${ask} Erst danach werden die Abstimmenden benachrichtigt und der Termin ggf. an rsvp-app übergeben:
+${link}`,
+    layout(
+      `${tie ? 'Termin entscheiden' : 'Termin bestätigen'}: ${pollTitle}`,
+      `Die Terminabstimmung ist beendet. ${summary} ${ask} Erst danach werden die Abstimmenden benachrichtigt und der Termin ggf. an rsvp-app übergeben.`,
+      tie ? 'Termin auswählen' : 'Termin bestätigen',
+      link,
+      'Du bekommst diese Mail, weil dir diese Abstimmung gehört.'
+    )
+  )
+}

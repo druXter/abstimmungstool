@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test'
 import { TEST_SUITE_IDPS } from './tests/e2e/suite-server'
 import { MAIL_PORT } from './tests/e2e/mail-server'
+import { RSVP_ORIGIN } from './tests/e2e/rsvp-server'
 import { createECDH, createHash } from 'node:crypto'
 
 // E2E-Tests gegen eine echte, frisch gebaute Instanz (next build + next start) mit eigener
@@ -61,6 +62,8 @@ export default defineConfig({
       SUITE_IDPS: TEST_SUITE_IDPS,
       SUITE_APP_NAME: 'Abstimmungstool Test',
       RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
+      // rsvp-app spielt tests/e2e/rsvp-server.ts (Terminabstimmung, Ergebnis-Meldung).
+      RSVP_APP_BASE_URL: RSVP_ORIGIN,
       // Mailversand an den Test-Mailserver (tests/e2e/mail-server.ts): ohne TLS, ohne Anmeldung.
       SMTP_HOST: '127.0.0.1',
       SMTP_PORT: String(MAIL_PORT),
@@ -68,10 +71,10 @@ export default defineConfig({
       SMTP_PASS: '',
       SMTP_FROM: 'Abstimmungstool Test <test@example.test>',
       // Werte aus einer lokalen .env ausdrücklich leeren (gesetzte Variablen - auch leere - haben
-      // Vorrang vor .env): keine Anbieter-Rolle, keine echte rsvp-app.
+      // Vorrang vor .env): keine Anbieter-Rolle.
       SUITE_SIGNING_KEY: '',
       SUITE_TRUSTED_APPS: '',
-      RSVP_APP_BASE_URL: '',
+
       // Push-Mitteilungen gehen an den Test-Push-Dienst (tests/e2e/push-server.ts).
       VAPID_PUBLIC_KEY: TEST_VAPID_PUBLIC_KEY,
       VAPID_PRIVATE_KEY: TEST_VAPID_PRIVATE_KEY,

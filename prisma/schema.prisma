@@ -213,6 +213,21 @@ model Poll {
   maxChoices               Int?
   // Art der Optionen: Freitext oder Termine (siehe OptionKind). Steht nach dem Anlegen fest.
   optionKind               OptionKind        @default(TEXT)
+  // Terminabstimmung (nur bei optionKind DATE/DATETIME): Nach dem Ende legt die Verwaltung
+  // den Termin fest - bei eindeutigem Ergebnis bestätigen, bei Gleichstand zwischen den
+  // gleichauf liegenden wählen, nie vollautomatisch (app/lib/final-date.ts). Danach werden
+  // die erreichbaren Abstimmenden benachrichtigt und der Termin an rsvp-app übergeben
+  // (app/lib/rsvp-date.ts).
+  confirmDate              Boolean           @default(false)
+  // Ergebnis der Festlegung: gewählte Option, endgültiger Zeitpunkt (bei Tagen mit der
+  // dabei angegebenen Uhrzeit) und wann. finalizedAt ist zugleich die Sperre gegen doppeltes
+  // Festlegen (bedingtes Update).
+  finalOptionId            String?
+  finalStartsAt            DateTime?
+  finalizedAt              DateTime?
+  // Was bei der Übergabe an rsvp-app herauskam (JSON, siehe RsvpTransfer in
+  // app/lib/rsvp-date.ts) - für die Anzeige und "erneut übertragen". null = nicht versucht.
+  rsvpTransfer             String?
   // Art der Abstimmung (siehe PollType). Gesperrt, sobald abgestimmt wurde - die
   // gespeicherten Vote.value-Werte bedeuten je Art etwas anderes.
   pollType                 PollType          @default(CHOICE)

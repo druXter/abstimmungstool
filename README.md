@@ -448,6 +448,48 @@ verfehlt oder ist das Ergebnis auf "nur Verwaltung" gestellt, unterbleibt die Me
 würde eine leere Gewinnerliste als "keine Stimme abgegeben" anzeigen (Folgepunkt in
 `TODO.md`).
 
+## Terminabstimmung: Termin festlegen und an rsvp-app übergeben
+
+Bei Abstimmungen mit Terminoptionen (Tage oder Termine mit Uhrzeit) und "Termin festlegen"
+(`Poll.confirmDate`, beim Anlegen vorausgewählt) endet die Abstimmung mit einer Festlegung -
+**nie vollautomatisch** (`app/lib/final-date.ts`):
+
+1. **Nach dem Ende** (manuell oder per Cron) bekommt das besitzende Konto die Bitte, den Termin zu
+   bestätigen bzw. bei Gleichstand zu entscheiden - als Push, wenn ein Gerät Mitteilungen an hat,
+   sonst als Mail. Sie ersetzt dann die normale Ergebnis-Mitteilung.
+2. **Auf der Verwaltungsseite** (Owner, Admin, Moderator:innen): bei eindeutigem Ergebnis "Termin
+   bestätigen", bei Gleichstand eine Auswahl nur unter den gleichauf liegenden. Bei Tagen ohne
+   Uhrzeit kommt die Uhrzeit dazu. Vorher zeigt die Seite, was in rsvp-app passiert und wie viele
+   Abstimmende erreichbar sind. `confirmPollDate` prüft alles serverseitig und legt nur einmal fest
+   (bedingtes Update auf `finalizedAt`).
+3. **Übergabe an rsvp-app** (`app/lib/rsvp-date.ts`, braucht `RSVP_APP_BASE_URL` und
+   `RSVP_VERIFICATION_SECRET`): Events dort, deren Abstimmungslink auf genau diese Abstimmung zeigt
+   und deren Datum noch offen ist ("Datum noch offen" in rsvp-app), übernehmen den Termin, und
+   rsvp-app benachrichtigt deren Zusagende. Gibt es keins, kann rsvp-app ein neues Event anlegen -
+   nur für den Owner der Abstimmung und nur, wenn dessen Konto über den Suite-Verbund mit einem
+   rsvp-app-Konto verknüpft ist (dann Häkchen "neues Event anlegen", gehört dort diesem Konto).
+   Ist rsvp-app nicht erreichbar, wird trotzdem festgelegt; die Übergabe lässt sich danach
+   wiederholen (ohne erneute Benachrichtigung).
+4. **Benachrichtigung der Abstimmenden** mit dem Termin (und ggf. dem Link zum rsvp-app-Event):
+   Konten per Push auf Geräten mit Mitteilungen, sonst per Mail; bestätigte Adressen (`EMAIL`) und
+   Stimmlinks mit Adresse (`LINK`, auch bei geheimer Wahl) per Mail; über rsvp-app Abstimmende
+   (`RSVP`) benachrichtigt rsvp-app selbst, sofern eines seiner Events den Termin übernommen hat.
+   Bei "Offen für alle" ist niemand erreichbar - die Seite sagt das. **Push nur mit Konto.**
+5. **Keine Doppel-Benachrichtigungen:** rsvp-app bekommt SHA-256-Hashes der Adressen, die dieses Tool
+   selbst benachrichtigt, und lässt diese Gäste aus.
+
+Die öffentliche Abstimmungsseite zeigt danach "Termin steht fest" (mit Link zum rsvp-app-Event).
+Vertrag (`POST <RSVP_APP_BASE_URL>/api/poll-date`, Body = signierter Token wie beim "Token-Format"
+oben, 5 Minuten gültig, immer mit `typ`):
+
+* `{ typ: "poll-date-status", pollId, owner: { toolUserId, rsvpUserId|null } }` → `{ ok, events: [{ id, title, datePending }], canCreate }`
+* `{ typ: "poll-date-set", pollId, pollTitle, startsAt (ISO), owner, create, skipEmailHashes: [sha256-hex] }` → `{ ok, updated: [{ id, title, url }], created: { id, title, url, adminUrl } | null, unchanged: [{ id, title }] }`
+
+`rsvpUserId` ist die Konto-ID in rsvp-app aus einer Verbund-Verknüpfung hier (`ExternalIdentity` mit
+rsvp-app als Anbieter); rsvp-app prüft außerdem seine eigene Verknüpfung in Gegenrichtung. Beide Seiten
+sind gegen Test-Doppel getestet (`tests/e2e/final-date.spec.ts` hier, `tests/e2e/poll-date.spec.ts`
+in rsvp-app) und wurden einmal gemeinsam gegeneinander laufen gelassen.
+
 ## Automatisches Schließen (Cronjob / Uptime Kuma)
 
 Damit eine Abstimmung mit gesetztem `closesAt` auch dann geschlossen wird (und damit
@@ -476,8 +518,9 @@ Browserleiste starten. Das Abstimmen selbst braucht das nicht - jeder Abstimmung
 
 ## Push-Mitteilungen (optional)
 
-Konten können unter "Mein Konto" Mitteilungen auf einem Gerät einschalten - bisher für "deine
-Abstimmung ist beendet" (zusammen mit der Ergebnis-Mail, Schalter `Poll.notifyOwnerOnClose`).
+Konten können unter "Mein Konto" Mitteilungen auf einem Gerät einschalten - für "deine Abstimmung
+ist beendet" (zusammen mit der Ergebnis-Mail, Schalter `Poll.notifyOwnerOnClose`), "Termin
+bestätigen/entscheiden" und "Termin steht fest" (Terminabstimmung).
 Das löst die frühere Entscheidung "keine Push-Benachrichtigungen" ab und ist die Grundlage für
 die geplante Terminabstimmung mit rsvp-app (`TODO.md`).
 
@@ -500,8 +543,8 @@ die geplante Terminabstimmung mit rsvp-app (`TODO.md`).
 * **Service Worker** (`public/sw.js`): zeigt Mitteilungen an und öffnet beim Antippen die
   mitgeschickte Adresse - nur auf dieser Herkunft.
 * iPhone/iPad: Push nur, wenn das Tool als App installiert ist (iOS 16.4+).
-* Noch nicht: Mitteilungen an Abstimmende ohne Konto - das hängt an den offenen Entscheidungen
-  zur Terminabstimmung (`TODO.md`, Abschnitt B).
+* Mitteilungen an Abstimmende gibt es nur mit Konto (Terminabstimmung, siehe dort) - Abstimmende
+  ohne Konto bekommen Mails.
 
 ## Automatische Löschung (Löschfristen)
 
@@ -558,8 +601,9 @@ Abgedeckt sind der Konten-Verbund (`suite.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
 Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
 (`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`), die
-E-Mail-Bestätigung samt Mailversand (`email.spec.ts`) und Export, Duplizieren, Ergebnis-Mail,
-Auto-Schließen und Quorum (`comfort.spec.ts`). Mails fängt ein kleiner
+E-Mail-Bestätigung samt Mailversand (`email.spec.ts`), Export, Duplizieren, Ergebnis-Mail,
+Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Übergabe an rsvp-app
+(`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
 (`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den

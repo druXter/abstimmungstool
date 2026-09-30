@@ -2,11 +2,8 @@
 import { prisma } from './prisma'
 import { signResultWebhookPayload } from './rsvp-verification'
 import { loadResult } from './results'
+import { rsvpAppBaseUrl } from './rsvp-date'
 
-function rsvpAppBaseUrl(): string | null {
-  const url = process.env.RSVP_APP_BASE_URL
-  return url ? url.replace(/\/+$/, '') : null
-}
 
 /**
  * Meldet das Ergebnis einer geschlossenen Abstimmung an rsvp-app, damit es auf der

@@ -1,7 +1,8 @@
 // app/lib/poll-closed.ts
 import { prisma } from './prisma'
 import { baseUrl } from './base-url'
-import { isMailConfigured, sendPollResultEmail } from './mail'
+import { isMailConfigured, sendDecisionRequestEmail, sendPollResultEmail } from './mail'
+import { needsDecision } from './final-date'
 import { notifyRsvpAppOfResult } from './rsvp-notify'
 import { sendPushToUser } from './push'
 import { formatScore, loadResult, type PollResult } from './results'
@@ -18,7 +19,9 @@ export function resultSummary(result: PollResult): string {
  * Alles, was nach dem Schließen einer Abstimmung passiert - vom manuellen closePoll
  * (app/actions.ts) und vom Cron (app/api/cron/close-expired-polls) gleichermaßen aufgerufen:
  * Ergebnis an rsvp-app melden und, falls gewünscht, dem besitzenden Konto mitteilen (Mail
- * und Push auf den Geräten, auf denen es Mitteilungen eingeschaltet hat). Alles best-effort: Ein Fehler darf das Schließen selbst nie rückgängig machen oder verhindern.
+ * und Push auf den Geräten, auf denen es Mitteilungen eingeschaltet hat) - bei einer
+ * Terminabstimmung stattdessen die Bitte, den Termin festzulegen. Alles best-effort: Ein
+ * Fehler darf das Schließen selbst nie rückgängig machen oder verhindern.
  */
 export async function afterPollClosed(pollId: string): Promise<void> {
   await notifyRsvpAppOfResult(pollId).catch(() => {})
@@ -28,15 +31,34 @@ export async function afterPollClosed(pollId: string): Promise<void> {
 async function notifyOwnerOfResult(pollId: string): Promise<void> {
   const poll = await prisma.poll.findUnique({
     where: { id: pollId },
-    select: { id: true, notifyOwnerOnClose: true, owner: { select: { id: true, email: true } } }
+    select: {
+      id: true, notifyOwnerOnClose: true, confirmDate: true, optionKind: true, finalizedAt: true, closedAt: true,
+      owner: { select: { id: true, email: true } }
+    }
   })
   // Alt-Abstimmungen ohne Konto bekommen nichts: Ihr Verwaltungslink hängt am creatorToken,
   // den eine Mail nicht im Klartext verschicken soll.
-  if (!poll || !poll.notifyOwnerOnClose || !poll.owner) return
+  if (!poll || !poll.owner) return
 
   const result = await loadResult(poll.id)
   if (!result) return
   const link = `${baseUrl()}/${poll.id}/verwalten`
+
+  // Terminabstimmung: Die Bitte zu bestätigen/entscheiden geht immer raus (sonst bliebe die
+  // Festlegung liegen) - als Push, wenn ein Gerät Mitteilungen an hat, sonst als Mail. Sie
+  // enthält das Ergebnis und ersetzt die normale Ergebnis-Mitteilung.
+  if (needsDecision(poll, result)) {
+    const tie = result.winners.length > 1
+    const delivered = await sendPushToUser(poll.owner.id, {
+      title: `${tie ? 'Termin entscheiden' : 'Termin bestätigen'}: ${result.poll.title}`,
+      body: resultSummary(result),
+      url: `/${poll.id}/verwalten`
+    })
+    if (delivered === 0 && isMailConfigured()) await sendDecisionRequestEmail(poll.owner.email, result.poll.title, resultSummary(result), link, tie)
+    return
+  }
+
+  if (!poll.notifyOwnerOnClose) return
   await sendPushToUser(poll.owner.id, { title: `Abstimmung beendet: ${result.poll.title}`, body: resultSummary(result), url: `/${poll.id}/verwalten` })
   if (!isMailConfigured()) return
   await sendPollResultEmail(
