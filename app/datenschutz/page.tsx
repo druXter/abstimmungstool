@@ -84,8 +84,10 @@ export default function DatenschutzPage() {
             deiner Antwort und die daraus berechneten Punkte. Dein Browser bekommt eine zufällige Kennung (Cookie{' '}
             <code>live_…</code>, 12 Stunden, siehe Punkt 9), bei uns liegt nur ein nicht umkehrbarer Hash davon. Der
             Spitzname ist für alle im Raum auf der Leinwand und in der Rangliste sichtbar; wer die Runde verwaltet,
-            sieht zusätzlich auf der Verwaltungsseite die Rangliste mit allen Punkten. Wähle daher am besten keinen
-            vollen Namen. Ein Konto brauchst du nicht.
+            sieht zusätzlich auf der Verwaltungsseite die Rangliste mit allen Punkten und jede einzelne Antwort (auch
+            als CSV-Export); das gilt auch für Konten, mit denen die Runde zum gemeinsamen Moderieren geteilt ist.
+            Wähle daher am besten keinen vollen Namen. Ein Konto brauchst du nicht. Bei einer Wortwolke erscheint dein
+            Begriff ohne Namen auf der Leinwand; die Verwaltung kann einzelne Begriffe ausblenden.
           </p>
         </div>
 
@@ -165,6 +167,11 @@ export default function DatenschutzPage() {
               Einmal-Links für Einladung und Passwort-Reset (ebenfalls nur als Hash, befristet),
             </li>
             <li>die Zuordnung deiner Abstimmungen und Live-Runden zu deinem Konto und Freigaben, die du erteilt hast oder erhalten hast.</li>
+            <li>
+              Bilder, die du zu Fragen einer Live-Runde hochlädst. Dein Browser verkleinert sie vorher und entfernt
+              dabei Metadaten wie den Aufnahmeort; gespeichert werden sie zusammen mit der Runde und nur denen
+              gezeigt, die sie verwalten oder ihr beigetreten sind.
+            </li>
           </ul>
           <p className="mt-2">
             Konten werden nicht öffentlich registriert, sondern von einer berechtigten Person eingeladen oder entstehen
@@ -286,7 +293,7 @@ export default function DatenschutzPage() {
           <p className="mt-2">
             Mit einem Teilnehmendenkonto aus rsvp-app gespeicherte Angaben (Name, Kennung) löschen wir automatisch, wenn
             du dich <strong>2 Jahre</strong> lang nicht mehr darüber angemeldet hast; deine Stimmen bleiben dann ohne
-            Namen gezählt. Live-Runden samt Spitznamen, Antworten und Punkten werden ebenfalls spätestens <strong>18 Monate nach
+            Namen gezählt. Live-Runden samt Spitznamen, Antworten, Punkten und Bildern werden ebenfalls spätestens <strong>18 Monate nach
             ihrem Ende</strong> (ohne Ende: nach der letzten Änderung) gelöscht. Wer die Runde verwaltet, kann sie
             jederzeit früher löschen oder &quot;neu starten&quot; - dann sind Spitznamen und Antworten sofort weg.
           </p>

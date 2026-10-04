@@ -1,7 +1,7 @@
 import { getCurrentUser } from '../../../lib/auth'
 import { prisma } from '../../../lib/prisma'
 import { currentPlayer } from '../../../lib/live-player'
-import { ANSWER_GRACE_MS, canManageLive, loadView, settleQuestion, waitForLive } from '../../../lib/live'
+import { ANSWER_GRACE_MS, getLiveLevel, loadView, settleQuestion, waitForLive } from '../../../lib/live'
 
 export const dynamic = 'force-dynamic'
 
@@ -33,7 +33,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   let playerId: string | null = null
   if (asHost) {
-    if (!canManageLive(await getCurrentUser(), session)) return Response.json({ error: 'not-found' }, { status: 404, headers: NO_STORE })
+    if (!(await getLiveLevel(await getCurrentUser(), session))) return Response.json({ error: 'not-found' }, { status: 404, headers: NO_STORE })
   } else {
     const player = await currentPlayer(id)
     if (!player) return Response.json({ error: 'gone' }, { status: 410, headers: NO_STORE })

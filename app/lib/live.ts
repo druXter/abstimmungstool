@@ -1,6 +1,6 @@
 import { createHash, randomInt } from 'node:crypto'
 import { EventEmitter } from 'node:events'
-import type { LivePhase } from '@prisma/client'
+import type { LivePhase, LiveQuestionKind } from '@prisma/client'
 import { prisma } from './prisma'
 import type { CurrentUser } from './auth'
 
@@ -15,6 +15,9 @@ export const MIN_ANSWERS = 2
 export const MAX_ANSWERS = 6
 export const MAX_QUESTION_LENGTH = 200
 export const MAX_ANSWER_LENGTH = 100
+/** Wortwolke: so lang darf ein Beitrag sein. */
+export const MAX_WORD_LENGTH = 40
+export const LIVE_QUESTION_KINDS: readonly LiveQuestionKind[] = ['CHOICE', 'MULTI', 'ESTIMATE', 'WORDCLOUD']
 export const MAX_NICKNAME_LENGTH = 24
 export const MAX_PLAYERS = 500
 /** Auswahl beim Anlegen, in Sekunden. 0 = ohne Zeitlimit. */
@@ -23,8 +26,51 @@ export const DEFAULT_TIME_LIMIT = 20
 /** Antworten, die kurz nach Ablauf eintreffen (Netzlaufzeit), zählen noch. */
 export const ANSWER_GRACE_MS = 1000
 
-export function canManageLive(user: CurrentUser | null, session: { ownerId: string }): boolean {
-  return !!user && (user.role === 'ADMIN' || user.id === session.ownerId)
+/**
+ * owner:     alles (präsentieren, bearbeiten, neu starten, exportieren, löschen, teilen)
+ * moderator: per LiveAccess geteilt - alles außer löschen und weiter teilen (wie bei Abstimmungen)
+ */
+export type LiveLevel = 'owner' | 'moderator'
+
+/** DIE Berechtigungsprüfung für Live-Runden - jede Seite, jede Action und das Long-Polling gehen hierüber. */
+export async function getLiveLevel(user: CurrentUser | null, session: { id: string; ownerId: string }): Promise<LiveLevel | null> {
+  if (!user) return null
+  if (user.role === 'ADMIN' || user.id === session.ownerId) return 'owner'
+  const access = await prisma.liveAccess.findUnique({ where: { sessionId_userId: { sessionId: session.id, userId: user.id } }, select: { id: true } })
+  return access ? 'moderator' : null
+}
+
+/** Was eine Frage für die Auswertung braucht. */
+export type QuestionLike = { kind: LiveQuestionKind; target: number | null; answers: { isCorrect: boolean }[] }
+
+/** Quizfrage = es gibt eine richtige Lösung und damit Punkte (Wortwolken nie). */
+export function isQuiz(q: QuestionLike): boolean {
+  if (q.kind === 'WORDCLOUD') return false
+  if (q.kind === 'ESTIMATE') return q.target !== null
+  return q.answers.some(a => a.isCorrect)
+}
+
+/** Toleranz einer Schätzfrage: eingestellt, sonst 10 % des richtigen Werts (bei 0: 1). */
+export function estimateTolerance(target: number, tolerance: number | null): number {
+  if (tolerance !== null && tolerance > 0) return tolerance
+  return target === 0 ? 1 : Math.abs(target) * 0.1
+}
+
+/**
+ * Schätzfrage: genau getroffen = 1000, am Rand der Toleranz 500, außerhalb 0 - dieselbe Spanne wie
+ * bei den anderen Quizfragen, aber nach Nähe statt Schnelligkeit.
+ */
+export function estimatePoints(value: number, target: number, tolerance: number | null): number {
+  const tol = estimateTolerance(target, tolerance)
+  const distance = Math.abs(value - target)
+  if (distance > tol) return 0
+  return Math.round(1000 * (1 - distance / tol / 2))
+}
+
+/** Wortwolke: Beitrag bereinigen wie einen Spitznamen; Schlüssel zum Zählen/Ausblenden ist klein geschrieben. */
+export function cleanWord(input: string): { text: string; key: string } | null {
+  const text = input.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORD_LENGTH)
+  return text ? { text, key: text.toLocaleLowerCase('de-DE') } : null
 }
 
 /** Kahoot-Formel: richtig = 1000 bei sofortiger Antwort, linear bis 500 bei Zeitablauf; ohne Zeitlimit 1000. */
@@ -147,6 +193,7 @@ export async function controlLive(sessionId: string, op: LiveControl, version: n
     include: { questions: { orderBy: { position: 'asc' }, include: { answers: { select: { isCorrect: true } } } } }
   })
   if (!session || session.version !== version) return false
+  // Nach Quizfragen kommt die Rangliste, nach Umfragen und Wortwolken direkt die nächste Frage.
 
   const now = new Date()
   const guard = { id: sessionId, version }
@@ -180,7 +227,7 @@ export async function controlLive(sessionId: string, op: LiveControl, version: n
         data = { phase: 'REVEAL' }
         break
       case 'REVEAL':
-        data = current && isQuiz(current.answers) ? { phase: 'LEADERBOARD' } : startQuestion(session.currentIndex + 1)
+        data = current && isQuiz(current) ? { phase: 'LEADERBOARD' } : startQuestion(session.currentIndex + 1)
         break
       case 'LEADERBOARD':
         data = startQuestion(session.currentIndex + 1)
@@ -193,10 +240,6 @@ export async function controlLive(sessionId: string, op: LiveControl, version: n
   const { count } = await prisma.liveSession.updateMany({ where: guard, data: { ...data, version: { increment: 1 } } })
   if (count > 0) notifyLive(sessionId)
   return count > 0
-}
-
-export function isQuiz(answers: { isCorrect: boolean }[]): boolean {
-  return answers.some(a => a.isCorrect)
 }
 
 // ---------------------------------------------------------------------------------------
@@ -215,6 +258,98 @@ export async function standings(sessionId: string): Promise<Standing[]> {
     .map(p => ({ playerId: p.id, nickname: p.nickname, score: score.get(p.id) ?? 0 }))
     .sort((a, b) => b.score - a.score)
   return sorted.map(row => ({ ...row, rank: sorted.findIndex(other => other.score === row.score) + 1 }))
+}
+
+// ---------------------------------------------------------------------------------------
+// Antworten auswerten (gemeinsam für Ansicht, Verwaltungsseite und CSV-Export)
+
+export type ResponseLike = {
+  playerId: string
+  answerId: string | null
+  choices: string | null
+  numberValue: number | null
+  text: string | null
+  textKey: string | null
+  hidden: boolean
+  points: number
+}
+
+/** Die gewählten Antwort-IDs einer Antwort (CHOICE: eine, MULTI: mehrere). */
+export function chosenIds(r: Pick<ResponseLike, 'answerId' | 'choices'>): string[] {
+  if (r.answerId) return [r.answerId]
+  if (!r.choices) return []
+  try {
+    const ids: unknown = JSON.parse(r.choices)
+    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+/** Wie oft jede Antwort gewählt wurde (bei Mehrfachauswahl zählt jede gewählte Antwort). */
+export function answerCounts(responses: Pick<ResponseLike, 'answerId' | 'choices'>[]): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const r of responses) for (const id of chosenIds(r)) counts.set(id, (counts.get(id) ?? 0) + 1)
+  return counts
+}
+
+export type EstimateStats = { count: number; min: number; max: number; median: number; mean: number }
+
+export function estimateStats(values: number[]): EstimateStats | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const middle = Math.floor(sorted.length / 2)
+  const median = sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2
+  const mean = sorted.reduce((sum, v) => sum + v, 0) / sorted.length
+  return { count: sorted.length, min: sorted[0], max: sorted[sorted.length - 1], median, mean }
+}
+
+export type WordCount = { key: string; text: string; count: number }
+
+/** Wortwolke: Beiträge nach Schlüssel zusammengefasst (Schreibweise des ersten Beitrags), häufigste zuerst. */
+export function wordCounts(responses: Pick<ResponseLike, 'text' | 'textKey' | 'hidden'>[], limit = 100): WordCount[] {
+  const words = new Map<string, WordCount>()
+  for (const r of responses) {
+    if (!r.text || !r.textKey || r.hidden) continue
+    const entry = words.get(r.textKey)
+    if (entry) entry.count++
+    else words.set(r.textKey, { key: r.textKey, text: r.text, count: 1 })
+  }
+  return [...words.values()].sort((a, b) => b.count - a.count || a.text.localeCompare(b.text, 'de')).slice(0, limit)
+}
+
+/** Zahlen deutsch formatiert (Schätzfragen), höchstens zwei Nachkommastellen. */
+export function formatNumber(value: number): string {
+  return value.toLocaleString('de-DE', { maximumFractionDigits: 2 })
+}
+
+/** Eine Antwort lesbar (Handy, Verwaltung, CSV). */
+export function describeResponse(
+  q: { kind: LiveQuestionKind; unit: string | null; answers: { id: string; label: string }[] },
+  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue' | 'text'>
+): string {
+  switch (q.kind) {
+    case 'ESTIMATE':
+      return r.numberValue === null ? '' : `${formatNumber(r.numberValue)}${q.unit ? ` ${q.unit}` : ''}`
+    case 'WORDCLOUD':
+      return r.text ?? ''
+    default: {
+      const ids = chosenIds(r)
+      return q.answers.filter(a => ids.includes(a.id)).map(a => a.label).join(', ')
+    }
+  }
+}
+
+/** Ob eine Antwort richtig ist (nur Quizfragen; MULTI = genau die richtige Kombination, ESTIMATE = in der Toleranz). */
+export function isCorrectResponse(
+  q: { kind: LiveQuestionKind; target: number | null; tolerance: number | null; answers: { id: string; isCorrect: boolean }[] },
+  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue'>
+): boolean {
+  if (!isQuiz(q)) return false
+  if (q.kind === 'ESTIMATE') return r.numberValue !== null && estimatePoints(r.numberValue, q.target!, q.tolerance) > 0
+  const ids = chosenIds(r)
+  const correct = q.answers.filter(a => a.isCorrect).map(a => a.id)
+  return ids.length === correct.length && correct.every(id => ids.includes(id))
 }
 
 // ---------------------------------------------------------------------------------------
@@ -244,12 +379,22 @@ export type LiveView = {
   playerCount: number
   hasQuiz: boolean
   question: null | {
+    id: string
+    kind: LiveQuestionKind
     text: string
     timeLimit: number | null
     endsAt: number | null
     quiz: boolean
+    /** Bild zur Frage (app/api/live/bild/[imageId]). */
+    imageId: string | null
+    unit: string | null
+    /** Nur CHOICE/MULTI. */
     answers: LiveAnswerView[]
     answeredCount: number
+    /** Nur ESTIMATE, ab der Auflösung: richtiger Wert, Kennzahlen, für die Leinwand alle Werte. */
+    estimate?: { target: number | null; stats: EstimateStats | null; values?: number[] }
+    /** Nur WORDCLOUD: Leinwand schon während der Frage (live), Handys ab der Auflösung. */
+    words?: WordCount[]
   }
   /** Nur Leinwand: alle Teilnehmenden (Lobby, zum Entfernen). */
   players?: { id: string; nickname: string }[]
@@ -260,7 +405,11 @@ export type LiveView = {
     nickname: string
     score: number
     rank: number
-    answerId: string | null
+    answered: boolean
+    /** CHOICE/MULTI: gewählte Antworten (für die Formen auf dem Handy). */
+    answerIds: string[]
+    /** Die eigene Antwort lesbar ("8 m", "Pizza, Sushi", Wortbeitrag). */
+    answerText: string | null
     points: number | null
     correct: boolean | null
   }
@@ -269,7 +418,8 @@ export type LiveView = {
 /**
  * Baut die Ansicht für die Leinwand (`playerId` null) oder eine teilnehmende Person. Richtige
  * Antworten und die Verteilung stehen erst ab der Auflösung darin - auch für die Leinwand,
- * deren Daten im Browser einsehbar wären.
+ * deren Daten im Browser einsehbar wären. Ausnahme Wortwolke: Sie hat nichts zu verraten und
+ * wächst auf der Leinwand live mit.
  */
 export async function loadView(sessionId: string, playerId: string | null): Promise<LiveView | null> {
   const session = await prisma.liveSession.findUnique({
@@ -290,13 +440,41 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
       ? prisma.livePlayer.findMany({ where: { sessionId }, select: { id: true, nickname: true }, orderBy: { createdAt: 'asc' } })
       : prisma.livePlayer.findMany({ where: { id: playerId, sessionId }, select: { id: true, nickname: true } }),
     prisma.livePlayer.count({ where: { sessionId } }),
-    current ? prisma.liveResponse.findMany({ where: { questionId: current.id }, select: { playerId: true, answerId: true, points: true } }) : [],
+    current
+      ? prisma.liveResponse.findMany({
+          where: { questionId: current.id },
+          select: { playerId: true, answerId: true, choices: true, numberValue: true, text: true, textKey: true, hidden: true, points: true }
+        })
+      : [],
     needsStandings ? standings(sessionId) : Promise.resolve([] as Standing[])
   ])
   if (!host && players.length === 0) return null
 
-  const counts = new Map<string, number>()
-  for (const r of responses) counts.set(r.answerId, (counts.get(r.answerId) ?? 0) + 1)
+  const counts = answerCounts(responses)
+  const quizNow = current ? isQuiz(current) : false
+
+  let question: LiveView['question'] = null
+  if (showQuestion) {
+    question = {
+      id: current.id,
+      kind: current.kind,
+      text: current.text,
+      timeLimit: current.timeLimit,
+      endsAt: session.phase === 'QUESTION' && session.questionEndsAt ? session.questionEndsAt.getTime() : null,
+      quiz: quizNow,
+      imageId: current.imageId,
+      unit: current.unit,
+      answers: current.kind === 'CHOICE' || current.kind === 'MULTI'
+        ? current.answers.map(a => ({ id: a.id, label: a.label, ...(revealed ? { correct: a.isCorrect, count: counts.get(a.id) ?? 0 } : {}) }))
+        : [],
+      answeredCount: responses.length
+    }
+    if (current.kind === 'ESTIMATE' && revealed) {
+      const values = responses.map(r => r.numberValue).filter((v): v is number => v !== null)
+      question.estimate = { target: current.target, stats: estimateStats(values), ...(host ? { values: values.slice(0, 500) } : {}) }
+    }
+    if (current.kind === 'WORDCLOUD' && (host || revealed)) question.words = wordCounts(responses)
+  }
 
   const view: Omit<LiveView, 'sig' | 'now'> = {
     title: session.title,
@@ -307,21 +485,8 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
     questionCount: session.questions.length,
     index: session.currentIndex,
     playerCount,
-    hasQuiz: session.questions.some(q => isQuiz(q.answers)),
-    question: showQuestion
-      ? {
-          text: current.text,
-          timeLimit: current.timeLimit,
-          endsAt: session.phase === 'QUESTION' && session.questionEndsAt ? session.questionEndsAt.getTime() : null,
-          quiz: isQuiz(current.answers),
-          answers: current.answers.map(a => ({
-            id: a.id,
-            label: a.label,
-            ...(revealed ? { correct: a.isCorrect, count: counts.get(a.id) ?? 0 } : {})
-          })),
-          answeredCount: responses.length
-        }
-      : null
+    hasQuiz: session.questions.some(isQuiz),
+    question
   }
 
   if (host) {
@@ -335,11 +500,11 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
       nickname: players[0].nickname,
       score: mine?.score ?? 0,
       rank: mine?.rank ?? 0,
-      answerId: response?.answerId ?? null,
+      answered: !!response,
+      answerIds: response ? chosenIds(response) : [],
+      answerText: response && current ? describeResponse(current, response) : null,
       points: revealed && response ? response.points : null,
-      correct: revealed && current && isQuiz(current.answers)
-        ? !!response && current.answers.some(a => a.id === response.answerId && a.isCorrect)
-        : null
+      correct: revealed && current && quizNow ? !!response && isCorrectResponse(current, response) : null
     }
     // Teilnehmende sehen am Ende nur das Treppchen, nicht die Liste aller anderen.
     if (session.phase === 'FINISHED') view.leaderboard = table.slice(0, 3)
@@ -350,13 +515,36 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
 }
 
 // ---------------------------------------------------------------------------------------
-// Ergebnisse für die Verwaltungsseite
+// Ergebnisse für Verwaltungsseite und CSV-Export
 
 export async function loadLiveResults(sessionId: string) {
-  const questions = await prisma.liveQuestion.findMany({
-    where: { sessionId },
-    orderBy: { position: 'asc' },
-    include: { answers: { orderBy: { position: 'asc' }, include: { _count: { select: { responses: true } } } }, _count: { select: { responses: true } } }
-  })
-  return { questions, standings: await standings(sessionId) }
+  const [questions, table] = await Promise.all([
+    prisma.liveQuestion.findMany({
+      where: { sessionId },
+      orderBy: { position: 'asc' },
+      include: {
+        answers: { orderBy: { position: 'asc' } },
+        responses: {
+          select: {
+            playerId: true, answerId: true, choices: true, numberValue: true, text: true, textKey: true, hidden: true,
+            points: true, elapsedMs: true, player: { select: { nickname: true } }
+          }
+        }
+      }
+    }),
+    standings(sessionId)
+  ])
+  return {
+    standings: table,
+    questions: questions.map(q => {
+      const values = q.responses.map(r => r.numberValue).filter((v): v is number => v !== null)
+      return {
+        ...q,
+        quiz: isQuiz(q),
+        counts: answerCounts(q.responses),
+        estimate: q.kind === 'ESTIMATE' ? estimateStats(values) : null,
+        words: q.kind === 'WORDCLOUD' ? wordCounts(q.responses, 1000) : []
+      }
+    })
+  }
 }

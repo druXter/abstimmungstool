@@ -2,7 +2,7 @@ import Link from 'next/link'
 import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
-import { canManageLive } from '../../../lib/live'
+import { getLiveLevel } from '../../../lib/live'
 import { updateLive } from '../../../live-actions'
 import SubmitButton from '../../../ui/submit-button'
 import Notice from '../../../ui/notice'
@@ -20,7 +20,7 @@ export default async function EditLivePage({ params, searchParams }: { params: P
   if (!session) notFound()
 
   const user = await getCurrentUser()
-  if (!canManageLive(user, session)) {
+  if (!(await getLiveLevel(user, session))) {
     if (!user) redirect(`/anmelden?next=${encodeURIComponent(`/live/${id}/bearbeiten`)}`)
     notFound()
   }
@@ -45,8 +45,15 @@ export default async function EditLivePage({ params, searchParams }: { params: P
           <QuestionsEditor
             initial={session.questions.map(q => ({
               text: q.text,
+              kind: q.kind,
               timeLimit: q.timeLimit ?? 0,
-              answers: q.answers.map(a => ({ label: a.label, correct: a.isCorrect }))
+              answers: q.answers.length > 0
+                ? q.answers.map(a => ({ label: a.label, correct: a.isCorrect }))
+                : Array.from({ length: 4 }, () => ({ label: '', correct: false })),
+              target: q.target !== null ? String(q.target).replace('.', ',') : '',
+              tolerance: q.tolerance !== null ? String(q.tolerance).replace('.', ',') : '',
+              unit: q.unit ?? '',
+              imageId: q.imageId
             }))}
           />
           <SubmitButton>Speichern</SubmitButton>

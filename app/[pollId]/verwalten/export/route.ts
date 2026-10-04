@@ -5,6 +5,7 @@ import { getPollLevel } from '../../../lib/permissions'
 import { loadResult, type PollResult } from '../../../lib/results'
 import { formatVoteValue } from '../../../lib/poll-types'
 import { resultSummary } from '../../../lib/poll-closed'
+import { csvResponse } from '../../../lib/csv'
 
 /**
  * CSV-Export der Ergebnisse für alle, die die Abstimmung verwalten dürfen (dieselbe Prüfung
@@ -45,15 +46,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ poll
     rows.push([], ['Name', 'Option', 'Angabe'], ...named.map(v => [v.voterName ?? '', v.option.label, formatVoteValue(result.pollType, v.value)]))
   }
 
-  const csv = '﻿' + rows.map(row => row.map(csvCell).join(';')).join('\r\n') + '\r\n'
-  const filename = `abstimmung-${poll.id}.csv`
-  return new Response(csv, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="${filename}"`,
-      'Cache-Control': 'no-store'
-    }
-  })
+  return csvResponse(rows, `abstimmung-${poll.id}.csv`)
 }
 
 /** Tabelle je Option, Spalten passend zur Art (siehe evaluate in app/lib/results.ts). */
@@ -70,14 +63,4 @@ function optionTable(result: PollResult): string[][] {
     case 'POINTS':
       return [['Option', 'Punkte', 'Punkte von'], ...result.options.map(o => [o.label, String(o.score), String(o.votes)])]
   }
-}
-
-/**
- * Ein CSV-Feld: in Anführungszeichen, innere verdoppelt. Werte, die mit = + - @ (oder Tab/CR)
- * beginnen, bekommen ein Apostroph vorangestellt - Namen und Optionen sind frei eingegeben,
- * und Tabellenprogramme würden sie sonst als Formel ausführen (CSV-Injection).
- */
-function csvCell(value: string): string {
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
-  return `"${safe.replace(/"/g, '""')}"`
 }

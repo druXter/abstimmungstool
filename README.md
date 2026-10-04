@@ -484,15 +484,34 @@ Eine eigene Art neben der Abstimmung (`LiveSession` mit `LiveQuestion`/`LiveAnsw
 `LivePlayer`, Antworten `LiveResponse`; Logik in `app/lib/live.ts`, Aktionen in `app/live-actions.ts`):
 Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleichzeitig auf dem Handy.
 
-* **Anlegen** (`/live/neu`, Creator/Admin, auch über "Meine Abstimmungen"): Titel, bis 50 Fragen mit je
-  2-6 Antworten und einem Zeitlimit (5-240 s oder ohne). Ist mindestens eine Antwort als richtig
-  markiert, ist es eine **Quizfrage** (Punkte), sonst eine **Umfragefrage**. Bearbeiten nur, solange
-  niemand geantwortet hat.
+* **Anlegen** (`/live/neu`, Creator/Admin, auch über "Meine Abstimmungen"): Titel, bis 50 Fragen mit
+  Zeitlimit (5-240 s oder ohne) und optional einem Bild. Bearbeiten nur, solange niemand geantwortet hat.
+* **Fragearten** (`LiveQuestion.kind`):
+
+  | Art | Handy | Quiz, wenn … | Punkte |
+  | --- | --- | --- | --- |
+  | `CHOICE` Auswahl | ein farbiger Knopf | eine Antwort als richtig markiert | 500-1000 nach Schnelligkeit |
+  | `MULTI` Mehrfachauswahl | Knöpfe an-/abwählen, abschicken | Antworten als richtig markiert | wie oben, nur bei genau der richtigen Kombination |
+  | `ESTIMATE` Schätzfrage | Zahl (Komma oder Punkt), optional Einheit | ein richtiger Wert eingetragen | nach Nähe: genau 1000, am Rand der Toleranz 500, außerhalb 0 (`estimatePoints`; Toleranz Standard 10 %) |
+  | `WORDCLOUD` Wortwolke | ein Begriff (höchstens 40 Zeichen) | nie | keine |
+
+  Ohne richtige Lösung ist eine Frage eine Umfrage. Die Schätzfrage zeigt nach der Auflösung einen
+  Zahlenstrahl mit allen Schätzungen und dem richtigen Wert sowie Median, Durchschnitt und Spanne. Die
+  Wortwolke wächst auf der Leinwand schon während der Frage mit (sie verrät nichts), gleiche Begriffe
+  zählen unabhängig von Groß-/Kleinschreibung zusammen; ein Klick auf ein Wort blendet es aus
+  (`LiveResponse.hidden`, auch im Ergebnis und auf den Handys) - gegen Unpassendes an der Wand.
+* **Bilder zu Fragen** (`LiveImage`): Der Editor verkleinert das Bild im Browser auf höchstens 1600 px und
+  kodiert es als JPEG neu - das hält den Upload klein und entfernt EXIF-Daten wie den Aufnahmeort.
+  Der Server prüft Größe (höchstens 1,5 MB) und Format am Dateiinhalt (JPEG, PNG, WebP, GIF; kein SVG,
+  `app/lib/live-images.ts`). Gespeichert in der Datenbank (damit in der täglichen Sicherung und mit der
+  Runde gelöscht), ausgeliefert unter `/api/live/bild/<id>` nur an Verwaltende und Beigetretene, mit
+  strenger CSP. Da alle Fragen in einer Server Action gehen, ist `serverActions.bodySizeLimit` in
+  `next.config.ts` auf 16 MB gesetzt.
 * **Beitreten** ohne Konto auf `/live` (auch über das Feld auf der Startseite): 6-stellige PIN von der
   Leinwand bzw. QR-Code (füllt die PIN vor) und ein Spitzname (eindeutig pro Runde, Groß-/Kleinschreibung
   egal, höchstens 24 Zeichen). Der Browser bekommt ein Cookie `live_<id>` (12 Stunden), in der Datenbank
   liegt nur dessen SHA-256-Hash. Wer das Cookie hat, kommt über PIN oder Link wieder ins Spiel.
-* **Leinwand** (`/live/<id>/praesentieren`, nur Owner und Admins; deckt die Seite ganz ab, Knopf
+* **Leinwand** (`/live/<id>/praesentieren`, Owner, Admins und Freigaben; deckt die Seite ganz ab, Knopf
   "Vollbild"): Lobby mit PIN, QR-Code und Teilnehmenden (antippen = entfernen), "Beitritt sperren" →
   Frage mit Countdown und "x von y haben geantwortet" → Auflösung (Verteilung, richtige Antwort) →
   Rangliste (nur nach Quizfragen, Top 5) → … → Siegertreppchen (Top 10, bei reinen Umfragen "Danke").
@@ -514,9 +533,15 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
 * **Vor der Auflösung** enthält keine Ansicht (auch nicht die der Leinwand) die richtige Antwort oder die
   Verteilung.
 * **Verwaltungsseite** (`/live/<id>/verwalten`): Beitrittslink mit QR-Code, Ergebnisse je Frage,
-  Rangliste, "Neu starten" (Teilnehmende und Antworten löschen, neue PIN - für die nächste Gruppe mit
-  denselben Fragen) und Löschen. Teilen mit anderen Konten gibt es (noch) nicht; Admins sehen alle
-  Runden. Wird ein Konto gelöscht, gehen seine Runden wie seine Abstimmungen an den löschenden Admin.
+  Rangliste, **CSV-Export** (`/live/<id>/verwalten/export`: Verteilung je Frage, Rangliste und jede Antwort
+  mit Spitzname, richtig, Punkten und Antwortzeit; Schutz vor CSV-Injection wie beim Abstimmungs-Export,
+  `app/lib/csv.ts`), "Neu starten" (Teilnehmende und Antworten löschen, neue PIN - für die nächste Gruppe
+  mit denselben Fragen) und Löschen. Admins sehen alle Runden. Wird ein Konto gelöscht, gehen seine Runden
+  wie seine Abstimmungen an den löschenden Admin.
+* **Gemeinsam moderieren** (`LiveAccess`, wie bei Abstimmungen, `getLiveLevel` in `app/lib/live.ts` als
+  einzige Prüfung): Owner und Admins teilen eine Runde per E-Mail-Adresse mit einem bestehenden Konto. Das
+  Konto darf präsentieren, bearbeiten, neu starten und exportieren - nicht löschen und nicht weiter teilen.
+  Geteilte Runden stehen unter "Meine Abstimmungen".
 * **Schutz:** falsche PINs zählen pro IP (30 in 15 Minuten, ein erfolgreicher Beitritt gibt seinen
   Versuch zurück), Beitritte pro IP und Runde (200 pro Stunde - eine ganze Klasse sitzt oft hinter einer
   Adresse), höchstens 500 Teilnehmende pro Runde. Spitznamen werden nicht geprüft - die Leinwand zeigt
@@ -701,7 +726,8 @@ E-Mail-Bestätigung samt Mailversand (`email.spec.ts`), Export, Duplizieren, Erg
 Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Übergabe an rsvp-app
 (`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642) und die Live-Runden
 (`live.spec.ts`: Leinwand und mehrere Handys als eigene Browser-Kontexte im Gleichtakt, Punkte,
-Zeitablauf, Entfernen, Berechtigungen). Mails fängt ein kleiner
+Zeitablauf, Entfernen, Berechtigungen; `live-extras.spec.ts`: Mehrfachauswahl, Schätzfrage, Wortwolke,
+Teilen, CSV-Export, Bilder). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
 (`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den

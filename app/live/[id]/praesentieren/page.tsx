@@ -2,19 +2,19 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
-import { canManageLive, ensurePin, loadView, settleQuestion } from '../../../lib/live'
+import { ensurePin, getLiveLevel, loadView, settleQuestion } from '../../../lib/live'
 import Presenter from './presenter'
 
 export const dynamic = 'force-dynamic'
 
-/** Leinwand einer Live-Runde - nur für das besitzende Konto und Admins. */
+/** Leinwand einer Live-Runde - für das besitzende Konto, Admins und Konten, mit denen sie geteilt ist. */
 export default async function PresentPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const session = await prisma.liveSession.findUnique({ where: { id } })
   if (!session) notFound()
 
   const user = await getCurrentUser()
-  if (!canManageLive(user, session)) {
+  if (!(await getLiveLevel(user, session))) {
     if (!user) redirect(`/anmelden?next=${encodeURIComponent(`/live/${id}/praesentieren`)}`)
     notFound()
   }

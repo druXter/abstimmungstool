@@ -3,21 +3,26 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import type { LiveView } from '../../lib/live'
-import { answerLive } from '../../live-actions'
+import { answerLive, type LiveAnswerInput } from '../../live-actions'
 import { useCountdown, useLiveView } from '../use-live-view'
 import { ANSWER_STYLES, AnswerShape } from '../shapes'
+import { EstimateSummary, formatDe, QuestionImage, WordCloud } from '../displays'
 
 /**
- * Ansicht der Teilnehmenden (Handy): warten, antworten (farbige Knöpfe wie auf der Leinwand),
- * danach das eigene Ergebnis. Die Frage selbst steht groß auf der Leinwand; hier steht sie klein
+ * Ansicht der Teilnehmenden (Handy): warten, antworten, danach das eigene Ergebnis. Je nach Art:
+ * farbige Knöpfe wie auf der Leinwand (Auswahl), Knöpfe zum An-/Abwählen und Abschicken
+ * (Mehrfachauswahl), Zahlenfeld (Schätzfrage) oder Textfeld (Wortwolke). Die Frage steht klein
  * mit, damit man auch ohne Blick nach vorn antworten kann.
  */
 export default function Player({ sessionId, initial }: { sessionId: string; initial: LiveView }) {
   const { view, status, offset, refresh } = useLiveView(sessionId, false, initial)
   const [pending, startTransition] = useTransition()
-  // Sofortige Rückmeldung nach dem Tippen, bevor die neue Ansicht da ist.
-  const [chosen, setChosen] = useState<{ index: number; answerId: string } | null>(null)
+  // Sofortige Rückmeldung nach dem Abschicken, bevor die neue Ansicht da ist.
+  const [sent, setSent] = useState<{ index: number; ids: string[] } | null>(null)
   const [late, setLate] = useState<number | null>(null)
+  const [invalid, setInvalid] = useState(false)
+  // Eingaben der aktuellen Frage (Mehrfachauswahl, Zahl, Wort) - beim Fragewechsel zurückgesetzt.
+  const [draft, setDraft] = useState<{ index: number; ids: string[]; value: string; text: string }>({ index: -1, ids: [], value: '', text: '' })
   const remaining = useCountdown(view.question?.endsAt ?? null, offset)
   const me = view.me
 
@@ -33,21 +38,26 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
     )
   }
 
-  const answer = (answerId: string) => {
-    setChosen({ index: view.index, answerId })
+  const submit = (input: LiveAnswerInput, ids: string[] = []) => {
+    setSent({ index: view.index, ids })
+    setInvalid(false)
     startTransition(async () => {
-      const result = await answerLive(sessionId, view.index, answerId)
+      const result = await answerLive(sessionId, view.index, input)
       if (!result.ok) {
-        setChosen(null)
+        setSent(null)
         if (result.reason === 'late') setLate(view.index)
+        if (result.reason === 'invalid') setInvalid(true)
       }
       refresh()
     })
   }
 
   const q = view.question
-  const myAnswer = me.answerId ?? (chosen?.index === view.index ? chosen.answerId : null)
-  const myAnswerIndex = q?.answers.findIndex(a => a.id === myAnswer) ?? -1
+  const current = draft.index === view.index ? draft : { index: view.index, ids: [], value: '', text: '' }
+  const setCurrent = (change: Partial<typeof current>) => setDraft({ ...current, ...change })
+  const answered = me.answered || sent?.index === view.index
+  const myIds = me.answered ? me.answerIds : sent?.index === view.index ? sent.ids : []
+  const estimateValue = Number(current.value.replace(/\s/g, '').replace(',', '.'))
 
   return (
     <Shell>
@@ -66,14 +76,22 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
         )}
 
         {view.phase === 'QUESTION' && q && (
-          myAnswer ? (
+          answered ? (
             <div className="text-center space-y-4">
-              {myAnswerIndex >= 0 && (
-                <div className={`${ANSWER_STYLES[myAnswerIndex % ANSWER_STYLES.length].bg} inline-flex rounded-lg p-4`}>
-                  <AnswerShape index={myAnswerIndex} className="w-12 h-12" />
+              {myIds.length > 0 && (
+                <div className="flex justify-center gap-2">
+                  {myIds.map(id => {
+                    const i = q.answers.findIndex(a => a.id === id)
+                    return i < 0 ? null : (
+                      <span key={id} className={`${ANSWER_STYLES[i % ANSWER_STYLES.length].bg} inline-flex rounded-lg p-4`}>
+                        <AnswerShape index={i} className="w-10 h-10" />
+                      </span>
+                    )
+                  })}
                 </div>
               )}
               <p className="text-2xl font-semibold">Antwort gespeichert</p>
+              {me.answerText && q.kind !== 'CHOICE' && <p className="text-lg">{me.answerText}</p>}
               <p className="text-gray-300">Warte auf die anderen …</p>
             </div>
           ) : late === view.index ? (
@@ -84,17 +102,68 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
                 <p className="text-lg font-semibold">{q.text}</p>
                 {remaining !== null && <span className="shrink-0 rounded-full bg-purple-700 px-3 py-1 font-bold tabular-nums">{remaining}</span>}
               </div>
-              <div className="grid grid-cols-2 gap-3 grow max-h-[60vh]">
-                {q.answers.map((a, i) => (
-                  <button
-                    key={a.id} type="button" disabled={pending} onClick={() => answer(a.id)}
-                    className={`${ANSWER_STYLES[i % ANSWER_STYLES.length].bg} rounded-lg p-3 flex flex-col items-center justify-center gap-2 text-lg font-semibold active:scale-95 transition disabled:opacity-70 ${q.answers.length % 2 === 1 && i === q.answers.length - 1 ? 'col-span-2' : ''}`}
-                  >
-                    <AnswerShape index={i} className="w-10 h-10" />
-                    <span className="break-words">{a.label}</span>
+              <QuestionImage imageId={q.imageId} className="max-h-40 mx-auto" />
+              {invalid && <p className="text-amber-300 text-sm" role="alert">Das hat nicht geklappt - bitte prüfe deine Eingabe.</p>}
+
+              {(q.kind === 'CHOICE' || q.kind === 'MULTI') && (
+                <div className="grid grid-cols-2 gap-3 grow max-h-[60vh]">
+                  {q.answers.map((a, i) => {
+                    const picked = current.ids.includes(a.id)
+                    return (
+                      <button
+                        key={a.id} type="button" disabled={pending} aria-pressed={q.kind === 'MULTI' ? picked : undefined}
+                        onClick={() => q.kind === 'CHOICE'
+                          ? submit({ answerId: a.id }, [a.id])
+                          : setCurrent({ ids: picked ? current.ids.filter(id => id !== a.id) : [...current.ids, a.id] })}
+                        className={`${ANSWER_STYLES[i % ANSWER_STYLES.length].bg} rounded-lg p-3 flex flex-col items-center justify-center gap-2 text-lg font-semibold active:scale-95 transition disabled:opacity-70 ${q.answers.length % 2 === 1 && i === q.answers.length - 1 ? 'col-span-2' : ''} ${q.kind === 'MULTI' && !picked ? 'opacity-60' : ''} ${picked ? 'ring-4 ring-white' : ''}`}
+                      >
+                        <AnswerShape index={i} className="w-10 h-10" />
+                        <span className="break-words">{a.label}{picked ? ' ✓' : ''}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {q.kind === 'MULTI' && (
+                <button
+                  type="button" disabled={pending || current.ids.length === 0} onClick={() => submit({ answerIds: current.ids }, current.ids)}
+                  className="rounded-lg bg-white text-gray-900 font-bold text-lg py-3 disabled:opacity-50"
+                >
+                  {current.ids.length === 0 ? 'Mehrere Antworten möglich' : `${current.ids.length} Antwort${current.ids.length === 1 ? '' : 'en'} abschicken`}
+                </button>
+              )}
+
+              {q.kind === 'ESTIMATE' && (
+                <form onSubmit={e => { e.preventDefault(); if (Number.isFinite(estimateValue) && current.value.trim()) submit({ value: estimateValue }) }} className="space-y-3">
+                  <label className="block">
+                    <span className="sr-only">Deine Schätzung</span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        inputMode="decimal" autoComplete="off" value={current.value} onChange={e => setCurrent({ value: e.target.value })}
+                        placeholder="Deine Schätzung" aria-label="Deine Schätzung"
+                        className="w-full rounded-lg p-4 text-2xl bg-white text-gray-900 text-center placeholder:text-gray-400"
+                      />
+                      {q.unit && <span className="text-xl">{q.unit}</span>}
+                    </span>
+                  </label>
+                  <button type="submit" disabled={pending || !current.value.trim() || !Number.isFinite(estimateValue)} className="w-full rounded-lg bg-white text-gray-900 font-bold text-lg py-3 disabled:opacity-50">
+                    Schätzung abschicken
                   </button>
-                ))}
-              </div>
+                </form>
+              )}
+
+              {q.kind === 'WORDCLOUD' && (
+                <form onSubmit={e => { e.preventDefault(); if (current.text.trim()) submit({ text: current.text }) }} className="space-y-3">
+                  <input
+                    maxLength={40} autoComplete="off" value={current.text} onChange={e => setCurrent({ text: e.target.value })}
+                    placeholder="Dein Begriff" aria-label="Dein Begriff"
+                    className="w-full rounded-lg p-4 text-2xl bg-white text-gray-900 text-center placeholder:text-gray-400"
+                  />
+                  <button type="submit" disabled={pending || !current.text.trim()} className="w-full rounded-lg bg-white text-gray-900 font-bold text-lg py-3 disabled:opacity-50">
+                    Abschicken
+                  </button>
+                </form>
+              )}
             </>
           )
         )}
@@ -102,16 +171,28 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
         {view.phase === 'REVEAL' && q && (
           q.quiz ? (
             me.correct ? (
-              <Result tone="bg-green-600" title="Richtig!" text={`+${me.points ?? 0} Punkte`} />
+              <Result tone="bg-green-600" title={q.kind === 'ESTIMATE' ? 'Gut geschätzt!' : 'Richtig!'} text={`+${me.points ?? 0} Punkte`} />
             ) : (
               <Result
                 tone="bg-red-600"
-                title={me.answerId ? 'Leider falsch' : 'Keine Antwort'}
-                text={`Richtig war: ${q.answers.filter(a => a.correct).map(a => a.label).join(' / ')}`}
+                title={!me.answered ? 'Keine Antwort' : q.kind === 'ESTIMATE' ? 'Leider zu weit weg' : 'Leider falsch'}
+                text={q.kind === 'ESTIMATE'
+                  ? `Richtig: ${formatDe(q.estimate?.target ?? 0)}${q.unit ? ` ${q.unit}` : ''}${me.answerText ? ` - du: ${me.answerText}` : ''}`
+                  : `Richtig war: ${q.answers.filter(a => a.correct).map(a => a.label).join(q.kind === 'MULTI' ? ' + ' : ' / ')}`}
               />
             )
+          ) : q.kind === 'WORDCLOUD' ? (
+            <div className="space-y-4 text-center">
+              <p className="text-xl font-bold">{me.answered ? 'Danke für deinen Beitrag!' : 'Keine Antwort'}</p>
+              <WordCloud words={q.words ?? []} max={2.5} min={0.9} />
+            </div>
           ) : (
-            <Center title={me.answerId ? 'Danke für deine Antwort!' : 'Keine Antwort'} text="Das Ergebnis siehst du auf der Leinwand." />
+            <Center
+              title={me.answered ? 'Danke für deine Antwort!' : 'Keine Antwort'}
+              text={q.kind === 'ESTIMATE' && q.estimate?.stats ? '' : 'Das Ergebnis siehst du auf der Leinwand.'}
+            >
+              {q.kind === 'ESTIMATE' && <p className="text-gray-300 text-sm"><EstimateSummary stats={q.estimate?.stats ?? null} unit={q.unit} /></p>}
+            </Center>
           )
         )}
 
@@ -148,11 +229,12 @@ function Shell({ children }: { children: React.ReactNode }) {
   return <main className="min-h-[85vh] bg-gray-900 text-white px-4 py-4 flex flex-col max-w-xl mx-auto w-full rounded-none sm:rounded-lg">{children}</main>
 }
 
-function Center({ title, text }: { title: string; text: string }) {
+function Center({ title, text, children }: { title: string; text: string; children?: React.ReactNode }) {
   return (
     <div className="text-center space-y-3">
       <p className="text-2xl font-bold">{title}</p>
-      <p className="text-gray-300">{text}</p>
+      {text && <p className="text-gray-300">{text}</p>}
+      {children}
     </div>
   )
 }

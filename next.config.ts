@@ -1,6 +1,12 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Live-Runden: Fragen mit Bildern gehen in EINER Server Action an den Server (Editor verkleinert
+  // jedes Bild vorher, app/lib/live-images.ts prüft höchstens 1,5 MB pro Bild). Standard wäre 1 MB.
+  experimental: {
+    serverActions: { bodySizeLimit: '16mb' }
+  },
+
   // Sicherheits-Header für alle Seiten. Bewusst KEINE Einbettung in fremde Seiten
   // (frame-ancestors 'none'): Login, Verwaltung und Konto-Seiten dürfen nicht in einem
   // unsichtbaren iFrame auftauchen (Clickjacking). Die Verzahnung mit rsvp-app läuft über

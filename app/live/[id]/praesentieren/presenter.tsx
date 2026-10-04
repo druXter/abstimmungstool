@@ -3,10 +3,11 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import type { LiveAnswerView, LiveView } from '../../../lib/live'
-import { controlLiveAction, kickLivePlayer } from '../../../live-actions'
+import { controlLiveAction, hideLiveWord, kickLivePlayer } from '../../../live-actions'
 import { useCountdown, useLiveView } from '../../use-live-view'
 import { ANSWER_STYLES, AnswerShape } from '../../shapes'
 import QrCode from '../../../ui/qr-code'
+import { EstimateLine, EstimateSummary, QuestionImage, WordCloud } from '../../displays'
 
 /**
  * Leinwand einer Live-Runde (für Beamer/Bildschirm im Raum): Lobby mit PIN und QR-Code, Frage
@@ -31,6 +32,14 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
       setConfirmKick(null)
       refresh()
     })
+
+  const hideWord = (questionId: string, key: string, text: string) => {
+    if (!confirm(`"${text}" aus der Wortwolke ausblenden?`)) return
+    startTransition(async () => {
+      await hideLiveWord(sessionId, questionId, key)
+      refresh()
+    })
+  }
 
   const fullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -116,8 +125,26 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
               {view.phase === 'QUESTION'
                 ? `${q.answeredCount} von ${view.playerCount} haben geantwortet`
                 : `${q.answeredCount} Antwort${q.answeredCount === 1 ? '' : 'en'}`}
+              {q.kind === 'MULTI' && ' · mehrere Antworten möglich'}
             </p>
-            <AnswerGrid answers={q.answers} revealed={view.phase === 'REVEAL'} total={q.answeredCount} />
+            <QuestionImage imageId={q.imageId} className="max-h-[35vh] mx-auto" />
+            {(q.kind === 'CHOICE' || q.kind === 'MULTI') && (
+              <AnswerGrid answers={q.answers} revealed={view.phase === 'REVEAL'} total={q.answeredCount} />
+            )}
+            {q.kind === 'ESTIMATE' && (view.phase === 'QUESTION' ? (
+              <p className="text-3xl text-center font-semibold">Schätzt jetzt auf dem Handy{q.unit ? ` (in ${q.unit})` : ''}!</p>
+            ) : (
+              <div className="space-y-4">
+                <EstimateLine values={q.estimate?.values ?? []} target={q.estimate?.target ?? null} unit={q.unit} />
+                <p className="text-xl text-center text-gray-200"><EstimateSummary stats={q.estimate?.stats ?? null} unit={q.unit} /></p>
+              </div>
+            ))}
+            {q.kind === 'WORDCLOUD' && (
+              <div className="space-y-2">
+                <WordCloud words={q.words ?? []} onPick={w => hideWord(q.id, w.key, w.text)} />
+                <p className="text-xs text-center text-gray-500">Ein Wort antippen, um es auszublenden.</p>
+              </div>
+            )}
           </>
         )}
 

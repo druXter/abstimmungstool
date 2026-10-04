@@ -51,6 +51,7 @@ model User {
   ownedPolls        Poll[]             @relation("PollOwner")
   pollAccess        PollAccess[]
   liveSessions      LiveSession[]
+  liveAccess        LiveAccess[]
 }
 
 // Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
@@ -431,18 +432,70 @@ model LiveSession {
   finishedAt        DateTime?
   questions         LiveQuestion[]
   players           LivePlayer[]
+  images            LiveImage[]
+  access            LiveAccess[]
 
   @@index([ownerId])
 }
 
-model LiveQuestion {
+// Gemeinsames Moderieren einer Live-Runde (wie PollAccess): Das Konto darf präsentieren,
+// bearbeiten, neu starten und exportieren - NICHT löschen oder weiter teilen (siehe getLiveLevel).
+model LiveAccess {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime    @default(now())
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+}
+
+// Art einer Frage (LiveQuestion.kind):
+// - CHOICE:    eine Antwort wählen (Kahoot-Knöpfe); Quiz, wenn eine Antwort als richtig markiert ist
+// - MULTI:     mehrere Antworten wählen; richtig nur bei genau der richtigen Kombination
+// - ESTIMATE:  Zahl schätzen; Quiz, wenn `target` gesetzt ist (Punkte nach Nähe, siehe estimatePoints)
+// - WORDCLOUD: kurzer Freitext, Wortwolke auf der Leinwand; nie Punkte
+enum LiveQuestionKind {
+  CHOICE
+  MULTI
+  ESTIMATE
+  WORDCLOUD
+}
+
+// Bild zu einer Frage. Bewusst in der Datenbank statt im Dateisystem: So ist es in der täglichen
+// Sicherung enthalten und verschwindet mit der Runde. Gehört der Runde (nicht der Frage), weil
+// "Bearbeiten" die Fragen neu anlegt und die Bilder dabei behalten soll. Im Browser verkleinert
+// und neu kodiert (entfernt EXIF/GPS), serverseitig auf Typ und Größe geprüft (app/lib/live-images.ts).
+model LiveImage {
   id        String         @id @default(cuid())
   sessionId String
   session   LiveSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type      String
+  data      Bytes
+  createdAt DateTime       @default(now())
+  questions LiveQuestion[]
+
+  @@index([sessionId])
+}
+
+model LiveQuestion {
+  id        String           @id @default(cuid())
+  sessionId String
+  session   LiveSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   position  Int
   text      String
   // Sekunden, null = ohne Zeitlimit.
   timeLimit Int?
+  kind      LiveQuestionKind @default(CHOICE)
+  // Nur ESTIMATE: richtiger Wert (null = reine Umfrage), Toleranz für Punkte (null = 10 % des
+  // Werts, mindestens 1) und eine Einheit zur Anzeige.
+  target    Float?
+  tolerance Float?
+  unit      String?
+  imageId   String?
+  image     LiveImage?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
   answers   LiveAnswer[]
   responses LiveResponse[]
 
@@ -479,17 +532,25 @@ model LivePlayer {
 
 // Eine Antwort pro Person und Frage (die erste zählt, wie bei Kahoot). elapsedMs = Zeit seit
 // Fragebeginn laut Server, points = bei der Abgabe berechnete Punkte (0 bei Umfragefragen).
+// Je nach LiveQuestion.kind ist genau eines gesetzt: answerId (CHOICE), choices (MULTI, JSON-Array
+// der Antwort-IDs), numberValue (ESTIMATE) oder text/textKey (WORDCLOUD; textKey = klein
+// geschrieben zum Zählen und Ausblenden, hidden = von der Leinwand ausgeblendet).
 model LiveResponse {
-  id         String       @id @default(cuid())
-  questionId String
-  question   LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  playerId   String
-  player     LivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  answerId   String
-  answer     LiveAnswer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
-  elapsedMs  Int
-  points     Int          @default(0)
-  createdAt  DateTime     @default(now())
+  id          String       @id @default(cuid())
+  questionId  String
+  question    LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  playerId    String
+  player      LivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  answerId    String?
+  answer      LiveAnswer?  @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  choices     String?
+  numberValue Float?
+  text        String?
+  textKey     String?
+  hidden      Boolean      @default(false)
+  elapsedMs   Int
+  points      Int          @default(0)
+  createdAt   DateTime     @default(now())
 
   @@unique([questionId, playerId])
   @@index([playerId])

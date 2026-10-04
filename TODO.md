@@ -129,8 +129,9 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
       Löschfristen wie bei Abstimmungen. README und Datenschutzerklärung (Spitzname, Antworten, Antwortzeit, Cookie).
 - Umgesetzt (2026-10-04): `app/lib/live.ts`, `app/live-actions.ts`, `app/api/live/[id]/route.ts`, Seiten unter
   `app/live/`, Tests `tests/e2e/live.spec.ts`, README-Abschnitt "Live-Runden".
-- [ ] Ideen für später: Live-Runde mit anderen Konten teilen (wie `PollAccess`), CSV-Export der Ergebnisse,
-      weitere Fragearten (Mehrfachauswahl, Schätzfrage, Wortwolke), Bilder zu Fragen.
+- [x] Ausbau (2026-10-04): Live-Runde mit anderen Konten teilen (`LiveAccess`, wie `PollAccess`), CSV-Export der
+      Ergebnisse, weitere Fragearten (Mehrfachauswahl, Schätzfrage, Wortwolke mit Ausblenden), Bilder zu Fragen
+      (im Browser verkleinert/neu kodiert, in der DB gespeichert). Tests: `tests/e2e/live-extras.spec.ts`.
 
 ---
 

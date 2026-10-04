@@ -63,9 +63,9 @@ export default async function MeineAbstimmungenPage() {
     }
   })
 
-  // Live-Runden (app/lib/live.ts) gehören nur ihrem Konto (kein Teilen), Admins sehen alle.
+  // Live-Runden (app/lib/live.ts): eigene und geteilte (LiveAccess), Admins sehen alle.
   const liveSessions = await prisma.liveSession.findMany({
-    where: isAdmin ? {} : { ownerId: user.id },
+    where: isAdmin ? {} : { OR: [{ ownerId: user.id }, { access: { some: { userId: user.id } } }] },
     orderBy: { createdAt: 'desc' },
     select: { id: true, title: true, createdAt: true, phase: true, ownerId: true, owner: { select: { email: true } } }
   })
