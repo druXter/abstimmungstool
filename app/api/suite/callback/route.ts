@@ -1,11 +1,12 @@
 // app/api/suite/callback/route.ts
 import type { NextRequest, NextResponse } from 'next/server'
-import { fetchDiscovery, sanitizeNextPath, verifyLoginAssertion, type DiscoveryDocument, type LoginClaims } from 'suite-kit'
+import { fetchDiscovery, sanitizeNextPath, verifyLoginAssertion, verifyParticipantAssertion, type DiscoveryDocument, type LoginClaims } from 'suite-kit'
 import { prisma } from '../../../lib/prisma'
 import { cookieOptions, getCurrentUser, issueSession, SESSION_COOKIE, SESSION_DURATION_MS } from '../../../lib/auth'
 import { safeEqual } from '../../../lib/permissions'
 import { getIdps, mapRole, selfOrigin } from '../../../lib/suite'
-import { parseFlow, redirectResponse, SUITE_STATE_COOKIE } from '../../../lib/suite-flow'
+import { parseFlow, redirectResponse, SUITE_STATE_COOKIE, withNotice, type SuiteFlow } from '../../../lib/suite-flow'
+import { issueParticipantSession, participantIdps } from '../../../lib/participant'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
   if (!origin || !flow || !assertion || !stateParam || !safeEqual(stateParam, flow.state)) {
     return fail('sso', 'state fehlt oder stimmt nicht überein')
   }
+  if (flow.mode === 'participant') return finish(await participantLogin(flow, assertion, origin, requestOrigin))
 
   const idp = getIdps().find(i => i.issuer === flow.issuer)
   if (!idp) return fail('sso', 'Anbieter nicht (mehr) konfiguriert')
@@ -143,4 +145,43 @@ async function provisionUser(
     // Gleichzeitiger zweiter Login mit derselben Person (Unique-Verstoß) - einfach neu versuchen lassen.
     return { code: 'sso', detail: `Konto konnte nicht angelegt werden: ${(error as Error).message}` }
   }
+}
+
+/**
+ * Anmeldung mit einem Teilnehmendenkonto (Modus `participant`, siehe app/lib/participant.ts):
+ * nur von Anbietern mit `participants: true`, nur eine Teilnehmenden-Bestätigung - eine
+ * Login-Bestätigung (z.B. von einem Anbieter mit älterer suite-kit-Version, der `kind` nicht
+ * kennt) scheitert hier am falschen Typ. Legt nie ein Verwaltungskonto an. Fehler landen als
+ * Hinweis auf der Abstimmungsseite, von der aus die Anmeldung gestartet wurde.
+ */
+async function participantLogin(flow: SuiteFlow, assertion: string, origin: string, requestOrigin: string): Promise<NextResponse> {
+  const next = sanitizeNextPath(flow.next, '/')
+  const failed = (notice: string, detail?: string) => {
+    if (detail) console.warn(`[suite] Teilnehmenden-Anmeldung abgelehnt: ${detail}`)
+    return redirectResponse(withNotice(next, notice), requestOrigin)
+  }
+
+  const idp = participantIdps().find(i => i.issuer === flow.issuer)
+  if (!idp) return failed('anmeldung-fehlgeschlagen', 'Anbieter liefert (nicht mehr) Teilnehmende')
+
+  let discovery = await fetchDiscovery(idp.issuer)
+  if (!discovery) return failed('anbieter-nicht-erreichbar')
+  const expectation = () => ({ issuer: idp.issuer, audience: origin, nonce: flow.state, keys: discovery!.keys })
+  let result = verifyParticipantAssertion(assertion, expectation())
+  if (!result.ok && result.reason === 'unknown-key') {
+    discovery = await loadDiscoveryForVerification(idp.issuer, true)
+    if (discovery) result = verifyParticipantAssertion(assertion, expectation())
+  }
+  if (!result.ok) return failed('anmeldung-fehlgeschlagen', `Bestätigung ungültig: ${result.reason}`)
+
+  const { iss, sub, name } = result.claims
+  const participant = await prisma.participant.upsert({
+    where: { issuer_subject: { issuer: iss, subject: sub } },
+    create: { issuer: iss, subject: sub, name },
+    update: { name, lastLoginAt: new Date() }
+  })
+  const cookie = await issueParticipantSession(participant.id)
+  const response = redirectResponse(next, requestOrigin)
+  response.cookies.set(cookie.name, cookie.value, cookie.options)
+  return response
 }

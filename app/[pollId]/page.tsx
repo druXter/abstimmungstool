@@ -14,6 +14,9 @@ import BallotInputs from './ballot-inputs'
 import { finalDateLabel } from '../lib/final-date'
 import { parseTransfer } from '../lib/rsvp-date'
 import { POLL_TYPE_LABELS } from '../lib/poll-types'
+import { participantIdps } from '../lib/participant'
+import { idpLabel } from '../lib/suite'
+import { logoutParticipant } from '../auth-actions'
 
 export const dynamic = 'force-dynamic'
 
@@ -38,7 +41,9 @@ const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: str
   'mail-ungueltig': { tone: 'error', text: 'Bitte gib eine gültige E-Mail-Adresse ein.' },
   'mail-nicht-zugelassen': { tone: 'error', text: 'Mit dieser Adresse kann bei dieser Abstimmung nicht abgestimmt werden.' },
   'mail-gedrosselt': { tone: 'error', text: 'Für diese Adresse wurden gerade schon mehrere Links angefordert. Bitte schau in dein Postfach (auch in den Spam-Ordner) oder versuche es in einer Stunde erneut.' },
-  'mail-fehler': { tone: 'error', text: 'Die Mail konnte gerade nicht verschickt werden. Bitte versuche es später erneut.' }
+  'mail-fehler': { tone: 'error', text: 'Die Mail konnte gerade nicht verschickt werden. Bitte versuche es später erneut.' },
+  'anmeldung-fehlgeschlagen': { tone: 'error', text: 'Die Anmeldung über das andere Tool ist fehlgeschlagen. Bitte versuche es noch einmal.' },
+  'anbieter-nicht-erreichbar': { tone: 'error', text: 'Das andere Tool ist gerade nicht erreichbar. Bitte versuche es später erneut.' }
 }
 
 function Hint({ children }: { children: React.ReactNode }) {
@@ -164,6 +169,17 @@ export default async function PollPage({
           <Hint>
             Für diese Abstimmung brauchst du ein Konto, damit jede Person nur einmal abstimmt.{' '}
             <Link href={`/anmelden?next=${encodeURIComponent(`/${poll.id}`)}`} className="underline font-medium">Jetzt anmelden</Link>
+            {/* Teilnehmendenkonten aus dem Verbund (app/lib/participant.ts) - nur zum Abstimmen. */}
+            {participantIdps().map(idp => (
+              <span key={idp.issuer} className="block mt-2">
+                <a
+                  href={`/api/suite/login?${new URLSearchParams({ idp: idp.issuer, mode: 'participant', next: `/${poll.id}` })}`}
+                  className="underline font-medium"
+                >
+                  Mit deinem Konto bei {idpLabel(idp)} abstimmen
+                </a>
+              </span>
+            ))}
           </Hint>
         )}
 
@@ -240,9 +256,15 @@ export default async function PollPage({
                 <button type="submit" form="forget-email" className="underline">andere Adresse verwenden</button>
               </p>
             )}
-            {voter?.kind === 'ACCOUNT' && (
+            {voter?.kind === 'ACCOUNT' && !voter.via && (
               <p className="text-xs text-gray-500">
                 Du stimmst mit deinem Konto ab: <strong>{voter.name}</strong>
+              </p>
+            )}
+            {voter?.kind === 'ACCOUNT' && voter.via && (
+              <p className="text-xs text-gray-500">
+                Du stimmst mit deinem Konto bei {voter.via} ab: <strong>{voter.name}</strong> ·{' '}
+                <button type="submit" form="logout-participant" className="underline">abmelden</button>
               </p>
             )}
             {namesVisible && (
@@ -310,6 +332,12 @@ export default async function PollPage({
           // sein); der Knopf im Abstimmformular zeigt per form-Attribut hierher.
           <form id="forget-email" action={forgetVoteEmail} className="hidden">
             <input type="hidden" name="pollId" value={poll.id} />
+          </form>
+        )}
+
+        {voter?.kind === 'ACCOUNT' && voter.via && (
+          <form id="logout-participant" action={logoutParticipant} className="hidden">
+            <input type="hidden" name="next" value={`/${poll.id}`} />
           </form>
         )}
 

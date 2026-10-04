@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { buildAuthorizeResponseUrl, buildDiscoveryDocument, issueLoginAssertion, loadSigner, parseAuthorizeRequest, type Signer } from 'suite-kit'
+import { buildAuthorizeResponseUrl, buildDiscoveryDocument, issueLoginAssertion, issueParticipantAssertion, loadSigner, parseAuthorizeRequest, type Signer } from 'suite-kit'
 
 // Test-Doppel für andere Tools der Suite, damit die Föderation ohne echtes rsvp-app oder Seating
 // geprüft werden kann. Tool A und B sind ANBIETER für dieses Tool (Discovery, Authorize mit einer
@@ -22,9 +22,12 @@ export const SUITE_TOOLS: Record<ToolName | 'c', { port: number; origin: string;
 // Eigenes Verzeichnis statt data/ - das gehört im Betrieb dem Container.
 export const SUITE_DIR = '.e2e/suite'
 
-/** Konfiguration für dieses Tool (playwright.config.ts): A legt Konten an, B und C nicht. */
+/**
+ * Konfiguration für dieses Tool (playwright.config.ts): A legt Konten an, B und C nicht. Nur A liefert
+ * auch Teilnehmendenkonten (participants, suite-kit v0.2.0).
+ */
 export const TEST_SUITE_IDPS = JSON.stringify([
-  { issuer: SUITE_TOOLS.a.origin, label: SUITE_TOOLS.a.label, autoProvision: true },
+  { issuer: SUITE_TOOLS.a.origin, label: SUITE_TOOLS.a.label, autoProvision: true, participants: true },
   { issuer: SUITE_TOOLS.b.origin, label: SUITE_TOOLS.b.label, autoProvision: false },
   { issuer: SUITE_TOOLS.c.origin, label: SUITE_TOOLS.c.label, autoProvision: false }
 ])
@@ -39,10 +42,13 @@ function testSigner(name: string): Signer {
 }
 
 /**
- * Wer beim Anbieter "eingeloggt" ist. null = niemand.
+ * Wer beim Anbieter "eingeloggt" ist. null = niemand. Bei einer Anfrage mit kind=participant
+ * gilt dieselbe Person als Teilnehmendenkonto (nur sub und name werden übertragen).
  * tamper 'signature': absichtlich ungültige Bestätigung - für die Fehlerfälle.
+ * tamper 'login-typ': auf kind=participant trotzdem eine LOGIN-Bestätigung schicken (wie ein
+ * Anbieter mit älterer suite-kit-Version, der kind nicht kennt).
  */
-export type TestIdentity = { sub: string; email: string; name?: string; role?: string; tamper?: 'signature' }
+export type TestIdentity = { sub: string; email: string; name?: string; role?: string; tamper?: 'signature' | 'login-typ' }
 
 export function setIdentity(tool: ToolName, identity: TestIdentity | null) {
   mkdirSync(SUITE_DIR, { recursive: true })
@@ -86,13 +92,20 @@ function handler(tool: ToolName, appOrigin: string) {
 
     if (url.pathname === '/api/suite/authorize') {
       // Wie ein echter Anbieter: nur an freigegebene Tools (hier: das Abstimmungstool) ausstellen.
-      const parsed = parseAuthorizeRequest(url, [appOrigin])
+      const parsed = parseAuthorizeRequest(url, [appOrigin], [appOrigin])
       if (!parsed.ok) return response.writeHead(400, { 'Content-Type': 'text/html' }).end(html(`Abgelehnt: ${parsed.reason}`))
       const file = join(SUITE_DIR, `identity-${tool}.json`)
       if (!existsSync(file)) return response.writeHead(200, { 'Content-Type': 'text/html' }).end(html('Bei diesem Tool ist niemand angemeldet.'))
       const identity = JSON.parse(readFileSync(file, 'utf8')) as TestIdentity
 
-      let assertion = issueLoginAssertion(currentKeys(tool).signer, {
+      const participant = parsed.request.kind === 'participant' && identity.tamper !== 'login-typ'
+      let assertion = participant ? issueParticipantAssertion(currentKeys(tool).signer, {
+        issuer: origin,
+        audience: parsed.request.app,
+        subject: identity.sub,
+        name: identity.name ?? 'Gast',
+        nonce: parsed.request.state
+      }) : issueLoginAssertion(currentKeys(tool).signer, {
         issuer: origin,
         audience: parsed.request.app,
         subject: identity.sub,

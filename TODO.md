@@ -38,7 +38,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 ### A3. Mit Konto abstimmen
 
 - [x] Mit lokalem Konto bzw. Suite-Konto abstimmen (Sessions/Verbund existieren schon).
-- [ ] Erweiterung auf **Teilnehmendenkonten** aus dem Suite-Verbund, siehe Abschnitt D.
+- [x] Erweiterung auf **Teilnehmendenkonten** aus dem Suite-Verbund, siehe Abschnitt D1.
 
 ### A4. Zugangscode pro Abstimmung
 
@@ -162,23 +162,31 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
 Idee: Neben den Verwaltungskonten (Rollen Admin/Creator/Moderator) auch die **Nutzer-Konten** aus rsvp-app
 (`GuestUser`) im Verbund nutzbar machen, z.B. für A3. Admins schalten das pro Tool an/aus.
 
-- [ ] **Kontoart im Protokoll:** Die signierte Bestätigung braucht ein Feld wie `kind: "staff" | "participant"`.
+- [x] **Kontoart im Protokoll:** Die signierte Bestätigung braucht ein Feld wie `kind: "staff" | "participant"`.
       Der Empfänger darf ein Teilnehmendenkonto **nie** auf eine Verwaltungsrolle abbilden - Teilnehmende landen
       in einer eigenen Tabelle (z.B. `Participant`), nicht in `User`, damit eine Teilnehmenden-Sitzung
       strukturell keine Verwaltungsrechte haben kann.
-- [ ] **Schalter an zwei Stellen:** Anbieter ("Teilnehmendenkonten für andere Tools freigeben") und Empfänger
+- [x] **Schalter an zwei Stellen:** Anbieter ("Teilnehmendenkonten für andere Tools freigeben") und Empfänger
       ("Anmeldung mit Teilnehmendenkonten annehmen"). Vorschlag: Vertrauen/Schlüssel bleiben in der Env
       (`SUITE_IDPS`, `SUITE_TRUSTED_APPS`), der fachliche An/Aus-Schalter kommt als Admin-Einstellung in die
       Oberfläche (neue Settings-Tabelle). Klären, was bei Deaktivierung mit bestehenden Sitzungen/Stimmen passiert.
-- [ ] **Nur verifizierte Konten bestätigen:** rsvp-app stellt Bestätigungen nur für `GuestUser.isVerified` aus.
-- [ ] **Datenminimierung & Einwilligung:** Beim ersten Login zeigen, was übertragen wird. Nur Konto-ID und ggf. Name
+- [x] **Nur verifizierte Konten bestätigen:** rsvp-app stellt Bestätigungen nur für `GuestUser.isVerified` aus.
+- [x] **Datenminimierung & Einwilligung:** Beim ersten Login zeigen, was übertragen wird. Nur Konto-ID und ggf. Name
       übertragen, E-Mail nur wenn nötig. Datenschutzerklärungen beider Tools anpassen (Übermittlung zwischen Tools).
-- [ ] **Paarweise Kennungen (Pseudonyme):** Für Teilnehmende pro Empfänger-Tool eine eigene `subject`-ID
+- [x] **Paarweise Kennungen (Pseudonyme):** Für Teilnehmende pro Empfänger-Tool eine eigene `subject`-ID
       ausstellen, damit Tools die Personen nicht untereinander verknüpfen können (Privacy by Design).
-- [ ] **Verhältnis zum RSVP-Token:** Wenn Teilnehmendenkonten föderiert sind, ist der Modus `RSVP` im Kern
+- [x] **Verhältnis zum RSVP-Token:** Wenn Teilnehmendenkonten föderiert sind, ist der Modus `RSVP` im Kern
       "Konto + Bedingung Zusage". Entscheiden: zwei Mechanismen parallel behalten oder den Klick-Token
       (`RSVP_VERIFICATION_SECRET`) in den Verbund überführen - der Webhook für Absagen bleibt so oder so nötig.
-- [ ] Dieselbe Person mit Verwaltungs- **und** Teilnehmendenkonto: bewusst getrennt halten, keine Zusammenführung.
+- [x] Dieselbe Person mit Verwaltungs- **und** Teilnehmendenkonto: bewusst getrennt halten, keine Zusammenführung.
+
+Umgesetzt (2026-10-04) nach den Entscheidungen oben: suite-kit v0.2.0 (`suite-participant+v1`, `kind=participant`,
+`SUITE_PARTICIPANT_APPS`, `participants` in `SUITE_IDPS`); rsvp-app `GuestToolConsent`, Zustimmungsseite
+`/mein-konto/freigabe`, Entzug in den Konto-Einstellungen; Abstimmungstool `Participant`/`ParticipantSession`
+(24 h), `app/lib/participant.ts`, Knopf im Modus `ACCOUNT`. Paarweise Kennung zufällig statt HMAC (gespeichert mit der
+Zustimmung - kein weiteres Secret, unabhängig von Schlüsselwechseln). RSVP-Token und Webhook bleiben parallel. Tests:
+suite-kit `test/participant.test.ts`, rsvp-app `suite-participant.spec.ts`, hier `participant.spec.ts`; einmal beide
+Apps echt gegeneinander.
 
 ### D2. Wording vereinheitlichen (alle Tools)
 
@@ -200,8 +208,8 @@ Problem: "Admin-Konten" meint in rsvp-app alle Verwaltungskonten (inkl. Creator/
       suite-kit `docs/PROTOCOL.md` "Bewusst nicht enthalten". Wird ein Konto beim Anbieter gelöscht, weiß der Empfänger nichts
       davon. Webhook zur Weitergabe oder kurze Sitzungsdauer für föderierte Konten?
 - [x] **Abmelden in allen Tools (Single Logout):** bewusst nicht, dokumentiert (suite-kit README und `docs/PROTOCOL.md`).
-- [ ] **Löschfristen für föderierte Teilnehmendenkonten** im Empfänger (Cleanup-Cron): entschieden (2 Jahre ohne
-      Anmeldung), Umsetzung mit D1.
+- [x] **Löschfristen für föderierte Teilnehmendenkonten** im Empfänger (Cleanup-Cron): 2 Jahre ohne Anmeldung,
+      Stimmen bleiben ohne Namen gezählt (mit D1 umgesetzt).
 - [x] ~~**Tool-Umschalter**~~ verschoben nach suite-kit `docs/IDEEN.md` P2 (gemeinsame Startseite).
 - [x] **Schlüsselwechsel** für `SUITE_SIGNING_KEY`: Ablauf in suite-kit `docs/PROTOCOL.md` (geplant und Notfall), Tests
       `test/rotation.test.ts` (suite-kit) und "Schlüsselwechsel beim Anbieter" (`tests/e2e/suite.spec.ts`).

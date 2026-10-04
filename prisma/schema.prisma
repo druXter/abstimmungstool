@@ -494,3 +494,37 @@ model LiveResponse {
   @@unique([questionId, playerId])
   @@index([playerId])
 }
+
+// ---------------------------------------------------------------------------------------
+// Teilnehmendenkonto aus einem anderen Tool der Suite (suite-kit v0.2.0, Teilnehmenden-
+// Bestätigung, z.B. ein GuestUser aus rsvp-app). Bewusst NICHT User/Session: Eine solche
+// Anmeldung kann strukturell keine Verwaltungsrechte haben - sie taugt nur zum Abstimmen im
+// Modus ACCOUNT (voterKey "participant:<id>", siehe app/lib/voter-identity.ts).
+// Identität ist (issuer, subject); subject ist die PAARWEISE Kennung des Anbieters (nur dieses
+// Tool sieht sie). Keine E-Mail - der Anbieter überträgt nur den Namen.
+model Participant {
+  id          String               @id @default(cuid())
+  issuer      String
+  subject     String
+  name        String
+  createdAt   DateTime             @default(now())
+  // Zuletzt bei einer Anmeldung gesetzt - Grundlage der Löschfrist (2 Jahre, Cleanup-Cron).
+  lastLoginAt DateTime             @default(now())
+  sessions    ParticipantSession[]
+
+  @@unique([issuer, subject])
+}
+
+// Sitzung eines Teilnehmendenkontos: eigenes Cookie (app/lib/participant.ts), nur der Hash in
+// der Datenbank, bewusst KURZ (24 Stunden) - eine beim Anbieter gelöschte oder entzogene
+// Anmeldung wirkt hier so spätestens nach einem Tag, ohne dass es einen Rückkanal braucht.
+model ParticipantSession {
+  id            String      @id @default(cuid())
+  tokenHash     String      @unique
+  participantId String
+  participant   Participant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  expiresAt     DateTime
+  createdAt     DateTime    @default(now())
+
+  @@index([participantId])
+}

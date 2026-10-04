@@ -12,7 +12,8 @@ const isProduction = process.env.NODE_ENV === 'production'
 export const SUITE_STATE_COOKIE = isProduction ? '__Host-suite-state' : 'suite-state'
 export const SUITE_STATE_MAX_AGE_SECONDS = 10 * 60
 
-export type SuiteFlow = { state: string; issuer: string; next: string; mode: 'login' | 'link' }
+/** `participant`: Anmeldung mit einem Teilnehmendenkonto (app/lib/participant.ts), nur zum Abstimmen. */
+export type SuiteFlow = { state: string; issuer: string; next: string; mode: 'login' | 'link' | 'participant' }
 
 export function parseFlow(raw: string | undefined): SuiteFlow | null {
   if (!raw) return null
@@ -20,7 +21,7 @@ export function parseFlow(raw: string | undefined): SuiteFlow | null {
     const value = JSON.parse(raw) as Partial<SuiteFlow>
     if (
       typeof value.state === 'string' && typeof value.issuer === 'string' &&
-      typeof value.next === 'string' && (value.mode === 'login' || value.mode === 'link')
+      typeof value.next === 'string' && (value.mode === 'login' || value.mode === 'link' || value.mode === 'participant')
     ) {
       return { state: value.state, issuer: value.issuer, next: value.next, mode: value.mode }
     }
@@ -36,6 +37,11 @@ export function parseFlow(raw: string | undefined): SuiteFlow | null {
  * Origin aus BASE_URL genommen. Die Antworten der Föderations-Endpunkte tragen
  * Einmal-Werte in der URL und dürfen weder gecacht werden noch per Referer an Dritte gehen.
  */
+/** Hängt einen Hinweis (`?hinweis=…`, feste Texte auf der Abstimmungsseite) an einen internen Pfad. */
+export function withNotice(path: string, notice: string): string {
+  return `${path}${path.includes('?') ? '&' : '?'}hinweis=${encodeURIComponent(notice)}`
+}
+
 export function redirectResponse(target: string | URL, requestOrigin: string): NextResponse {
   const url = typeof target === 'string' ? new URL(target, selfOrigin() ?? requestOrigin) : target
   const response = NextResponse.redirect(url, 303)

@@ -211,10 +211,35 @@ Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Se
 * `voterKey = account:<User.id>` - nie die E-Mail, die sich ändern lässt. Als Name wird der
   Kontoname gespeichert, sonst die E-Mail (bei jeder Änderung der Auswahl aktualisiert).
 * Wer nur abstimmen soll, bekommt ein Konto mit der Rolle **Moderator**: Ohne Freigabe kann
-  es nichts verwalten. Eigene **Teilnehmendenkonten** (ohne jede Verwaltungsrolle, auch aus
-  rsvp-app) sind für den Suite-Verbund geplant (`TODO.md` D1).
+  es nichts verwalten. Oder die Person nutzt ein **Teilnehmendenkonto** aus rsvp-app (siehe unten).
 * **Wird ein Konto gelöscht** (von Hand oder per Löschfrist), bleiben seine Stimmen gezählt
   - sonst änderten sich Ergebnisse rückwirkend -, verlieren aber den Namen.
+
+### Teilnehmendenkonten aus dem Verbund
+
+Gäste mit einem Teilnehmendenkonto in rsvp-app ("Mein Konto") können im Modus `ACCOUNT` abstimmen,
+ohne dass hier ein Konto entsteht (suite-kit v0.2.0, Teilnehmenden-Bestätigung; `app/lib/participant.ts`).
+
+* **Einschalten** an zwei Stellen in der Env: in rsvp-app dieses Tool in `SUITE_PARTICIPANT_APPS`, hier beim
+  rsvp-app-Eintrag in `SUITE_IDPS` `"participants": true`. Dann zeigt eine Abstimmung im Modus `ACCOUNT` ohne
+  Anmeldung zusätzlich "Mit deinem Konto bei … abstimmen".
+* **Ablauf:** `/api/suite/login?mode=participant` → rsvp-app (`kind=participant`): Gast-Login, beim ersten Mal
+  eine Zustimmungsseite, die sagt, was übertragen wird → zurück zur Abstimmung. Übertragen werden nur der
+  **Name** und eine **paarweise Kennung** (nur dieses Tool bekommt sie, keine E-Mail). rsvp-app bestätigt nur
+  bestätigte Konten.
+* **Strikt getrennt von Verwaltungskonten:** eigene Tabellen `Participant`/`ParticipantSession`, eigenes Cookie
+  `__Host-participant`. Eine solche Anmeldung kann keine Verwaltungsseite öffnen und legt nie ein `User` an. Eine
+  Login-Bestätigung (z.B. von einem Anbieter mit älterer suite-kit-Version, der `kind` nicht kennt) wird für
+  diesen Ablauf als falscher Typ abgelehnt.
+* `voterKey = participant:<Participant.id>`, Art weiterhin `ACCOUNT`; als Name steht der von rsvp-app gelieferte
+  Name. Ist man zugleich mit einem Verwaltungskonto angemeldet, zählt dieses.
+* **Sitzung 24 Stunden:** Danach geht die Anmeldung wieder über rsvp-app - ein dort gelöschtes Konto oder eine
+  entzogene Freigabe ("Konto-Einstellungen" in rsvp-app) kommt so spätestens nach einem Tag nicht mehr durch.
+  Wird `participants` abgeschaltet, gelten bestehende Sitzungen sofort nicht mehr; Stimmen bleiben gezählt.
+* **Nicht erreichbar:** Von Teilnehmenden kennt dieses Tool keine Adresse - die Benachrichtigung nach einer
+  Terminabstimmung erreicht sie nicht (rsvp-app benachrichtigt seine Gäste selbst, wenn eines seiner Events den
+  Termin übernimmt).
+* **Löschfrist:** wie Konten, 2 Jahre ohne Anmeldung; Stimmen bleiben gezählt, verlieren den Namen.
 
 ## Verifizierte Abstimmungen (Modus `RSVP`)
 
@@ -624,6 +649,7 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
   über ein verbundenes Tool). **Konten mit Admin-Rolle sind ausgenommen**, ebenso Konten, denen noch
   eine Abstimmung oder Live-Runde gehört.
+* **Teilnehmendenkonten aus dem Verbund** (`Participant`): 2 Jahre ohne Anmeldung, Stimmen bleiben ohne Namen.
 * **Live-Runden** samt Teilnehmenden und Antworten: 18 Monate nach dem Beenden (sonst nach der letzten
   Änderung). PINs von Runden, an denen sich 24 Stunden nichts getan hat, werden freigegeben.
 * Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
@@ -663,7 +689,7 @@ npx playwright install chromium   # einmalig
 npm run test:e2e
 ```
 
-Abgedeckt sind der Konten-Verbund (`suite.spec.ts`), die Stimmabgabe samt
+Abgedeckt sind der Konten-Verbund (`suite.spec.ts`; Teilnehmendenkonten: `participant.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie
 Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
 (`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`), die

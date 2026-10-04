@@ -3,6 +3,7 @@ import type { VoterIdentity } from '@prisma/client'
 import { getOrCreateVoterToken, getVoterToken } from './voter'
 import { verifyRsvpToken } from './rsvp-verification'
 import { getCurrentUser } from './auth'
+import { getCurrentParticipant } from './participant'
 import { prisma } from './prisma'
 import { findVoterLink, secretBallotKey } from './voter-links'
 import { getConfirmedEmail, isEmailAllowed } from './email-voters'
@@ -24,6 +25,8 @@ export type Voter = {
   linkId?: string
   /** Nur geheime Wahl: Stimme ohne Zeitstempel/zeitlich sortierbare ID speichern (siehe replaceVotes). */
   secret?: boolean
+  /** Nur Modus ACCOUNT mit Teilnehmendenkonto: Anzeigename des Anbieters ("über rsvp-app"). */
+  via?: string
 }
 
 /**
@@ -71,6 +74,11 @@ export function voterKey(kind: VoterIdentity, raw: string): string {
   return `${kind.toLowerCase()}:${raw}`
 }
 
+/** Schlüssel einer Stimme mit Teilnehmendenkonto (Modus ACCOUNT, siehe schema.prisma Participant). */
+export function participantVoterKey(participantId: string): string {
+  return `participant:${participantId}`
+}
+
 /** Was eine Anfrage an Identitäts-Nachweisen mitbringt (URL-Parameter bzw. versteckte Formularfelder). */
 export type IdentityParams = { verifyToken?: string | null; linkToken?: string | null }
 
@@ -105,8 +113,14 @@ export async function resolveVoter(
       // Jedes Konto dieses Tools, auch ein über den Verbund angelegtes (siehe README "Konten").
       // Schlüssel ist die Konto-ID, nie die E-Mail - die lässt sich ändern.
       const user = await getCurrentUser()
-      if (!user) return { voter: null, block: 'account-missing' }
-      return { voter: { kind: 'ACCOUNT', key: voterKey('ACCOUNT', user.id), name: user.name || user.email }, block: null }
+      if (user) return { voter: { kind: 'ACCOUNT', key: voterKey('ACCOUNT', user.id), name: user.name || user.email }, block: null }
+      // Sonst ein Teilnehmendenkonto aus dem Verbund (app/lib/participant.ts). Gleiche Art ACCOUNT,
+      // aber eigenes Präfix - Konto-IDs und Teilnehmenden-IDs können so nie zusammenfallen.
+      const participant = await getCurrentParticipant()
+      if (participant) {
+        return { voter: { kind: 'ACCOUNT', key: participantVoterKey(participant.id), name: participant.name, via: participant.providerLabel }, block: null }
+      }
+      return { voter: null, block: 'account-missing' }
     }
     case 'LINK': {
       const link = await findVoterLink(poll.id, input.linkToken)

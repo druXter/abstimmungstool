@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
 import { safeEqual } from '../../../lib/permissions'
-import { voterKey } from '../../../lib/voter-identity'
+import { participantVoterKey, voterKey } from '../../../lib/voter-identity'
 
 // Bewusst dieselben Fristen wie in rsvp-app (dort app/api/cron/cleanup/route.ts), damit die
 // Tools der Suite einheitlich mit Daten umgehen und die Datenschutzerklärungen dieselben
@@ -25,7 +25,8 @@ const LIVE_PIN_IDLE_HOURS = 24
  *    sollen nicht automatisiert verschwinden). Ein Konto, das noch Abstimmungen besitzt,
  *    bleibt bestehen: Dass sie die Frist aus Punkt 1 überlebt haben, heißt, dass sie noch
  *    "leben" - ihre Stimmen anderer Leute sollen nicht stillschweigend ohne Besitzer enden.
- * 3. Räumt Technisches auf: abgelaufene Sitzungen, abgelaufene Einladungs-/Reset-Links,
+ *    Ebenso Teilnehmendenkonten aus dem Verbund (Participant) nach derselben Frist.
+ * 3. Räumt Technisches auf: abgelaufene Sitzungen (auch die von Teilnehmenden), abgelaufene Einladungs-/Reset-Links,
  *    veraltete Drossel-Zähler, nie bestätigte E-Mail-Anfragen.
  * 4. Live-Runden (samt Teilnehmenden und Antworten) mit derselben Frist wie Abstimmungen - "zu Ende"
  *    ist dort das Beenden, sonst die letzte Änderung. PINs von Runden, an denen sich seit
@@ -96,6 +97,16 @@ export async function GET(request: Request) {
   })
   await prisma.user.deleteMany({ where: { id: { in: inactiveUsers.map(u => u.id) } } })
 
+  // Teilnehmendenkonten aus dem Verbund: gleiche Frist wie Konten (2 Jahre ohne Anmeldung). Ihre
+  // Stimmen bleiben gezählt, verlieren aber den Namen; Sitzungen verschwinden per Cascade.
+  const inactiveParticipants = await prisma.participant.findMany({ where: { lastLoginAt: { lt: inactivityCutoff } }, select: { id: true } })
+  await prisma.vote.updateMany({
+    where: { voterKey: { in: inactiveParticipants.map(p => participantVoterKey(p.id)) } },
+    data: { voterName: null }
+  })
+  await prisma.participant.deleteMany({ where: { id: { in: inactiveParticipants.map(p => p.id) } } })
+  await prisma.participantSession.deleteMany({ where: { expiresAt: { lt: now } } })
+
   await prisma.session.deleteMany({ where: { expiresAt: { lt: now } } })
   await prisma.user.updateMany({
     where: { resetTokenExpiresAt: { lt: now } },
@@ -110,6 +121,7 @@ export async function GET(request: Request) {
     success: true,
     deletedPolls: pollIds.length,
     deletedLiveSessions,
-    deletedInactiveUsers: inactiveUsers.length
+    deletedInactiveUsers: inactiveUsers.length,
+    deletedInactiveParticipants: inactiveParticipants.length
   })
 }

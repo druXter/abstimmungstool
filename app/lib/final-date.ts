@@ -31,7 +31,8 @@ export function finalDateLabel(startsAt: Date): string {
  * Wie die Abstimmenden erreichbar sind - je Art der Stimmabgabe:
  * - EMAIL: die bestätigte Adresse; LINK: die beim Ausstellen eingetragene Adresse (auch bei
  *   geheimer Wahl - dort ist bekannt, WER abgestimmt hat, nur nicht wofür).
- * - ACCOUNT: Push auf den Geräten des Kontos, sonst Mail an seine Adresse.
+ * - ACCOUNT: Push auf den Geräten des Kontos, sonst Mail an seine Adresse. Teilnehmendenkonten aus dem
+ *   Verbund ("participant:…") sind nicht erreichbar - von ihnen kennt dieses Tool keine Adresse.
  * - RSVP: die von rsvp-app bestätigte Adresse - separat, weil rsvp-app diese Personen selbst
  *   benachrichtigt, sobald eines seiner Events den Termin übernommen hat.
  * - COOKIE: niemand (anonym) - die Oberfläche sagt das.
@@ -47,7 +48,7 @@ export async function voterContacts(pollId: string): Promise<VoterContacts> {
     const raw = voterKey.slice(voterKey.indexOf(':') + 1)
     if (identityKind === 'EMAIL') mail.add(raw)
     else if (identityKind === 'RSVP') rsvpMail.add(raw)
-    else if (identityKind === 'ACCOUNT') accountIds.push(raw)
+    else if (identityKind === 'ACCOUNT' && voterKey.startsWith('account:')) accountIds.push(raw)
   }
   const links = await prisma.voterLink.findMany({ where: { pollId, hasVoted: true, email: { not: null } }, select: { email: true } })
   for (const link of links) mail.add(link.email!)

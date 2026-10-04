@@ -2,7 +2,7 @@
 import Link from 'next/link'
 
 // ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
-// Föderation, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP und Live-Runden, 2026-10-04). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP und Live-Runden, 2026-10-04). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -99,6 +99,16 @@ export default function DatenschutzPage() {
             Ebenso kann eine Abstimmung <strong>nur mit Konto</strong> möglich sein. Dann speichern wir zu deiner
             Stimme die Kennung deines Kontos und deinen Kontonamen (ohne Namen deine E-Mail-Adresse). Wird dein Konto
             gelöscht, bleibt die Stimme gezählt, der Name wird aber entfernt.
+          </p>
+          <p className="mt-2">
+            <strong>Mit deinem Teilnehmendenkonto aus rsvp-app (optional):</strong> Ist es eingerichtet, kannst du bei
+            einer solchen Abstimmung auch mit deinem Konto aus <em>rsvp-app</em> (&quot;Mein Konto&quot;) abstimmen. Nach
+            deiner Zustimmung dort übermittelt rsvp-app uns eine etwa eine Minute gültige, digital signierte Bestätigung
+            mit <strong>deinem Namen und einer Kennung, die nur für dieses Tool gilt</strong> - keine E-Mail-Adresse und
+            keine anderen Angaben aus rsvp-app. Wir speichern Name, Kennung und den Zeitpunkt deiner letzten Anmeldung;
+            deine Stimme speichern wir mit deinem Namen. Dein Browser bekommt dafür eine Anmeldung als Cookie{' '}
+            <code>__Host-participant</code> (24 Stunden, siehe Punkt 9). Ein Konto mit Verwaltungsrechten entsteht
+            dabei nicht. Rechtsgrundlage ist die Durchführung der Abstimmung (Art. 6 Abs. 1 lit. b DSGVO).
           </p>
           <p className="mt-2">
             <strong>Bestätigte E-Mail-Adresse:</strong> Bei einer so eingestellten Abstimmung gibst du deine
@@ -215,6 +225,7 @@ export default function DatenschutzPage() {
             <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
             <li><code>live_…</code> - nur bei Live-Runden: deine zufällige Kennung in dieser Runde (12 Stunden)</li>
             <li><code>__Host-session</code> - Anmeldung an deinem Konto (30 Tage)</li>
+            <li><code>__Host-participant</code> - nur bei Abstimmung mit deinem Teilnehmendenkonto aus rsvp-app: deine Anmeldung zum Abstimmen (24 Stunden)</li>
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
             <li><code>invite_link</code> - nur kurz (2 Minuten), wenn ein Konto einen Einladungslink zum Weitergeben angezeigt bekommt</li>
           </ul>
@@ -267,7 +278,9 @@ export default function DatenschutzPage() {
             Anlage). Die Ersteller:in kann sie jederzeit früher selbst löschen.
           </p>
           <p className="mt-2">
-            Live-Runden samt Spitznamen, Antworten und Punkten werden ebenfalls spätestens <strong>18 Monate nach
+            Mit einem Teilnehmendenkonto aus rsvp-app gespeicherte Angaben (Name, Kennung) löschen wir automatisch, wenn
+            du dich <strong>2 Jahre</strong> lang nicht mehr darüber angemeldet hast; deine Stimmen bleiben dann ohne
+            Namen gezählt. Live-Runden samt Spitznamen, Antworten und Punkten werden ebenfalls spätestens <strong>18 Monate nach
             ihrem Ende</strong> (ohne Ende: nach der letzten Änderung) gelöscht. Wer die Runde verwaltet, kann sie
             jederzeit früher löschen oder &quot;neu starten&quot; - dann sind Spitznamen und Antworten sofort weg.
           </p>

@@ -18,6 +18,7 @@ import {
   clearFailures, clientIp, loginRules, passwordChangeRule, refund, reserve, resetRules
 } from './lib/throttle'
 import { sendInviteEmail, sendPasswordResetEmail } from './lib/mail'
+import { destroyParticipantSession } from './lib/participant'
 
 const INVITE_VALID_MS = 7 * 24 * 60 * 60 * 1000
 const RESET_VALID_MS = 60 * 60 * 1000
@@ -78,6 +79,12 @@ export async function loginUser(formData: FormData) {
 export async function logoutUser() {
   await destroySession()
   redirect('/')
+}
+
+/** Abmelden eines Teilnehmendenkontos (app/lib/participant.ts) - zurück auf die Abstimmung, von der aus es ging. */
+export async function logoutParticipant(formData: FormData) {
+  await destroyParticipantSession()
+  redirect(sanitizeNextPath(formString(formData, 'next', 200), '/'))
 }
 
 /**
