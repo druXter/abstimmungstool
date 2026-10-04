@@ -63,6 +63,13 @@ export default async function MeineAbstimmungenPage() {
     }
   })
 
+  // Live-Runden (app/lib/live.ts) gehören nur ihrem Konto (kein Teilen), Admins sehen alle.
+  const liveSessions = await prisma.liveSession.findMany({
+    where: isAdmin ? {} : { ownerId: user.id },
+    orderBy: { createdAt: 'desc' },
+    select: { id: true, title: true, createdAt: true, phase: true, ownerId: true, owner: { select: { email: true } } }
+  })
+
   const mine = polls.filter(p => p.ownerId === user.id)
   const others = polls.filter(p => p.ownerId !== user.id)
 
@@ -72,13 +79,18 @@ export default async function MeineAbstimmungenPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Meine Abstimmungen</h1>
           {canCreatePolls(user) && (
-            <Link href="/erstellen" className="bg-blue-600 text-white text-sm font-bold py-2 px-4 rounded hover:bg-blue-700 transition">
-              Neue Abstimmung
-            </Link>
+            <div className="flex gap-2">
+              <Link href="/live/neu" className="bg-purple-600 text-white text-sm font-bold py-2 px-4 rounded hover:bg-purple-700 transition">
+                Neue Live-Runde
+              </Link>
+              <Link href="/erstellen" className="bg-blue-600 text-white text-sm font-bold py-2 px-4 rounded hover:bg-blue-700 transition">
+                Neue Abstimmung
+              </Link>
+            </div>
           )}
         </div>
 
-        {polls.length === 0 && (
+        {polls.length === 0 && liveSessions.length === 0 && (
           <div className="bg-white p-6 rounded-lg shadow text-sm text-gray-600">
             {canCreatePolls(user)
               ? 'Du hast noch keine Abstimmung angelegt.'
@@ -88,6 +100,30 @@ export default async function MeineAbstimmungenPage() {
 
         <PollList title="Von mir" polls={mine} />
         <PollList title={isAdmin ? 'Alle anderen (Administrator-Ansicht)' : 'Mit mir geteilt'} polls={others} showOwner />
+
+        {liveSessions.length > 0 && (
+          <div className="bg-white p-6 rounded-lg shadow">
+            <h2 className="font-bold mb-3">Live-Runden</h2>
+            <ul className="divide-y">
+              {liveSessions.map(live => (
+                <li key={live.id} className="py-3 flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <Link href={`/live/${live.id}/verwalten`} className="font-medium text-blue-700 hover:underline truncate block">
+                      {live.title}
+                    </Link>
+                    <div className="text-xs text-gray-500">
+                      {live.createdAt.toLocaleDateString('de-DE')}
+                      {live.ownerId !== user.id && ` · von ${live.owner.email}`}
+                    </div>
+                  </div>
+                  <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${live.phase === 'FINISHED' ? 'bg-gray-100 text-gray-600' : 'bg-purple-100 text-purple-800'}`}>
+                    {live.phase === 'FINISHED' ? 'beendet' : live.phase === 'LOBBY' ? 'Lobby' : 'läuft'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
     </main>
   )

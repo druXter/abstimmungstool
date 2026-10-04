@@ -9,6 +9,7 @@ import { voterKey } from '../../../lib/voter-identity'
 // Zeiträume nennen können.
 const POLL_RETENTION_MONTHS = 18
 const ACCOUNT_INACTIVITY_YEARS = 2
+const LIVE_PIN_IDLE_HOURS = 24
 
 /**
  * Automatischer Cron-Endpoint für Uptime Kuma (Speicherbegrenzung, Art. 5 Abs. 1 lit. e
@@ -26,6 +27,9 @@ const ACCOUNT_INACTIVITY_YEARS = 2
  *    "leben" - ihre Stimmen anderer Leute sollen nicht stillschweigend ohne Besitzer enden.
  * 3. Räumt Technisches auf: abgelaufene Sitzungen, abgelaufene Einladungs-/Reset-Links,
  *    veraltete Drossel-Zähler, nie bestätigte E-Mail-Anfragen.
+ * 4. Live-Runden (samt Teilnehmenden und Antworten) mit derselben Frist wie Abstimmungen - "zu Ende"
+ *    ist dort das Beenden, sonst die letzte Änderung. PINs von Runden, an denen sich seit
+ *    LIVE_PIN_IDLE_HOURS nichts getan hat, werden freigegeben (beim Öffnen der Leinwand gibt es eine neue).
  */
 export async function GET(request: Request) {
   const secret = new URL(request.url).searchParams.get('secret')
@@ -63,11 +67,25 @@ export async function GET(request: Request) {
     prisma.poll.deleteMany({ where: { id: { in: pollIds } } })
   ])
 
+  // Teilnehmende, Fragen und Antworten verschwinden per Cascade mit der Runde.
+  const { count: deletedLiveSessions } = await prisma.liveSession.deleteMany({
+    where: {
+      OR: [
+        { finishedAt: { lt: pollCutoff } },
+        { finishedAt: null, updatedAt: { lt: pollCutoff } }
+      ]
+    }
+  })
+  await prisma.liveSession.updateMany({
+    where: { pin: { not: null }, updatedAt: { lt: new Date(now.getTime() - LIVE_PIN_IDLE_HOURS * 60 * 60 * 1000) } },
+    data: { pin: null }
+  })
+
   const inactivityCutoff = new Date(now)
   inactivityCutoff.setFullYear(inactivityCutoff.getFullYear() - ACCOUNT_INACTIVITY_YEARS)
 
   const inactiveUsers = await prisma.user.findMany({
-    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} } },
+    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} }, liveSessions: { none: {} } },
     select: { id: true }
   })
   // Sitzungen, Verknüpfungen und Freigaben verschwinden per Cascade mit dem Konto. Stimmen im
@@ -91,6 +109,7 @@ export async function GET(request: Request) {
   return NextResponse.json({
     success: true,
     deletedPolls: pollIds.length,
+    deletedLiveSessions,
     deletedInactiveUsers: inactiveUsers.length
   })
 }

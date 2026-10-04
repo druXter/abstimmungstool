@@ -2,7 +2,7 @@
 import Link from 'next/link'
 
 // ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
-// Föderation und alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, 2026-09-30). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// Föderation, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP und Live-Runden, 2026-10-04). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -74,6 +74,15 @@ export default function DatenschutzPage() {
             <strong>Zugangscode (optional):</strong> Ist eine Abstimmung mit einem Zugangscode geschützt und du gibst
             ihn richtig ein, merkt sich dein Browser das (Cookie <code>poll_access_…</code>, siehe Punkt 9). Es enthält
             nur einen Prüfwert, weder den Code selbst noch Angaben zu dir.
+          </p>
+          <p className="mt-2">
+            <strong>Live-Runden (Quiz/Umfrage im Raum):</strong> Trittst du einer Live-Runde mit PIN bei, speichern wir
+            den von dir gewählten <strong>Spitznamen</strong>, deine Antworten, die Zeit vom Beginn der Frage bis zu
+            deiner Antwort und die daraus berechneten Punkte. Dein Browser bekommt eine zufällige Kennung (Cookie{' '}
+            <code>live_…</code>, 12 Stunden, siehe Punkt 9), bei uns liegt nur ein nicht umkehrbarer Hash davon. Der
+            Spitzname ist für alle im Raum auf der Leinwand und in der Rangliste sichtbar; wer die Runde verwaltet,
+            sieht zusätzlich auf der Verwaltungsseite die Rangliste mit allen Punkten. Wähle daher am besten keinen
+            vollen Namen. Ein Konto brauchst du nicht.
           </p>
         </div>
 
@@ -172,8 +181,8 @@ export default function DatenschutzPage() {
           <p className="mt-2">
             Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
-            Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes und erste Stimmabgaben in
-            offenen Abstimmungen. Dazu wird
+            Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes, erste Stimmabgaben in
+            offenen Abstimmungen sowie eingegebene PINs und Beitritte bei Live-Runden. Dazu wird
             deine <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
             (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
@@ -204,6 +213,7 @@ export default function DatenschutzPage() {
             <li><code>voter_token</code> - zufällige Kennung für deine Stimme (1 Jahr)</li>
             <li><code>poll_email_…</code> - nur bei Abstimmungen mit E-Mail-Bestätigung: merkt sich deine bestätigte Adresse (30 Tage, nur für diese Abstimmung)</li>
             <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
+            <li><code>live_…</code> - nur bei Live-Runden: deine zufällige Kennung in dieser Runde (12 Stunden)</li>
             <li><code>__Host-session</code> - Anmeldung an deinem Konto (30 Tage)</li>
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
             <li><code>invite_link</code> - nur kurz (2 Minuten), wenn ein Konto einen Einladungslink zum Weitergeben angezeigt bekommt</li>
@@ -257,10 +267,15 @@ export default function DatenschutzPage() {
             Anlage). Die Ersteller:in kann sie jederzeit früher selbst löschen.
           </p>
           <p className="mt-2">
+            Live-Runden samt Spitznamen, Antworten und Punkten werden ebenfalls spätestens <strong>18 Monate nach
+            ihrem Ende</strong> (ohne Ende: nach der letzten Änderung) gelöscht. Wer die Runde verwaltet, kann sie
+            jederzeit früher löschen oder &quot;neu starten&quot; - dann sind Spitznamen und Antworten sofort weg.
+          </p>
+          <p className="mt-2">
             Ein Konto wird automatisch gelöscht, wenn du dich <strong>2 Jahre</strong> lang nicht mehr angemeldet
-            hast und dir keine Abstimmung mehr gehört - inklusive Sitzungen, Verknüpfungen zu anderen Tools und
+            hast und dir keine Abstimmung oder Live-Runde mehr gehört - inklusive Sitzungen, Verknüpfungen zu anderen Tools und
             Freigaben. Administrator-Konten sind von dieser automatischen Löschung ausgenommen. Unabhängig davon kannst
-            du jederzeit unter der oben genannten Adresse um frühere Löschung deines Kontos bitten; seine Abstimmungen
+            du jederzeit unter der oben genannten Adresse um frühere Löschung deines Kontos bitten; seine Abstimmungen und Live-Runden
             gehen dann an einen Administrator über, damit die Stimmen anderer Personen nicht stillschweigend ohne
             Besitzer bleiben.
           </p>

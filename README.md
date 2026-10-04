@@ -64,6 +64,9 @@ anlegt und verwaltet (siehe "Konten" unten).
   Einstellungen), vorzeitig Schließen, Löschen und Teilen - siehe "Konten".
 * **Gemeinsam moderieren:** Eine Abstimmung lässt sich mit anderen Konten teilen; diese
   können sie bearbeiten und schließen.
+* **Live-Runden wie bei Kahoot** - siehe "Live-Runden" unten: mehrere Fragen, die die Verwaltung
+  Frage für Frage auf einer Leinwand vorführt; alle antworten gleichzeitig auf dem Handy (PIN +
+  Spitzname, kein Konto), optional als Quiz mit Punkten, Rangliste und Siegertreppchen.
 * **Komfort auf der Verwaltungsseite:** CSV-Export, QR-Code zum Abstimmungslink,
   Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
   optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
@@ -435,6 +438,54 @@ weist in allen Modi mit Namen darauf hin, wer sie sieht.
   danach bei Verfehlen "nicht beschlussfähig" (Seiten, CSV, Mail, rsvp-app). Die Auswertung liegt
   an einer Stelle (`app/lib/results.ts`).
 
+## Live-Runden (wie Kahoot)
+
+Eine eigene Art neben der Abstimmung (`LiveSession` mit `LiveQuestion`/`LiveAnswer`, Teilnehmende
+`LivePlayer`, Antworten `LiveResponse`; Logik in `app/lib/live.ts`, Aktionen in `app/live-actions.ts`):
+Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleichzeitig auf dem Handy.
+
+* **Anlegen** (`/live/neu`, Creator/Admin, auch über "Meine Abstimmungen"): Titel, bis 50 Fragen mit je
+  2-6 Antworten und einem Zeitlimit (5-240 s oder ohne). Ist mindestens eine Antwort als richtig
+  markiert, ist es eine **Quizfrage** (Punkte), sonst eine **Umfragefrage**. Bearbeiten nur, solange
+  niemand geantwortet hat.
+* **Beitreten** ohne Konto auf `/live` (auch über das Feld auf der Startseite): 6-stellige PIN von der
+  Leinwand bzw. QR-Code (füllt die PIN vor) und ein Spitzname (eindeutig pro Runde, Groß-/Kleinschreibung
+  egal, höchstens 24 Zeichen). Der Browser bekommt ein Cookie `live_<id>` (12 Stunden), in der Datenbank
+  liegt nur dessen SHA-256-Hash. Wer das Cookie hat, kommt über PIN oder Link wieder ins Spiel.
+* **Leinwand** (`/live/<id>/praesentieren`, nur Owner und Admins; deckt die Seite ganz ab, Knopf
+  "Vollbild"): Lobby mit PIN, QR-Code und Teilnehmenden (antippen = entfernen), "Beitritt sperren" →
+  Frage mit Countdown und "x von y haben geantwortet" → Auflösung (Verteilung, richtige Antwort) →
+  Rangliste (nur nach Quizfragen, Top 5) → … → Siegertreppchen (Top 10, bei reinen Umfragen "Danke").
+  Weiter schaltet nur die Verwaltung; eine Frage löst sich zusätzlich von selbst auf, wenn die Zeit um ist
+  oder alle geantwortet haben. Jeder Schritt trägt die gesehene `version` mit - ein Doppelklick oder eine
+  zweite Leinwand schaltet nicht doppelt weiter.
+* **Handy:** farbige Knöpfe mit denselben Formen wie auf der Leinwand (Dreieck, Raute, Kreis, Quadrat,
+  Stern, Sechseck), die **erste Antwort zählt**, danach "richtig/falsch", Punkte und Platz.
+* **Punkte wie bei Kahoot** (`pointsFor`): richtig = 1000 × (1 − Antwortzeit / Zeitlimit / 2), also
+  500-1000 je nach Schnelligkeit, ohne Zeitlimit 1000; falsch oder keine Antwort = 0. Die Zeit misst der
+  Server ab Fragebeginn, Antworten bis 1 s nach Ablauf zählen noch (Netzlaufzeit).
+* **Echtzeit per Long-Polling** (`app/api/live/[id]/route.ts`): Die Ansicht fragt mit dem Fingerabdruck
+  der zuletzt gesehenen Daten; der Server antwortet sofort bei einer Änderung, sonst nach spätestens
+  25 s. Geweckt wird über ein prozessinternes Signal (`notifyLive`, an `globalThis`, weil Next.js Route
+  Handler und Server Actions getrennt bündelt), zur Sicherheit wird alle 5 s und zum Ende des Zeitlimits
+  selbst nachgesehen. Antworten und Beitritte wecken nur die Leinwand, nicht alle Handys. Bewusst kein
+  WebSocket/SSE: normale HTTP-Antworten laufen ohne Sonderkonfiguration durch Cloudflare und Nginx.
+  Läuft das Tool je in mehreren Prozessen, funktioniert es weiter, nur mit bis zu 5 s Verzögerung.
+* **Vor der Auflösung** enthält keine Ansicht (auch nicht die der Leinwand) die richtige Antwort oder die
+  Verteilung.
+* **Verwaltungsseite** (`/live/<id>/verwalten`): Beitrittslink mit QR-Code, Ergebnisse je Frage,
+  Rangliste, "Neu starten" (Teilnehmende und Antworten löschen, neue PIN - für die nächste Gruppe mit
+  denselben Fragen) und Löschen. Teilen mit anderen Konten gibt es (noch) nicht; Admins sehen alle
+  Runden. Wird ein Konto gelöscht, gehen seine Runden wie seine Abstimmungen an den löschenden Admin.
+* **Schutz:** falsche PINs zählen pro IP (30 in 15 Minuten, ein erfolgreicher Beitritt gibt seinen
+  Versuch zurück), Beitritte pro IP und Runde (200 pro Stunde - eine ganze Klasse sitzt oft hinter einer
+  Adresse), höchstens 500 Teilnehmende pro Runde. Spitznamen werden nicht geprüft - die Leinwand zeigt
+  alle und kann entfernen bzw. den Beitritt sperren.
+* **PINs** sind nur vergeben, solange eine Runde nicht beendet ist. Der Cleanup-Cron gibt PINs von
+  Runden frei, an denen sich 24 Stunden nichts getan hat; beim Öffnen der Leinwand gibt es eine neue.
+* **Grenze:** Wer sein Cookie löscht, kann mit neuem Spitznamen erneut beitreten (für ein Spiel im Raum
+  akzeptiert, die Leinwand sieht es).
+
 ## Ergebnis-Meldung an rsvp-app
 
 Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
@@ -561,7 +612,9 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
   Abstimmung ohne Frist zählt ab Anlage).
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
   über ein verbundenes Tool). **Admin-Konten sind ausgenommen**, ebenso Konten, denen noch
-  eine Abstimmung gehört.
+  eine Abstimmung oder Live-Runde gehört.
+* **Live-Runden** samt Teilnehmenden und Antworten: 18 Monate nach dem Beenden (sonst nach der letzten
+  Änderung). PINs von Runden, an denen sich 24 Stunden nichts getan hat, werden freigegeben.
 * Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
   bestätigte E-Mail-Anfragen (Modus `EMAIL`) nach Ablauf ihres Links.
 
@@ -605,7 +658,9 @@ Klick-Tokens und Webhooks mit einem Test-Secret signieren), die Hürden
 (`hurdles.spec.ts`), die persönlichen Stimmlinks (`links.spec.ts`), die
 E-Mail-Bestätigung samt Mailversand (`email.spec.ts`), Export, Duplizieren, Ergebnis-Mail,
 Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Übergabe an rsvp-app
-(`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642). Mails fängt ein kleiner
+(`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642) und die Live-Runden
+(`live.spec.ts`: Leinwand und mehrere Handys als eigene Browser-Kontexte im Gleichtakt, Punkte,
+Zeitablauf, Entfernen, Berechtigungen). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
 (`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den

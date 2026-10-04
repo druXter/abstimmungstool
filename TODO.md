@@ -101,6 +101,32 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 
 ---
 
+## E. Live-Abstimmungsmodus wie bei Kahoot (neu 2026-10-04)
+
+Eigene Art neben der Abstimmung: eine **Live-Runde** mit mehreren Fragen, die die Verwaltung im Raum auf einer
+Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
+- [x] Anlegen/Bearbeiten: Titel, Fragen mit 2-6 Antworten, Zeitlimit je Frage (oder ohne), optional richtige
+      Antwort(en) markieren → Quizfrage mit Punkten, sonst reine Umfragefrage. Bearbeiten nur, solange noch niemand
+      geantwortet hat.
+- [x] Beitritt ohne Konto: 6-stellige PIN auf `/live` (oder QR-Code mit vorausgefüllter PIN) + Spitzname. Cookie
+      pro Runde (nur Hash in der DB), Spitznamen eindeutig. PIN-Raten und Massen-Beitritte drosseln.
+- [x] Präsentationsansicht (Leinwand): Lobby mit PIN, QR-Code und Teilnehmenden (entfernen, Beitritt sperren) →
+      Frage mit Countdown und "x von y haben geantwortet" → Auflösung (Verteilung, richtige Antwort) → Rangliste →
+      … → Siegertreppchen. Die Verwaltung schaltet weiter, Zeitablauf oder "alle haben geantwortet" lösen auf.
+- [x] Teilnehmendenansicht: farbige Antwortknöpfe (Kahoot-Formen), erste Antwort zählt, danach eigenes Ergebnis,
+      Punkte und Platz.
+- [x] Punkte wie bei Kahoot: richtig = 500-1000 je nach Schnelligkeit (ohne Zeitlimit 1000), falsch = 0.
+- [x] Echtzeit ohne Zusatzdienst: Long-Polling auf einen Route Handler (wacht über ein prozessinternes Signal sofort
+      auf, prüft sonst alle 2 s die DB) - funktioniert hinter Cloudflare/Nginx ohne Sonderkonfiguration.
+- [x] Ergebnisse danach auf der Verwaltungsseite, "Neu starten" (Teilnehmende/Antworten löschen, neue PIN), Löschen,
+      Löschfristen wie bei Abstimmungen. README und Datenschutzerklärung (Spitzname, Antworten, Antwortzeit, Cookie).
+- Umgesetzt (2026-10-04): `app/lib/live.ts`, `app/live-actions.ts`, `app/api/live/[id]/route.ts`, Seiten unter
+  `app/live/`, Tests `tests/e2e/live.spec.ts`, README-Abschnitt "Live-Runden".
+- [ ] Ideen für später: Live-Runde mit anderen Konten teilen (wie `PollAccess`), CSV-Export der Ergebnisse,
+      weitere Fragearten (Mehrfachauswahl, Schätzfrage, Wortwolke), Bilder zu Fragen.
+
+---
+
 ## D. Suite-Verbund (zum Besprechen, bevor gebaut wird) **[suite-kit] [rsvp-app]**
 
 ### D1. Teilnehmendenkonten im Verbund teilen

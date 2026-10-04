@@ -156,3 +156,17 @@ export function voteEmailRules(ip: string, email: string, pollId: string): Throt
 export function suggestionRule(ip: string, pollId: string): ThrottleRule {
   return { scope: 'suggest:ip', identifier: `${pollId}\u0000${ip}`, limit: 10, windowMs: 60 * MINUTE }
 }
+
+/**
+ * Regeln für den Beitritt zu einer Live-Runde: falsche PINs pro IP (gegen das Durchprobieren der
+ * 6-stelligen PINs - ein erfolgreicher Beitritt gibt seinen Versuch zurück) und Beitritte pro IP
+ * und Runde (gegen das Fluten der Lobby mit Fantasienamen). Großzügig, weil eine ganze Klasse
+ * oder ein Saal oft hinter einer Adresse sitzt.
+ */
+export function livePinRule(ip: string): ThrottleRule {
+  return { scope: 'live:pin:ip', identifier: ip, limit: 30, windowMs: LOGIN_WINDOW_MS }
+}
+
+export function liveJoinRule(ip: string, sessionId: string): ThrottleRule {
+  return { scope: 'live:join:ip', identifier: `${sessionId}\u0000${ip}`, limit: 200, windowMs: 60 * MINUTE }
+}

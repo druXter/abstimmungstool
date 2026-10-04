@@ -25,6 +25,16 @@ export default function Home() {
         <p className="text-sm text-gray-400">
           Zu einer Abstimmung eingeladen? Nutze einfach den Link, den du bekommen hast.
         </p>
+        <form action="/live" className="flex justify-center gap-2">
+          <label htmlFor="home-pin" className="sr-only">PIN der Live-Runde</label>
+          <input
+            id="home-pin" name="pin" inputMode="numeric" maxLength={7} placeholder="PIN der Live-Runde"
+            className="w-48 border border-gray-300 p-2 rounded text-center"
+          />
+          <button type="submit" className="bg-purple-600 text-white font-bold py-2 px-4 rounded hover:bg-purple-700 transition">
+            Beitreten
+          </button>
+        </form>
         <InstallHint />
       </div>
     </main>

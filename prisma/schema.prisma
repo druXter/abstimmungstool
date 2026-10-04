@@ -50,6 +50,7 @@ model User {
   pushSubscriptions PushSubscription[]
   ownedPolls        Poll[]             @relation("PollOwner")
   pollAccess        PollAccess[]
+  liveSessions      LiveSession[]
 }
 
 // Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
@@ -386,4 +387,110 @@ model Vote {
   createdAt    DateTime      @default(now())
 
   @@unique([pollId, voterKey, optionId])
+}
+
+// ---------------------------------------------------------------------------------------
+// Live-Runde (wie Kahoot, siehe app/lib/live.ts und README "Live-Runden"): eine Folge von
+// Fragen, die die Verwaltung im Raum Frage für Frage vorführt (Präsentationsansicht), während
+// die Teilnehmenden ohne Konto per PIN und Spitzname beitreten und auf dem Handy antworten.
+// Bewusst getrennt von Poll: andere Identität (Spitzname pro Runde statt Stimmmodi), ein
+// gemeinsamer Takt statt "abstimmen, solange offen", Fragen statt Optionen.
+
+// Wo die Runde gerade steht. Weiter schaltet nur die Verwaltung - außer QUESTION -> REVEAL,
+// das auch Zeitablauf oder "alle haben geantwortet" auslösen (app/lib/live.ts settleQuestion).
+// LEADERBOARD gibt es nur nach Quizfragen (mit richtiger Antwort).
+enum LivePhase {
+  LOBBY
+  QUESTION
+  REVEAL
+  LEADERBOARD
+  FINISHED
+}
+
+model LiveSession {
+  id                String         @id @default(cuid())
+  title             String
+  ownerId           String
+  owner             User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // 6-stellige Beitritts-PIN, nur solange die Runde läuft (null nach dem Ende und nach langer
+  // Untätigkeit, siehe Cleanup-Cron) - so bleibt der Zahlenraum frei und alte PINs führen nirgends hin.
+  pin               String?        @unique
+  phase             LivePhase      @default(LOBBY)
+  // Index (LiveQuestion.position) der aktuellen Frage, -1 in der Lobby.
+  currentIndex      Int            @default(-1)
+  questionStartedAt DateTime?
+  // Ende des Zeitlimits der aktuellen Frage, null = ohne Zeitlimit (die Verwaltung löst auf).
+  questionEndsAt    DateTime?
+  // Kein Beitritt mehr möglich (von der Verwaltung in der Lobby oder während des Spiels gesetzt).
+  joinLocked        Boolean        @default(false)
+  // Steigt bei jedem Zustandswechsel - daran erkennen die Ansichten beim Long-Polling eine Änderung.
+  version           Int            @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  startedAt         DateTime?
+  finishedAt        DateTime?
+  questions         LiveQuestion[]
+  players           LivePlayer[]
+
+  @@index([ownerId])
+}
+
+model LiveQuestion {
+  id        String         @id @default(cuid())
+  sessionId String
+  session   LiveSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  position  Int
+  text      String
+  // Sekunden, null = ohne Zeitlimit.
+  timeLimit Int?
+  answers   LiveAnswer[]
+  responses LiveResponse[]
+
+  @@unique([sessionId, position])
+}
+
+// Eine Antwortmöglichkeit. Ist bei einer Frage mindestens eine als richtig markiert, ist sie
+// eine Quizfrage (Punkte, Rangliste), sonst eine reine Umfragefrage.
+model LiveAnswer {
+  id         String         @id @default(cuid())
+  questionId String
+  question   LiveQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  position   Int
+  label      String
+  isCorrect  Boolean        @default(false)
+  responses  LiveResponse[]
+}
+
+// Teilnehmende:r einer Runde. Kein Konto: Der Browser hält ein Cookie live_<sessionId> mit einem
+// zufälligen Token, hier liegt nur dessen SHA-256-Hash. nicknameKey (klein geschrieben) macht den
+// Spitznamen pro Runde eindeutig.
+model LivePlayer {
+  id          String         @id @default(cuid())
+  sessionId   String
+  session     LiveSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  nickname    String
+  nicknameKey String
+  tokenHash   String         @unique
+  createdAt   DateTime       @default(now())
+  responses   LiveResponse[]
+
+  @@unique([sessionId, nicknameKey])
+}
+
+// Eine Antwort pro Person und Frage (die erste zählt, wie bei Kahoot). elapsedMs = Zeit seit
+// Fragebeginn laut Server, points = bei der Abgabe berechnete Punkte (0 bei Umfragefragen).
+model LiveResponse {
+  id         String       @id @default(cuid())
+  questionId String
+  question   LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  playerId   String
+  player     LivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  answerId   String
+  answer     LiveAnswer   @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  elapsedMs  Int
+  points     Int          @default(0)
+  createdAt  DateTime     @default(now())
+
+  @@unique([questionId, playerId])
+  @@index([playerId])
 }

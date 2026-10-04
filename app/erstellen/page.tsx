@@ -40,6 +40,11 @@ export default async function ErstellenPage() {
           </Link>
         </div>
 
+        <p className="text-sm text-gray-600">
+          Lieber live im Raum, Frage für Frage auf der Leinwand wie bei Kahoot?{' '}
+          <Link href="/live/neu" className="text-blue-700 hover:underline">Neue Live-Runde</Link>
+        </p>
+
         <form action={createPoll} className="space-y-4">
           <div>
             <label htmlFor="poll-title" className="block text-sm font-medium mb-1">Frage / Titel</label>
