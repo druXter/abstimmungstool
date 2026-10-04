@@ -9,6 +9,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 ## A. Schutz vor Mehrfachabstimmung
 
 ### A0. Grundlage: Identitätsmodell verallgemeinern (Voraussetzung für A1-A5)
+
 - [x] `Poll.voterIdentity` (Enum: `COOKIE`, `LINK`, `EMAIL`, `ACCOUNT`, `RSVP`) ersetzt den Schalter
       `requireRsvpVerification`.
 - [x] `Vote`: `identityKind` + `voterKey` statt `voterToken`/`verifiedEmail`, Eindeutigkeit per
@@ -19,6 +20,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [x] `showVoterNames` auf alle Modi mit Namen/E-Mail verallgemeinern (heute nur mit RSVP wirksam).
 
 ### A1. Persönliche Stimmlinks
+
 - [x] Verwaltung gibt eine Namensliste (oder nur eine Anzahl) ein, pro Person ein Link `/[pollId]?k=…`.
 - [x] In der DB nur der SHA-256-Hash (wie Sessions/Einladungen). Links einzeln widerrufen/neu ausstellen.
 - [x] Verteilen per Kopieren, QR-Code oder - bei gesetztem `SMTP_HOST` - direkt per Mail.
@@ -27,20 +29,24 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
       (wer verteilt, kennt die Zuordnung Link → Person).
 
 ### A2. E-Mail-Bestätigung (Magic Link)
+
 - [x] Offene Abstimmung, vor dem Abstimmen Bestätigungslink an die eigene Adresse (braucht SMTP).
 - [x] Optional Domain-Allowlist (z.B. nur `@verein.de`) oder feste Adressliste.
 - [x] Adressen per `normalizeEmail` vereinheitlichen, Anfragen über `app/lib/throttle.ts` drosseln
       (sonst Mailschleuder).
 
 ### A3. Mit Konto abstimmen
+
 - [x] Mit lokalem Konto bzw. Suite-Konto abstimmen (Sessions/Verbund existieren schon).
 - [ ] Erweiterung auf **Teilnehmendenkonten** aus dem Suite-Verbund, siehe Abschnitt D.
 
 ### A4. Zugangscode pro Abstimmung
+
 - [x] Optionaler Code/PIN, mit jedem Modus kombinierbar. In der Oberfläche klar sagen: hält Fremde fern,
       verhindert keine Mehrfachabstimmung.
 
 ### A5. Hürden für den Cookie-Modus
+
 - [x] Drosselung beim Abstimmen pro IP-Hash und Abstimmung (`LoginThrottle` wiederverwenden), großzügig wegen NAT
       (z.B. 30 neue Identitäten/Stunde). Schließt die README-Grenze "Kein Rate-Limiting beim Abstimmen".
 - [x] Optionales Pflicht-Namensfeld (Namen im Ergebnis sichtbar → soziale Kontrolle).
@@ -105,6 +111,7 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 
 Eigene Art neben der Abstimmung: eine **Live-Runde** mit mehreren Fragen, die die Verwaltung im Raum auf einer
 Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
+
 - [x] Anlegen/Bearbeiten: Titel, Fragen mit 2-6 Antworten, Zeitlimit je Frage (oder ohne), optional richtige
       Antwort(en) markieren → Quizfrage mit Punkten, sonst reine Umfragefrage. Bearbeiten nur, solange noch niemand
       geantwortet hat.
@@ -127,11 +134,34 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
 
 ---
 
-## D. Suite-Verbund (zum Besprechen, bevor gebaut wird) **[suite-kit] [rsvp-app]**
+## D. Suite-Verbund **[suite-kit] [rsvp-app]**
+
+**Besprochen und entschieden (2026-10-04)** - gilt vor den Einzelpunkten darunter, wo sie abweichen:
+- **D1 wird gebaut, schlank:** zunächst nur rsvp-app (Anbieter) → Abstimmungstool (Empfänger, Modus `ACCOUNT`).
+  - Statt eines Felds `kind` ein **eigener Bestätigungstyp** (z.B. `typ: suite-participant+v1`): Ein Tool mit älterer
+    suite-kit-Version würde ein unbekanntes Feld ignorieren und das Konto als Verwaltungskonto anlegen (bei
+    `autoProvision` sogar als Creator) - einen unbekannten Typ lehnt es ab (fail-closed).
+  - Empfänger: eigene Tabelle und eigenes Sitzungs-Cookie für Teilnehmende, nie `User`/`Session`.
+  - Nur `GuestUser.isVerified`; übertragen werden **paarweise Kennung** (`sub` = HMAC über Empfänger + Konto-ID) und
+    Name, **keine E-Mail**. rsvp-app zeigt beim ersten Mal pro Tool, was übertragen wird, und merkt sich die Zustimmung.
+  - RSVP-Token und Webhook bleiben parallel (Gäste ohne Konto haben nur diesen Weg).
+- **Schalter nur in der Env** (keine Settings-Tabelle): Anbieter-Liste der Tools, die Teilnehmende bekommen; Empfänger
+  `participants: true` je Eintrag in `SUITE_IDPS`. Abschalten beendet Teilnehmenden-Sitzungen sofort, Stimmen bleiben
+  gezählt.
+- **Löschung/Sperre beim Anbieter:** kein Webhook, sondern **kurze Sitzungen** für föderierte Teilnehmende (ca. 24 h),
+  danach erneute Anmeldung über rsvp-app.
+- **D2 in allen vier Tools** (rsvp-app, Abstimmungstool, Seating, Zeitplan) und im suite-kit-README.
+- **D3:** Single Logout bewusst nicht (dokumentieren). Löschfrist für föderierte Teilnehmende wie suite-weit (2 Jahre
+  ohne Anmeldung, Stimmen bleiben ohne Namen gezählt). Tool-Umschalter wandert nach `suite-kit/docs/IDEEN.md` P2
+  (gemeinsame Startseite, `SUITE_HOME_URL`). Schlüsselwechsel (`SUITE_SIGNING_KEY_PREVIOUS` gibt es schon) nur
+  dokumentieren und testen.
+- **Reihenfolge:** D2 und Schlüsselwechsel zuerst (unabhängig, risikoarm), dann D1.
 
 ### D1. Teilnehmendenkonten im Verbund teilen
+
 Idee: Neben den Verwaltungskonten (Rollen Admin/Creator/Moderator) auch die **Nutzer-Konten** aus rsvp-app
 (`GuestUser`) im Verbund nutzbar machen, z.B. für A3. Admins schalten das pro Tool an/aus.
+
 - [ ] **Kontoart im Protokoll:** Die signierte Bestätigung braucht ein Feld wie `kind: "staff" | "participant"`.
       Der Empfänger darf ein Teilnehmendenkonto **nie** auf eine Verwaltungsrolle abbilden - Teilnehmende landen
       in einer eigenen Tabelle (z.B. `Participant`), nicht in `User`, damit eine Teilnehmenden-Sitzung
@@ -151,8 +181,10 @@ Idee: Neben den Verwaltungskonten (Rollen Admin/Creator/Moderator) auch die **Nu
 - [ ] Dieselbe Person mit Verwaltungs- **und** Teilnehmendenkonto: bewusst getrennt halten, keine Zusammenführung.
 
 ### D2. Wording vereinheitlichen (alle Tools)
+
 Problem: "Admin-Konten" meint in rsvp-app alle Verwaltungskonten (inkl. Creator/Moderator, Login unter
 `/admin/login`), gleichzeitig ist "Admin" eine Rolle. Vorschlag:
+
 - **Verwaltungskonto** = Konto mit Rolle Admin, Creator oder Moderator (Code: `User`).
 - **Teilnehmendenkonto** = Konto für Gäste/Abstimmende ohne Verwaltungsrechte (rsvp-app: `GuestUser`,
   bisher "Nutzer-Konto").
@@ -161,6 +193,7 @@ Problem: "Admin-Konten" meint in rsvp-app alle Verwaltungskonten (inkl. Creator/
 - [ ] suite-kit-README anpassen ("Gäste ohne Konto … nehmen an der Konto-Föderation nicht teil" gilt dann nicht mehr).
 
 ### D3. Weitere Punkte für später
+
 - [ ] **Konto-Löschung/Sperre weitergeben:** Wird ein Konto beim Anbieter gelöscht, weiß der Empfänger nichts
       davon. Webhook zur Weitergabe oder kurze Sitzungsdauer für föderierte Konten?
 - [ ] **Abmelden in allen Tools (Single Logout):** gibt es nicht - bewusst so lassen oder nachrüsten?
