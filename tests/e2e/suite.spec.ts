@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { BASE_URL, createAccount, login, pageAlert, prisma, unique, uniqueEmail } from './helpers'
-import { setIdentity, SUITE_TOOLS, type TestIdentity } from './suite-server'
+import { setIdentity, setKeys, SUITE_TOOLS, type TestIdentity } from './suite-server'
 
 // Konto-Föderation über suite-kit, Rolle EMPFÄNGER. Die anderen Tools spielt
 // tests/e2e/suite-server.ts: Tool A (autoProvision), Tool B (ohne), Tool C (nicht erreichbar).
@@ -36,6 +36,7 @@ async function startLogin(page: Page, label: string) {
 test.afterEach(() => {
   setIdentity('a', null)
   setIdentity('b', null)
+  setKeys('a', null)
 })
 
 // Name des state-Cookies im Produktionsbetrieb (next start), siehe app/lib/suite-flow.ts.
@@ -179,4 +180,35 @@ test.describe('Login über ein anderes Tool: Fehler bleiben auf /anmelden', () =
     expect(url.searchParams.get('error')).toBe('idp-unreachable')
     await expect(pageAlert(page)).toContainText('Das andere Tool ist gerade nicht erreichbar.')
   })
+})
+
+// Schlüsselwechsel beim Anbieter (suite-kit docs/PROTOCOL.md "Schlüsselwechsel"): Der Empfänger hat
+// das Discovery-Dokument mit dem alten Schlüssel im Cache, lädt es bei einer unbekannten
+// Schlüssel-ID einmal neu und nimmt danach alten (noch veröffentlichten) und neuen Schlüssel an.
+test('Schlüsselwechsel beim Anbieter: neuer Schlüssel nach Neuladen, alter während des Wechsels, fremder nie', async ({ page }) => {
+  const person = identity()
+  setIdentity('a', person)
+  const loginAgain = async () => {
+    await page.context().clearCookies()
+    return startLogin(page, SUITE_TOOLS.a.label)
+  }
+
+  // Vorher: nur der alte Schlüssel - der Empfänger hat ihn danach sicher im Cache.
+  expect((await loginAgain()).pathname).toBe('/meine-abstimmungen')
+
+  // Wechsel: neuer Schlüssel aktiv, alter als SUITE_SIGNING_KEY_PREVIOUS weiter veröffentlicht.
+  setKeys('a', { sign: 'a-neu', publish: ['a-neu', 'a'] })
+  expect((await loginAgain()).pathname).toBe('/meine-abstimmungen')
+
+  // Eine noch mit dem alten Schlüssel ausgestellte Bestätigung gilt während des Wechsels weiter.
+  setKeys('a', { sign: 'a', publish: ['a-neu', 'a'] })
+  expect((await loginAgain()).pathname).toBe('/meine-abstimmungen')
+
+  // Ein Schlüssel, den der Anbieter nie veröffentlicht hat, wird abgelehnt.
+  setKeys('a', { sign: 'fremd', publish: ['a-neu', 'a'] })
+  const url = await loginAgain()
+  expect(url.pathname).toBe('/anmelden')
+  expect(url.searchParams.get('error')).toBe('sso')
+
+  expect(await prisma.externalIdentity.count({ where: { issuer: SUITE_TOOLS.a.origin, subject: person.sub } })).toBe(1)
 })

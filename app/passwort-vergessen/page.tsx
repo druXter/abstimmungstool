@@ -40,7 +40,7 @@ export default async function PasswortVergessenPage({
         )}
 
         <p className="text-xs text-gray-500">
-          Für Administrator-Konten gibt es aus Sicherheitsgründen keinen Reset per Mail. Konten, die über ein
+          Für Konten mit Admin-Rolle gibt es aus Sicherheitsgründen keinen Reset per Mail. Konten, die über ein
           anderes Tool angemeldet werden, setzen ihr Passwort dort zurück.
         </p>
         <p className="text-sm">

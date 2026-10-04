@@ -268,9 +268,16 @@ Zwei Varianten teilen sich dieses Format (siehe `app/lib/rsvp-verification.ts`):
 
 ## Konten
 
-Jedes Tool der Suite (rsvp-app, dieses Tool, künftig weitere) hat **eigene, lokale
+Jedes Tool der Suite (rsvp-app, dieses Tool, Seating, Zeitplan) hat **eigene, lokale
 Konten** und ist damit vollständig allein nutzbar. Optional lassen sich Tools verbinden,
 sodass man dasselbe Konto in mehreren nutzen kann - siehe "Konten-Verbund" unten.
+
+**Begriffe (suite-weit gleich):** Ein **Verwaltungskonto** ist ein Konto mit der Rolle Admin, Creator
+oder Moderator (Code: `User`) - die Konten in diesem Tool sind alle Verwaltungskonten, auch wenn ein
+Moderator-Konto nur zum Abstimmen genutzt wird. Ein **Teilnehmendenkonto** ist ein Konto ohne
+Verwaltungsrechte für Gäste und Abstimmende (heute nur in rsvp-app, dort `GuestUser`). **Admin** ist
+nur der Name einer Rolle, nie eine Kontoart ("Konto mit Admin-Rolle"). Die Kontenliste heißt in der
+Oberfläche "Konten" (Pfad weiterhin `/nutzer`).
 
 ### Rollen
 
@@ -287,7 +294,7 @@ zentrale Prüfung für jede Seite und jede Server Action):
 * **moderator** (per Freigabe): bearbeiten und schließen, **nicht** löschen oder weiter teilen.
 
 Geteilt wird per E-Mail-Adresse mit einem **bestehenden** Konto (`PollAccess`); wer noch
-keins hat, wird zuerst unter `/nutzer` eingeladen oder meldet sich einmal über ein
+keins hat, wird zuerst unter "Konten" (`/nutzer`) eingeladen oder meldet sich einmal über ein
 verbundenes Tool an.
 
 ### Erstes Konto und weitere Konten
@@ -300,11 +307,11 @@ docker compose run --rm abstimmungstool node create-user.js deine-email@domain.d
 ```
 
 Das Passwort wird verdeckt abgefragt (mind. 10 Zeichen). Weitere Konten lädt man unter
-`/nutzer` ein: Die Person bekommt einen Einmal-Link (7 Tage gültig) und legt ihr Passwort
+"Konten" (`/nutzer`) ein: Die Person bekommt einen Einmal-Link (7 Tage gültig) und legt ihr Passwort
 **selbst** fest - kein Admin vergibt je ein Passwort für jemand anderen. Ohne `SMTP_HOST`
 zeigt die Seite den Link dem Einladenden einmalig zum Weitergeben an. Nur Admins vergeben
 die Rollen CREATOR/ADMIN; alle anderen laden ausschließlich Moderatoren ein.
-Admin-Konten lassen sich in der Oberfläche bewusst weder ändern noch löschen (Schutz vor
+Konten mit Admin-Rolle lassen sich in der Oberfläche bewusst weder ändern noch löschen (Schutz vor
 Aussperren) und haben keinen Passwort-Reset per Mail - das geht nur per `create-user.js`.
 
 ### Alt-Abstimmungen (vor Einführung der Konten)
@@ -361,6 +368,10 @@ Tool ist zugleich Anbieter (stellt Login-Bestätigungen aus) und Empfänger (nim
   föderierte.
 * Der Login-Ablauf läuft über `/api/suite/login` → Anbieter → `/api/suite/authorize` →
   `/api/suite/callback` (`app/api/suite/`).
+* **Abmelden** wirkt nur in diesem Tool - es gibt bewusst kein gemeinsames Abmelden (Single Logout).
+* **Schlüsselwechsel** beim Anbieter (`SUITE_SIGNING_KEY`, Ablauf im suite-kit unter `docs/PROTOCOL.md`): Eine
+  Bestätigung mit unbekannter Schlüssel-ID lädt das Discovery-Dokument einmal neu (höchstens einmal pro Minute und
+  Anbieter), danach gelten neuer und noch veröffentlichter alter Schlüssel. Getestet in `tests/e2e/suite.spec.ts`.
 * **Fehlermeldungen:** Beim Login landen sie auf `/anmelden?error=…`, beim Verknüpfen aus
   `/konto` dagegen auf `/konto?error=…` - dort ist man eingeloggt, die Login-Seite würde
   sofort weiterleiten und die Meldung verschlucken. Ist die Sitzung inzwischen weg
@@ -611,7 +622,7 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
   gingen (Schließzeitpunkt; sonst das automatische Schließdatum; eine nie geschlossene
   Abstimmung ohne Frist zählt ab Anlage).
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
-  über ein verbundenes Tool). **Admin-Konten sind ausgenommen**, ebenso Konten, denen noch
+  über ein verbundenes Tool). **Konten mit Admin-Rolle sind ausgenommen**, ebenso Konten, denen noch
   eine Abstimmung oder Live-Runde gehört.
 * **Live-Runden** samt Teilnehmenden und Antworten: 18 Monate nach dem Beenden (sonst nach der letzten
   Änderung). PINs von Runden, an denen sich 24 Stunden nichts getan hat, werden freigegeben.

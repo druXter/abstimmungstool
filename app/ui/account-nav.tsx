@@ -16,7 +16,7 @@ export default async function AccountNav() {
       {user ? (
         <>
           <Link href="/meine-abstimmungen" className="hover:text-gray-900">Meine Abstimmungen</Link>
-          {user.role !== 'MODERATOR' && <Link href="/nutzer" className="hover:text-gray-900">Nutzer</Link>}
+          {user.role !== 'MODERATOR' && <Link href="/nutzer" className="hover:text-gray-900">Konten</Link>}
           <Link href="/konto" className="hover:text-gray-900">{user.name || user.email}</Link>
           <form action={logoutUser}>
             <button type="submit" className="text-gray-500 hover:text-gray-900">Abmelden</button>

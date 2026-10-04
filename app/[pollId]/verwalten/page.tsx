@@ -20,7 +20,7 @@ import { isMailConfigured } from '../../lib/mail'
 export const dynamic = 'force-dynamic'
 
 const SHARE_ERRORS: Record<string, string> = {
-  notfound: 'Zu dieser E-Mail-Adresse gibt es kein Konto. Lade die Person zuerst ein (Nutzer) oder bitte sie, sich einmal anzumelden.',
+  notfound: 'Zu dieser E-Mail-Adresse gibt es kein Konto. Lade die Person zuerst ein (Konten) oder bitte sie, sich einmal anzumelden.',
   owner: 'Diese Person besitzt die Abstimmung bereits.'
 }
 

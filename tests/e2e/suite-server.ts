@@ -51,16 +51,36 @@ export function setIdentity(tool: ToolName, identity: TestIdentity | null) {
   else writeFileSync(file, JSON.stringify(identity))
 }
 
+/**
+ * Schlüsselwechsel beim Anbieter nachspielen (suite-kit docs/PROTOCOL.md "Schlüsselwechsel"):
+ * `sign` signiert, `publish` steht im Discovery-Dokument (erster = aktiv, weitere = wie
+ * SUITE_SIGNING_KEY_PREVIOUS). null = Standard (ein fester Schlüssel pro Tool).
+ */
+export type TestKeys = { sign: string; publish: string[] }
+
+export function setKeys(tool: ToolName, keys: TestKeys | null) {
+  mkdirSync(SUITE_DIR, { recursive: true })
+  const file = join(SUITE_DIR, `keys-${tool}.json`)
+  if (keys === null) rmSync(file, { force: true })
+  else writeFileSync(file, JSON.stringify(keys))
+}
+
+function currentKeys(tool: ToolName): { signer: Signer; published: Signer[] } {
+  const file = join(SUITE_DIR, `keys-${tool}.json`)
+  if (!existsSync(file)) return { signer: testSigner(tool), published: [testSigner(tool)] }
+  const keys = JSON.parse(readFileSync(file, 'utf8')) as TestKeys
+  return { signer: testSigner(keys.sign), published: keys.publish.map(testSigner) }
+}
+
 function handler(tool: ToolName, appOrigin: string) {
   const { origin, label } = SUITE_TOOLS[tool]
-  const signer = testSigner(tool)
   const html = (text: string) => `<!doctype html><meta charset="utf-8"><title>${label}</title><p>${text}</p>`
 
   return (request: import('node:http').IncomingMessage, response: import('node:http').ServerResponse) => {
     const url = new URL(request.url ?? '/', origin)
 
     if (url.pathname === '/.well-known/suite-identity') {
-      const doc = buildDiscoveryDocument({ issuer: origin, name: label, signers: [signer] })
+      const doc = buildDiscoveryDocument({ issuer: origin, name: label, signers: currentKeys(tool).published })
       return response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(doc))
     }
 
@@ -72,7 +92,7 @@ function handler(tool: ToolName, appOrigin: string) {
       if (!existsSync(file)) return response.writeHead(200, { 'Content-Type': 'text/html' }).end(html('Bei diesem Tool ist niemand angemeldet.'))
       const identity = JSON.parse(readFileSync(file, 'utf8')) as TestIdentity
 
-      let assertion = issueLoginAssertion(signer, {
+      let assertion = issueLoginAssertion(currentKeys(tool).signer, {
         issuer: origin,
         audience: parsed.request.app,
         subject: identity.sub,

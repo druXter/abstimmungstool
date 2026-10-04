@@ -21,7 +21,7 @@ const LIVE_PIN_IDLE_HOURS = 24
  *    (manuell geschlossen, sonst das automatische Schließdatum); eine nie geschlossene
  *    Abstimmung ohne Frist zählt ab ihrer Anlage - sonst bliebe sie ewig liegen.
  * 2. Löscht Konten, die seit ACCOUNT_INACTIVITY_YEARS nicht mehr eingeloggt waren -
- *    bewusst NICHT Admin-Konten (wie in rsvp-app: sie sind eine fortlaufende Identität und
+ *    bewusst NICHT Konten mit Admin-Rolle (anders als in rsvp-app, wo alle Verwaltungskonten ausgenommen sind: sie sind eine fortlaufende Identität und
  *    sollen nicht automatisiert verschwinden). Ein Konto, das noch Abstimmungen besitzt,
  *    bleibt bestehen: Dass sie die Frist aus Punkt 1 überlebt haben, heißt, dass sie noch
  *    "leben" - ihre Stimmen anderer Leute sollen nicht stillschweigend ohne Besitzer enden.

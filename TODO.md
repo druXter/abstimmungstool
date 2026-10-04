@@ -189,14 +189,19 @@ Problem: "Admin-Konten" meint in rsvp-app alle Verwaltungskonten (inkl. Creator/
 - **Teilnehmendenkonto** = Konto für Gäste/Abstimmende ohne Verwaltungsrechte (rsvp-app: `GuestUser`,
   bisher "Nutzer-Konto").
 - **Admin** nur noch als Rollenname ("Konto mit Admin-Rolle"), nie als Kontoart.
-- [ ] Begriffe in allen READMEs, UI-Texten und Datenschutzerklärungen umstellen; Code-Bezeichner dürfen bleiben.
-- [ ] suite-kit-README anpassen ("Gäste ohne Konto … nehmen an der Konto-Föderation nicht teil" gilt dann nicht mehr).
+- [x] Begriffe in allen READMEs, UI-Texten und Datenschutzerklärungen umstellen; Code-Bezeichner dürfen bleiben.
+      (2026-10-04, alle vier Tools: "Verwaltung" statt "Admin-Dashboard", Kontenliste "Konten", "Konto mit Admin-Rolle".)
+- [x] suite-kit-README anpassen: Abschnitt "Begriffe"; der Satz zur Föderation nennt Teilnehmendenkonten als geplant
+      (nach D1 nochmals anpassen).
 
 ### D3. Weitere Punkte für später
 
-- [ ] **Konto-Löschung/Sperre weitergeben:** Wird ein Konto beim Anbieter gelöscht, weiß der Empfänger nichts
+- [x] **Konto-Löschung/Sperre weitergeben:** entschieden: kurze Sitzungen (Umsetzung mit D1), dokumentiert in
+      suite-kit `docs/PROTOCOL.md` "Bewusst nicht enthalten". Wird ein Konto beim Anbieter gelöscht, weiß der Empfänger nichts
       davon. Webhook zur Weitergabe oder kurze Sitzungsdauer für föderierte Konten?
-- [ ] **Abmelden in allen Tools (Single Logout):** gibt es nicht - bewusst so lassen oder nachrüsten?
-- [ ] **Löschfristen für föderierte Teilnehmendenkonten** im Empfänger (Cleanup-Cron) festlegen.
-- [ ] **Tool-Umschalter:** gemeinsames Menü, um zwischen verbundenen Tools zu wechseln (Discovery gibt es schon).
-- [ ] **Schlüsselwechsel** für `SUITE_SIGNING_KEY` als Ablauf dokumentieren und testen.
+- [x] **Abmelden in allen Tools (Single Logout):** bewusst nicht, dokumentiert (suite-kit README und `docs/PROTOCOL.md`).
+- [ ] **Löschfristen für föderierte Teilnehmendenkonten** im Empfänger (Cleanup-Cron): entschieden (2 Jahre ohne
+      Anmeldung), Umsetzung mit D1.
+- [x] ~~**Tool-Umschalter**~~ verschoben nach suite-kit `docs/IDEEN.md` P2 (gemeinsame Startseite).
+- [x] **Schlüsselwechsel** für `SUITE_SIGNING_KEY`: Ablauf in suite-kit `docs/PROTOCOL.md` (geplant und Notfall), Tests
+      `test/rotation.test.ts` (suite-kit) und "Schlüsselwechsel beim Anbieter" (`tests/e2e/suite.spec.ts`).

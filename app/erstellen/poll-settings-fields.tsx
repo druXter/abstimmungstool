@@ -26,7 +26,7 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
   },
   ACCOUNT: {
     title: 'Nur mit Konto (1 Stimme pro Konto)',
-    text: 'Abstimmen kann, wer hier ein Konto hat - auch eines, das über ein verbundenes Tool entstanden ist. Angezeigt wird der Name, sonst die E-Mail des Kontos. Konten legst du unter "Nutzer" an (Rolle Moderator genügt).'
+    text: 'Abstimmen kann, wer hier ein Konto hat - auch eines, das über ein verbundenes Tool entstanden ist. Angezeigt wird der Name, sonst die E-Mail des Kontos. Konten legst du unter "Konten" an (Rolle Moderator genügt).'
   }
 }
 

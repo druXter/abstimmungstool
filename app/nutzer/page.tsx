@@ -46,7 +46,7 @@ export default async function NutzerPage({
     <main className="bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto space-y-6 text-gray-900">
         <div className="bg-white p-6 rounded-lg shadow space-y-4">
-          <h1 className="text-2xl font-bold">{isAdmin ? 'Nutzer' : 'Moderator anlegen'}</h1>
+          <h1 className="text-2xl font-bold">{isAdmin ? 'Verwaltungskonten' : 'Moderator anlegen'}</h1>
 
           {created === 'mailed' && <Notice tone="success">Konto angelegt. Die Einladung wurde per E-Mail verschickt.</Notice>}
           {created === 'link' && (
@@ -140,7 +140,7 @@ export default async function NutzerPage({
               })}
             </ul>
             <p className="text-xs text-gray-400 mt-3">
-              Administrator-Konten lassen sich hier nicht ändern oder löschen (Schutz vor versehentlichem Aussperren) -
+              Konten mit Admin-Rolle lassen sich hier nicht ändern oder löschen (Schutz vor versehentlichem Aussperren) -
               das geht nur per <code>create-user.js</code> auf dem Server.
             </p>
           </div>
