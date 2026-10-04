@@ -26,8 +26,9 @@ anlegt und verwaltet (siehe "Konten" unten).
   * **Mit bestätigter E-Mail-Adresse (`EMAIL`):** Adresse eingeben, per Link bestätigen,
     abstimmen; optional nur bestimmte Adressen/Domains - siehe "Abstimmen mit bestätigter
     E-Mail-Adresse" unten. Nur wählbar, wenn `SMTP_HOST` gesetzt ist.
-  * **Nur mit Konto (`ACCOUNT`):** Eine Stimme pro Konto dieses Tools, geräteübergreifend -
-    siehe "Abstimmen mit Konto" unten.
+  * **Nur mit Konto (`ACCOUNT`):** Eine Stimme pro Person, geräteübergreifend - mit einem
+    Teilnehmendenkonto aus rsvp-app (sofern eingerichtet) oder einem Konto dieses Tools, siehe
+    "Abstimmen mit Konto" unten.
   * **Nur über rsvp-app (`RSVP`):** Statt des Cookies wird eine über `rsvp-app`
     verifizierte E-Mail als Identität genutzt - siehe "Verifizierte Abstimmungen"
     unten. Verhindert Mehrfachabstimmen auch über verschiedene Geräte/Browser hinweg.
@@ -205,13 +206,16 @@ Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Se
 
 ## Abstimmen mit Konto (Modus `ACCOUNT`)
 
-* Abstimmen kann jedes Konto dieses Tools - lokal eingeladen oder beim ersten Verbund-Login
-  entstanden (siehe "Konten-Verbund"). Ohne Anmeldung zeigt die Seite einen Hinweis mit
-  Link zur Anmeldung, die danach auf die Abstimmung zurückführt.
+* Abstimmen können **Teilnehmendenkonten aus rsvp-app** (sofern eingerichtet, siehe unten - der Weg
+  für Gäste, sie brauchen hier kein Konto) und jedes Konto dieses Tools - lokal eingeladen oder beim
+  ersten Verbund-Login entstanden (siehe "Konten-Verbund"). Ohne Anmeldung zeigt die Seite einen
+  Hinweis mit beiden Wegen; die Anmeldung führt danach auf die Abstimmung zurück. Die Erklärung beim
+  Anlegen (`accountText` in `app/erstellen/poll-settings-fields.tsx`) richtet sich danach, ob
+  Teilnehmendenkonten angenommen werden.
 * `voterKey = account:<User.id>` - nie die E-Mail, die sich ändern lässt. Als Name wird der
   Kontoname gespeichert, sonst die E-Mail (bei jeder Änderung der Auswahl aktualisiert).
-* Wer nur abstimmen soll, bekommt ein Konto mit der Rolle **Moderator**: Ohne Freigabe kann
-  es nichts verwalten. Oder die Person nutzt ein **Teilnehmendenkonto** aus rsvp-app (siehe unten).
+* Ohne Teilnehmendenkonten aus dem Verbund bekommt, wer nur abstimmen soll, ein Konto mit der Rolle
+  **Moderator**: Ohne Freigabe kann es nichts verwalten.
 * **Wird ein Konto gelöscht** (von Hand oder per Löschfrist), bleiben seine Stimmen gezählt
   - sonst änderten sich Ergebnisse rückwirkend -, verlieren aber den Namen.
 

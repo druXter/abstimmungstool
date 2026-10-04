@@ -6,6 +6,8 @@ import { isMailConfigured } from '../lib/mail'
 import { isPushConfigured } from '../lib/push'
 import { toInputValue } from '../lib/date-options'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, POLL_TYPE_LABELS, POLL_TYPES } from '../lib/poll-types'
+import { participantIdps } from '../lib/participant'
+import { idpLabel } from '../lib/suite'
 
 const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = {
   COOKIE: {
@@ -25,8 +27,9 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
     text: 'Wer abstimmen will, gibt seine Adresse ein und bestätigt sie über einen Link per Mail. Wer mehrere Adressen hat, kann mehrfach abstimmen - dagegen hilft eine feste Liste unten.'
   },
   ACCOUNT: {
-    title: 'Nur mit Konto (1 Stimme pro Konto)',
-    text: 'Abstimmen kann, wer hier ein Konto hat - auch eines, das über ein verbundenes Tool entstanden ist. Angezeigt wird der Name, sonst die E-Mail des Kontos. Konten legst du unter "Konten" an (Rolle Moderator genügt).'
+    title: 'Nur mit Konto (1 Stimme pro Person)',
+    // Der Text hängt davon ab, ob Teilnehmendenkonten aus dem Verbund angenommen werden - siehe accountText().
+    text: ''
   }
 }
 
@@ -37,6 +40,19 @@ type Settings = Pick<Poll, 'closesAt' | 'allowMultipleChoices' | 'voterIdentity'
  * parsePollSettings/parseVoterIdentity in app/actions.ts). `locked`: Es gibt schon
  * Stimmen, der Stimmmodus steht dann fest (updatePoll ignoriert ihn ebenfalls).
  */
+/**
+ * Erklärung zum Modus ACCOUNT. Nehmen wir Teilnehmendenkonten aus dem Verbund an (app/lib/participant.ts),
+ * ist das der Weg für Gäste - ein Konto hier brauchen sie dann nicht. Sonst bleibt nur ein eigenes Konto
+ * (für reine Abstimmende mit der Rolle Moderator).
+ */
+function accountText(): string {
+  const providers = participantIdps().map(idpLabel)
+  if (providers.length === 0) {
+    return 'Abstimmen kann, wer hier ein Konto hat - auch eines aus einem verbundenen Tool. Angezeigt wird der Name, sonst die E-Mail. Wer nur abstimmen soll, bekommt unter "Konten" ein Konto mit der Rolle Moderator.'
+  }
+  return `Gäste melden sich mit ihrem Teilnehmendenkonto bei ${providers.join(' oder ')} an - ein Konto hier brauchen sie nicht. Beim ersten Mal stimmen sie dort zu; übertragen werden nur Name und eine Kennung, keine E-Mail. Abstimmen kann außerdem, wer hier ein Konto hat. Angezeigt wird der Name, geräteübergreifend gilt eine Stimme pro Person.`
+}
+
 export default function PollSettingsFields({ poll, locked = false }: { poll?: Settings; locked?: boolean }) {
   const identity = poll?.voterIdentity ?? 'COOKIE'
   // Ein (künftig) nicht mehr angebotener Modus einer bestehenden Abstimmung bleibt sichtbar.
@@ -147,7 +163,7 @@ export default function PollSettingsFields({ poll, locked = false }: { poll?: Se
               />
               <span>
                 <span className="block text-sm font-medium text-amber-900">{IDENTITY_LABELS[kind].title}</span>
-                {IDENTITY_LABELS[kind].text && <span className="block text-xs text-amber-700">{IDENTITY_LABELS[kind].text}</span>}
+                <span className="block text-xs text-amber-700">{kind === 'ACCOUNT' ? accountText() : IDENTITY_LABELS[kind].text}</span>
               </span>
             </label>
             {kind === 'EMAIL' && (

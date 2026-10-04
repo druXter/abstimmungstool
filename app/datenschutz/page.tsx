@@ -48,15 +48,18 @@ export default function DatenschutzPage() {
           <h2 className="font-bold text-lg">2. Worum es geht</h2>
           <p className="mt-2">
             Mit dieser Anwendung lassen sich Abstimmungen in einer Gruppe durchführen (z.B. &quot;Wohin gehen wir am
-            Mittwoch?&quot;). <strong>Zum Abstimmen brauchst du kein Konto.</strong> Ein Konto brauchen nur Personen, die
-            Abstimmungen anlegen oder verwalten. Wir verarbeiten nur, was dafür nötig ist (Art. 6 Abs. 1 lit. b und f
+            Mittwoch?&quot;) und Live-Runden im Raum (Quiz oder Umfrage Frage für Frage). <strong>Zum Abstimmen und
+            Mitspielen brauchst du in der Regel kein Konto.</strong> Ausnahme sind Abstimmungen &quot;nur mit
+            Konto&quot; - dort genügt auch dein Teilnehmendenkonto aus rsvp-app (Punkt 4). Ein Konto hier
+            (Verwaltungskonto) brauchen nur Personen, die Abstimmungen oder Live-Runden anlegen oder verwalten. Wir
+            verarbeiten nur, was dafür nötig ist (Art. 6 Abs. 1 lit. b und f
             DSGVO - Durchführung der Abstimmung bzw. Betrieb und Sicherheit der Anwendung), und nur dann, wenn die
             jeweilige Funktion genutzt wird.
           </p>
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">3. Abstimmen (ohne Konto)</h2>
+          <h2 className="font-bold text-lg">3. Abstimmen und Live-Runden (ohne Konto)</h2>
           <p className="mt-2">
             Beim Abstimmen speichern wir deine Auswahl und einen Zeitstempel. Damit du deine Auswahl später ändern
             kannst und nicht mehrfach im selben Browser abstimmst, legen wir in deinem Browser eine zufällige Kennung
@@ -149,7 +152,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">5. Konto (Anlegen und Verwalten von Abstimmungen)</h2>
+          <h2 className="font-bold text-lg">5. Verwaltungskonto (Anlegen und Verwalten von Abstimmungen und Live-Runden)</h2>
           <p className="mt-2">Für ein Konto speichern wir:</p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
             <li>E-Mail-Adresse, optional einen Namen, deine Rolle und den Zeitpunkt der Anlage,</li>
@@ -161,7 +164,7 @@ export default function DatenschutzPage() {
               deine Anmelde-Sitzungen (nur ein Hash des Sitzungs-Tokens und das Ablaufdatum, 30 Tage) sowie
               Einmal-Links für Einladung und Passwort-Reset (ebenfalls nur als Hash, befristet),
             </li>
-            <li>die Zuordnung deiner Abstimmungen zu deinem Konto und Freigaben, die du erteilt hast oder erhalten hast.</li>
+            <li>die Zuordnung deiner Abstimmungen und Live-Runden zu deinem Konto und Freigaben, die du erteilt hast oder erhalten hast.</li>
           </ul>
           <p className="mt-2">
             Konten werden nicht öffentlich registriert, sondern von einer berechtigten Person eingeladen oder entstehen
@@ -172,7 +175,8 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">6. Anmeldung mit dem Konto eines anderen Tools (optional)</h2>
           <p className="mt-2">
-            Ist dies vom Betreiber eingerichtet, kannst du dich hier mit einem Konto eines verbundenen Tools anmelden
+            Dieser Punkt betrifft Verwaltungskonten; zum Abstimmen mit einem Teilnehmendenkonto aus rsvp-app siehe
+            Punkt 4. Ist dies vom Betreiber eingerichtet, kannst du dich hier mit einem Konto eines verbundenen Tools anmelden
             (z.B. rsvp-app), und umgekehrt kann man sich dort mit einem Konto von hier anmelden. Das geschieht{' '}
             <strong>nur, wenn du es aktiv anstößt</strong>, und nur zwischen Tools, die der Betreiber ausdrücklich
             freigegeben hat.
@@ -181,7 +185,7 @@ export default function DatenschutzPage() {
             Dabei übermittelt das Tool, bei dem du angemeldet bist, an das andere Tool eine kurz gültige (etwa eine
             Minute), digital signierte Bestätigung mit <strong>deiner Konto-Kennung, E-Mail-Adresse, ggf. deinem
             Namen und deiner Rolle</strong>. Dein Passwort und deine Sitzung werden nie übermittelt. Das empfangende
-            Tool legt beim ersten Mal ein Konto (ohne Passwort) für dich an und merkt sich die Verknüpfung; du kannst
+            Tool legt beim ersten Mal ggf. ein Konto (ohne Passwort) für dich an und merkt sich die Verknüpfung; du kannst
             sie unter &quot;Konto&quot; jederzeit wieder entfernen.
           </p>
         </div>
@@ -206,9 +210,10 @@ export default function DatenschutzPage() {
           <p className="mt-2">
             Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto, den auf Wunsch
             angeforderten Passwort-Reset und - falls eingeschaltet - das Ergebnis einer eigenen Abstimmung beim
-            Schließen), auf deine Anforderung hin den Bestätigungslink einer Abstimmung und, wenn
-            die Verwaltung einer Abstimmung das veranlasst, persönliche Stimmlinks an die von ihr eingetragenen
-            Adressen. Werbung oder Newsletter gibt es nicht.
+            Schließen bzw. bei Terminabstimmungen die Bitte, den Termin festzulegen), auf deine Anforderung hin den
+            Bestätigungslink einer Abstimmung, wenn die Verwaltung einer Abstimmung das veranlasst, persönliche
+            Stimmlinks an die von ihr eingetragenen Adressen und nach einer Terminabstimmung den festgelegten Termin an
+            Abstimmende, deren Adresse wir kennen (Punkt 4). Werbung oder Newsletter gibt es nicht.
           </p>
         </div>
 
@@ -216,7 +221,7 @@ export default function DatenschutzPage() {
           <h2 className="font-bold text-lg">9. Cookies</h2>
           <p className="mt-2">
             Wir setzen ausschließlich technisch notwendige Cookies ein (Art. 6 Abs. 1 lit. b/f DSGVO, § 25 Abs. 2 Nr. 2
-            TTDSG) - eine Einwilligung ist dafür nicht erforderlich. Es gibt keine Tracking-, Analyse- oder
+            TDDDG) - eine Einwilligung ist dafür nicht erforderlich. Es gibt keine Tracking-, Analyse- oder
             Marketing-Cookies.
           </p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
@@ -250,7 +255,7 @@ export default function DatenschutzPage() {
         <div>
           <h2 className="font-bold text-lg">10. Empfänger und Auftragsverarbeiter</h2>
           <p className="mt-2">
-            <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset-, Bestätigungs- und Stimmlink-Mails versenden wir über den
+            <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset-, Bestätigungs-, Stimmlink-, Ergebnis- und Termin-Mails versenden wir über den
             E-Mail-Server <code>{smtpHost}</code>. Mit dem Betreiber dieses Servers besteht, soweit es sich um einen
             externen Anbieter handelt, ein Vertrag zur Auftragsverarbeitung nach Art. 28 DSGVO.
           </p>
@@ -259,8 +264,9 @@ export default function DatenschutzPage() {
             den Push-Dienst deines Browser-Herstellers (siehe Punkt 9). Welcher das ist, bestimmt dein Browser.
           </p>
           <p className="mt-2">
-            <strong>Verbundene Tools:</strong> Die in Punkt 4 und 6 beschriebene Übermittlung erfolgt nur an Tools, die
-            der Betreiber selbst betreibt und freigegeben hat.
+            <strong>Verbundene Tools:</strong> Die in Punkt 4 und 6 beschriebene Übermittlung (in beide Richtungen, auch
+            der Empfang deines Namens und einer Kennung von rsvp-app beim Abstimmen mit Teilnehmendenkonto) erfolgt nur
+            zwischen Tools, die der Betreiber selbst betreibt und freigegeben hat.
           </p>
           <p className="mt-2">
             <strong>Hosting:</strong> Diese Anwendung wird auf einem vom Verantwortlichen selbst betriebenen und
@@ -293,8 +299,8 @@ export default function DatenschutzPage() {
             Besitzer bleiben.
           </p>
           <p className="mt-2">
-            Sitzungen laufen nach 30 Tagen ab, Einladungs- und Reset-Links nach 7 Tagen bzw. 1 Stunde und werden dann
-            entfernt. Drossel-Zähler siehe Punkt 7.
+            Sitzungen laufen nach 30 Tagen ab, Anmeldungen mit einem Teilnehmendenkonto aus rsvp-app nach 24 Stunden,
+            Einladungs- und Reset-Links nach 7 Tagen bzw. 1 Stunde; sie werden dann entfernt. Drossel-Zähler siehe Punkt 7.
           </p>
         </div>
 

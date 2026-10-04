@@ -167,9 +167,8 @@ export default async function PollPage({
 
         {!isClosed && block === 'account-missing' && (
           <Hint>
-            Für diese Abstimmung brauchst du ein Konto, damit jede Person nur einmal abstimmt.{' '}
-            <Link href={`/anmelden?next=${encodeURIComponent(`/${poll.id}`)}`} className="underline font-medium">Jetzt anmelden</Link>
-            {/* Teilnehmendenkonten aus dem Verbund (app/lib/participant.ts) - nur zum Abstimmen. */}
+            Für diese Abstimmung brauchst du ein Konto, damit jede Person nur einmal abstimmt.
+            {/* Teilnehmendenkonten aus dem Verbund (app/lib/participant.ts) - der Weg für Gäste, daher zuerst. */}
             {participantIdps().map(idp => (
               <span key={idp.issuer} className="block mt-2">
                 <a
@@ -180,6 +179,10 @@ export default async function PollPage({
                 </a>
               </span>
             ))}
+            <span className="block mt-2">
+              {participantIdps().length > 0 ? 'Du hast ein Konto in diesem Tool? ' : ''}
+              <Link href={`/anmelden?next=${encodeURIComponent(`/${poll.id}`)}`} className="underline font-medium">Jetzt anmelden</Link>
+            </span>
           </Hint>
         )}
 

@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createAccount, createPoll, pageAlert, prisma, unique, uniqueEmail } from './helpers'
+import { createAccount, createPoll, login, pageAlert, prisma, unique, uniqueEmail } from './helpers'
 import { setIdentity, SUITE_TOOLS, type TestIdentity } from './suite-server'
 import { TEST_CRON_SECRET } from '../../playwright.config'
 
@@ -113,4 +113,13 @@ test('Abgelaufene Sitzung gilt nicht mehr; Cleanup löscht alte Teilnehmende, St
   expect(await prisma.participantSession.count({ where: { participantId } })).toBe(0)
   const kept = await prisma.vote.findUniqueOrThrow({ where: { id: vote.id } })
   expect(kept.voterName).toBeNull()
+})
+
+test('Anlegen: "Nur mit Konto" erklärt den Weg für Gäste über das Teilnehmendenkonto', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/erstellen')
+  const account = page.locator('label').filter({ has: page.locator('input[value="ACCOUNT"]') })
+  await expect(account).toContainText(`Gäste melden sich mit ihrem Teilnehmendenkonto bei ${SUITE_TOOLS.a.label} an`)
+  await expect(account).not.toContainText('Moderator')
 })
