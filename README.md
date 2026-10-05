@@ -504,8 +504,13 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
   Freitext vergleicht ohne Groß-/Kleinschreibung, Akzente, ß/ss, Satzzeichen und Leerzeichen und verzeiht
   kleine Tippfehler (ab 5 Zeichen einer, ab 9 zwei; vertauschte Nachbarn zählen als einer). Abkürzungen
   oder Spitznamen trägt man als weitere Schreibweise ein. Nach der Auflösung zeigt die Leinwand die
-  richtigen Antworten, "x von y richtig" und die gegebenen Antworten (zusammengefasst, passende grün,
-  antippen = ausblenden); ohne eingetragene Antwort ist es eine offene Frage, die nur die Antworten zeigt.
+  richtigen Antworten, "x von y richtig" und die gegebenen Antworten (zusammengefasst, passende grün);
+  ohne eingetragene Antwort ist es eine offene Frage, die nur die Antworten zeigt. Eine Antwort antippen
+  → **"Als richtig werten" / "Doch nicht richtig"** oder ausblenden: Die Wertung gilt für alle gleichen
+  Antworten (`LiveResponse.judgedCorrect`, `judgeLiveText`), die Punkte werden nach der gemessenen
+  Antwortzeit neu berechnet, Handys und Rangliste sehen es sofort. Werten geht nur bei abgeschlossenen
+  Fragen; entspricht die Wertung wieder dem automatischen Abgleich, wird sie gelöscht. Gewertete Antworten
+  tragen einen gestrichelten Rahmen, im CSV-Export "ja (gewertet)".
 * **Bilder zu Fragen** (`LiveImage`): Der Editor verkleinert das Bild im Browser auf höchstens 1600 px und
   kodiert es als JPEG neu - das hält den Upload klein und entfernt EXIF-Daten wie den Aufnahmeort.
   Der Server prüft Größe (höchstens 1,5 MB) und Format am Dateiinhalt (JPEG, PNG, WebP, GIF; kein SVG,

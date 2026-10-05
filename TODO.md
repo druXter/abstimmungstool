@@ -137,6 +137,7 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
       richtig markierten Antworten bekam niemand Punkte - jetzt zählt jede davon.
 - [x] Nutzerwunsch (2026-10-05): Frageart Freitext (`TEXT`) mit richtigen Antworten/Schreibweisen, tolerantem
       Abgleich (Groß-/Kleinschreibung, Akzente, Satzzeichen, kleine Tippfehler) oder als offene Frage.
+      Nachträglich auf der Leinwand als richtig/falsch werten, Punkte werden neu berechnet.
 
 ---
 

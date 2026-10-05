@@ -142,11 +142,37 @@ test('Freitext: Punkte für passende Antworten, Leinwand zeigt richtige und gege
   expect(points.Ben).toBeGreaterThanOrEqual(500)
   expect(points.Cleo).toBe(0)
 
-  // Unpassendes lässt sich ausblenden wie bei der Wortwolke.
-  page.once('dialog', dialog => dialog.accept())
+  // Nachträglich werten: "Big Ben" als richtig - Punkte nach Antwortzeit, das Handy erfährt es sofort.
   await given.getByRole('button', { name: /Big Ben/ }).click()
+  await page.getByRole('button', { name: 'Als richtig werten' }).click()
+  await expect(page.getByText('3 von 3 richtig')).toBeVisible()
+  await expect(given.getByLabel('richtig (gewertet)')).toHaveCount(1)
+  await expect(cleo.getByText('Richtig!')).toBeVisible()
+  expect((await pointsOf(live.id)).Cleo).toBeGreaterThanOrEqual(500)
+  // ... und zurück: wieder automatisch, keine Punkte.
+  await given.getByRole('button', { name: /Big Ben/ }).click()
+  await page.getByRole('button', { name: 'Doch nicht richtig' }).click()
+  await expect(page.getByText('2 von 3 richtig')).toBeVisible()
+  await expect(cleo.getByText('Leider falsch')).toBeVisible()
+  expect((await pointsOf(live.id)).Cleo).toBe(0)
+  expect((await prisma.liveResponse.findFirstOrThrow({ where: { player: { nickname: 'Cleo', sessionId: live.id } } })).judgedCorrect).toBeNull()
+  // Eine automatisch erkannte Antwort lässt sich als falsch werten.
+  await given.getByRole('button', { name: /^Eifelturm/ }).click()
+  await page.getByRole('button', { name: 'Doch nicht richtig' }).click()
+  await expect(page.getByText('1 von 3 richtig')).toBeVisible()
+  await expect(given.getByLabel('falsch (gewertet)')).toHaveCount(1)
+  await expect(ben.getByText('Leider falsch')).toBeVisible()
+  expect((await pointsOf(live.id)).Ben).toBe(0)
+
+  // Unpassendes lässt sich ausblenden wie bei der Wortwolke.
+  await given.getByRole('button', { name: /Big Ben/ }).click()
+  await page.getByRole('button', { name: 'Ausblenden' }).click()
   await expect(given.getByText('Big Ben')).toHaveCount(0)
   await expect(given.getByRole('listitem')).toHaveCount(2)
+
+  // Weiter zur Rangliste: Werten geht nur bei abgeschlossenen Fragen, die Punkte stimmen dort.
+  await page.getByRole('button', { name: 'Rangliste' }).click()
+  await expect(page.getByRole('list', { name: 'Rangliste' }).getByRole('listitem').first()).toContainText('Anna')
 })
 
 test('Freitext anlegen: eingetragene Schreibweisen sind richtig, ohne Eintrag eine offene Frage', async ({ page }) => {

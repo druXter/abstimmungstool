@@ -338,6 +338,7 @@ export type ResponseLike = {
   text: string | null
   textKey: string | null
   hidden: boolean
+  judgedCorrect: boolean | null
   points: number
 }
 
@@ -411,19 +412,43 @@ export function describeResponse(
 /**
  * Ob eine Antwort richtig ist (nur Quizfragen). CHOICE: die gewählte Antwort ist eine der richtigen
  * (mehrere markierte = jede zählt), MULTI: genau die richtige Kombination, ESTIMATE: in der Toleranz,
- * TEXT: passt zu einer der eingetragenen Antworten (textMatches).
+ * TEXT: passt zu einer der eingetragenen Antworten (textMatches), es sei denn, die Verwaltung hat anders gewertet.
  */
 export function isCorrectResponse(
   q: { kind: LiveQuestionKind; target: number | null; tolerance: number | null; answers: { id: string; label: string; isCorrect: boolean }[] },
-  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue' | 'text'>
+  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue' | 'text' | 'judgedCorrect'>
 ): boolean {
   if (!isQuiz(q)) return false
+  if (q.kind === 'TEXT' && r.judgedCorrect !== null) return r.judgedCorrect
   if (q.kind === 'ESTIMATE') return r.numberValue !== null && estimatePoints(r.numberValue, q.target!, q.tolerance) > 0
   if (q.kind === 'TEXT') return r.text !== null && textMatches(r.text, q.answers.filter(a => a.isCorrect).map(a => a.label))
   const ids = chosenIds(r)
   const correct = q.answers.filter(a => a.isCorrect).map(a => a.id)
   if (q.kind === 'CHOICE') return ids.length === 1 && correct.includes(ids[0])
   return ids.length === correct.length && correct.every(id => ids.includes(id))
+}
+
+export type TextGroup = WordCount & { correct: boolean; judged: boolean }
+
+/**
+ * Freitext: gleiche Antworten zusammengefasst (wordCounts, ohne ausgeblendete), je Gruppe ob sie
+ * richtig ist und ob die Verwaltung das von Hand entschieden hat (`judged`).
+ */
+export function textGroups(
+  q: Parameters<typeof isCorrectResponse>[0],
+  responses: Pick<ResponseLike, 'text' | 'textKey' | 'hidden' | 'judgedCorrect'>[],
+  limit: number
+): TextGroup[] {
+  const first = new Map<string, (typeof responses)[number]>()
+  for (const r of responses) if (r.textKey && !first.has(r.textKey)) first.set(r.textKey, r)
+  return wordCounts(responses, limit).map(w => {
+    const r = first.get(w.key)!
+    return {
+      ...w,
+      correct: isCorrectResponse(q, { answerId: null, choices: null, numberValue: null, text: r.text, judgedCorrect: r.judgedCorrect }),
+      judged: r.judgedCorrect !== null
+    }
+  })
 }
 
 // ---------------------------------------------------------------------------------------
@@ -480,7 +505,7 @@ export type LiveView = {
      * Nur TEXT, ab der Auflösung: die richtigen Antworten (leer = Umfrage), wie viele richtig lagen und
      * für die Leinwand die häufigsten Antworten (ohne ausgeblendete).
      */
-    textResult?: { accepted: string[]; correctCount: number; answers?: (WordCount & { correct: boolean })[] }
+    textResult?: { accepted: string[]; correctCount: number; answers?: TextGroup[] }
   }
   /** Nur Leinwand: alle Teilnehmenden (Lobby, zum Entfernen). */
   players?: { id: string; nickname: string }[]
@@ -529,7 +554,7 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
     current
       ? prisma.liveResponse.findMany({
           where: { questionId: current.id },
-          select: { playerId: true, answerId: true, choices: true, numberValue: true, text: true, textKey: true, hidden: true, points: true }
+          select: { playerId: true, answerId: true, choices: true, numberValue: true, text: true, textKey: true, hidden: true, judgedCorrect: true, points: true }
         })
       : [],
     needsStandings ? standings(sessionId) : Promise.resolve([] as Standing[])
@@ -569,7 +594,7 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
       question.textResult = {
         accepted,
         correctCount: responses.filter(r => isCorrectResponse(current, r)).length,
-        ...(host ? { answers: wordCounts(responses, 30).map(w => ({ ...w, correct: quizNow && textMatches(w.text, accepted) })) } : {})
+        ...(host ? { answers: textGroups(current, responses, 30) } : {})
       }
     }
   }
@@ -625,7 +650,7 @@ export async function loadLiveResults(sessionId: string) {
         responses: {
           select: {
             playerId: true, answerId: true, choices: true, numberValue: true, text: true, textKey: true, hidden: true,
-            points: true, elapsedMs: true, player: { select: { nickname: true } }
+            judgedCorrect: true, points: true, elapsedMs: true, player: { select: { nickname: true } }
           }
         }
       }
@@ -641,7 +666,8 @@ export async function loadLiveResults(sessionId: string) {
         quiz: isQuiz(q),
         counts: answerCounts(q.responses),
         estimate: q.kind === 'ESTIMATE' ? estimateStats(values) : null,
-        words: q.kind === 'WORDCLOUD' || q.kind === 'TEXT' ? wordCounts(q.responses, 1000) : []
+        words: q.kind === 'WORDCLOUD' ? wordCounts(q.responses, 1000) : [],
+        textAnswers: q.kind === 'TEXT' ? textGroups(q, q.responses, 1000) : []
       }
     })
   }

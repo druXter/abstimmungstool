@@ -13,7 +13,7 @@ import { deleteUnusedImages, readImage } from './lib/live-images'
 import {
   ANSWER_GRACE_MS, cleanNickname, cleanTextAnswer, cleanWord, controlLive, estimatePoints, freePin, getLiveLevel, isCorrectResponse, isQuiz,
   LIVE_QUESTION_KINDS, MAX_ANSWER_LENGTH, MAX_ANSWERS, MAX_PLAYERS, MAX_QUESTION_LENGTH, MAX_QUESTIONS, MIN_ANSWERS,
-  nicknameKey, notifyLive, pointsFor, settleQuestion, TIME_LIMITS, type LiveControl, type LiveLevel
+  nicknameKey, notifyLive, pointsFor, settleQuestion, textMatches, TIME_LIMITS, type LiveControl, type LiveLevel
 } from './lib/live'
 
 const MAX_TITLE_LENGTH = 200
@@ -242,6 +242,36 @@ export async function hideLiveWord(sessionId: string, questionId: string, key: s
 }
 
 /**
+ * Freitext nachträglich werten (Leinwand bei der Auflösung): alle gleichen Antworten (`key` =
+ * textKey) einer Quizfrage als richtig oder falsch, Punkte neu nach der gemessenen Antwortzeit.
+ * Entspricht die Wertung dem automatischen Abgleich, wird sie wieder "automatisch" (null) - so
+ * lässt sich ein Fehlklick spurlos zurücknehmen. Nur für abgeschlossene Fragen: Danach kommen
+ * keine Antworten mehr dazu, die anders gewertet würden.
+ */
+export async function judgeLiveText(sessionId: string, questionId: string, key: string, correct: boolean): Promise<void> {
+  if (typeof sessionId !== 'string' || typeof questionId !== 'string' || typeof key !== 'string' || typeof correct !== 'boolean') return
+  const session = await manageableSession(sessionId)
+  if (!session) return
+  const question = await prisma.liveQuestion.findFirst({
+    where: { id: questionId, sessionId: session.id, kind: 'TEXT' },
+    include: { answers: { select: { id: true, label: true, isCorrect: true } } }
+  })
+  if (!question || !isQuiz(question)) return
+  const closed = question.position < session.currentIndex || (question.position === session.currentIndex && session.phase !== 'QUESTION') || session.phase === 'FINISHED'
+  if (!closed) return
+
+  const accepted = question.answers.filter(a => a.isCorrect).map(a => a.label)
+  const responses = await prisma.liveResponse.findMany({ where: { questionId, textKey: key }, select: { id: true, text: true, elapsedMs: true } })
+  if (responses.length === 0) return
+  const points = (elapsedMs: number) => pointsFor(correct, elapsedMs, question.timeLimit)
+  await prisma.$transaction(responses.map(r => prisma.liveResponse.update({
+    where: { id: r.id },
+    data: { judgedCorrect: r.text !== null && textMatches(r.text, accepted) === correct ? null : correct, points: points(r.elapsedMs) }
+  })))
+  notifyLive(session.id)
+}
+
+/**
  * Beitritt per PIN und Spitzname. Wer in dieser Runde schon ein gültiges Cookie hat, landet
  * direkt wieder im Spiel (z.B. nach versehentlichem Schließen des Tabs).
  */
@@ -351,7 +381,7 @@ export async function answerLive(sessionId: string, index: number, input: LiveAn
   let points = 0
   if (isQuiz(question)) {
     if (question.kind === 'ESTIMATE') points = estimatePoints(data.numberValue as number, question.target!, question.tolerance)
-    else points = pointsFor(isCorrectResponse(question, { answerId: data.answerId ?? null, choices: data.choices ?? null, numberValue: null, text: data.text ?? null }), elapsedMs, question.timeLimit)
+    else points = pointsFor(isCorrectResponse(question, { answerId: data.answerId ?? null, choices: data.choices ?? null, numberValue: null, text: data.text ?? null, judgedCorrect: null }), elapsedMs, question.timeLimit)
   }
 
   try {

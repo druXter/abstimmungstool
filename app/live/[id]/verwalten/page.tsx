@@ -3,7 +3,7 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
-import { formatNumber, getLiveLevel, loadLiveResults, textMatches } from '../../../lib/live'
+import { formatNumber, getLiveLevel, loadLiveResults } from '../../../lib/live'
 import { deleteLive, resetLive, shareLive, unshareLive } from '../../../live-actions'
 import CopyableField from '../../../ui/copyable-field'
 import ConfirmForm from '../../../ui/confirm-form'
@@ -214,11 +214,9 @@ export default async function ManageLivePage({
 
                 {q.kind === 'WORDCLOUD' && played && <WordCloud words={q.words} tone="light" max={2} min={0.85} />}
 
-                {q.kind === 'TEXT' && (() => {
-                  const accepted = q.answers.filter(a => a.isCorrect).map(a => a.label)
-                  const answers = played ? q.words.map(w => ({ ...w, correct: q.quiz && textMatches(w.text, accepted) })) : []
-                  return <TextAnswerList accepted={accepted} answers={answers} tone="light" />
-                })()}
+                {q.kind === 'TEXT' && (
+                  <TextAnswerList accepted={q.answers.filter(a => a.isCorrect).map(a => a.label)} answers={q.textAnswers} tone="light" />
+                )}
               </section>
             )
           })}

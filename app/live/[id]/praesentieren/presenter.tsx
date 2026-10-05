@@ -3,7 +3,7 @@
 import { useState, useTransition } from 'react'
 import Link from 'next/link'
 import type { LiveAnswerView, LiveView } from '../../../lib/live'
-import { controlLiveAction, hideLiveWord, kickLivePlayer } from '../../../live-actions'
+import { controlLiveAction, hideLiveWord, judgeLiveText, kickLivePlayer } from '../../../live-actions'
 import { useCountdown, useLiveView } from '../../use-live-view'
 import { ANSWER_STYLES, AnswerShape } from '../../shapes'
 import QrCode from '../../../ui/qr-code'
@@ -19,6 +19,8 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
   const { view, status, offset, refresh } = useLiveView(sessionId, true, initial)
   const [pending, startTransition] = useTransition()
   const [confirmKick, setConfirmKick] = useState<string | null>(null)
+  // Freitext bei der Auflösung: ausgewählte Antwort (zum Werten oder Ausblenden).
+  const [picked, setPicked] = useState<{ questionId: string; key: string; text: string } | null>(null)
   const remaining = useCountdown(view.question?.endsAt ?? null, offset)
 
   const control = (op: 'next' | 'finish' | 'lock' | 'unlock' | 'uncover') =>
@@ -41,6 +43,20 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
       refresh()
     })
   }
+
+  const judge = (questionId: string, key: string, correct: boolean) =>
+    startTransition(async () => {
+      await judgeLiveText(sessionId, questionId, key, correct)
+      setPicked(null)
+      refresh()
+    })
+
+  const hidePicked = (questionId: string, key: string) =>
+    startTransition(async () => {
+      await hideLiveWord(sessionId, questionId, key)
+      setPicked(null)
+      refresh()
+    })
 
   const fullscreen = () => {
     if (document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -152,8 +168,38 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
             ) : (
               <div className="space-y-3">
                 {q.quiz && <p className="text-xl text-center text-gray-200">{q.textResult?.correctCount ?? 0} von {q.answeredCount} richtig</p>}
-                <TextAnswerList accepted={q.textResult?.accepted ?? []} answers={q.textResult?.answers ?? []} onPick={w => hideWord(q.id, w.key, w.text)} />
-                {(q.textResult?.answers?.length ?? 0) > 0 && <p className="text-xs text-center text-gray-500">Eine Antwort antippen, um sie auszublenden.</p>}
+                <TextAnswerList
+                  accepted={q.textResult?.accepted ?? []} answers={q.textResult?.answers ?? []}
+                  selected={picked?.questionId === q.id ? picked.key : null}
+                  onPick={w => setPicked(picked?.questionId === q.id && picked.key === w.key ? null : { questionId: q.id, key: w.key, text: w.text })}
+                />
+                {(() => {
+                  const group = picked?.questionId === q.id ? q.textResult?.answers?.find(a => a.key === picked.key) : undefined
+                  if (!group) {
+                    return (q.textResult?.answers?.length ?? 0) > 0 && (
+                      <p className="text-xs text-center text-gray-500">
+                        Eine Antwort antippen, um sie {q.quiz ? 'als richtig oder falsch zu werten oder ' : ''}auszublenden.
+                      </p>
+                    )
+                  }
+                  return (
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-sm" role="group" aria-label={`Antwort "${group.text}"`}>
+                      <span className="text-gray-300">&quot;{group.text}&quot;:</span>
+                      {q.quiz && (
+                        <button
+                          type="button" disabled={pending} onClick={() => judge(q.id, group.key, !group.correct)}
+                          className={`rounded px-3 py-1.5 font-semibold disabled:opacity-50 ${group.correct ? 'bg-red-700 hover:bg-red-600' : 'bg-green-700 hover:bg-green-600'}`}
+                        >
+                          {group.correct ? 'Doch nicht richtig' : 'Als richtig werten'}
+                        </button>
+                      )}
+                      <button type="button" disabled={pending} onClick={() => hidePicked(q.id, group.key)} className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20 disabled:opacity-50">
+                        Ausblenden
+                      </button>
+                      <button type="button" onClick={() => setPicked(null)} className="rounded bg-white/10 px-3 py-1.5 hover:bg-white/20">Abbrechen</button>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
             {q.kind === 'WORDCLOUD' && (

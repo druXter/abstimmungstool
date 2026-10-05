@@ -543,21 +543,24 @@ model LivePlayer {
 // der Antwort-IDs), numberValue (ESTIMATE) oder text/textKey (WORDCLOUD; textKey = klein
 // geschrieben zum Zählen und Ausblenden, hidden = von der Leinwand ausgeblendet).
 model LiveResponse {
-  id          String       @id @default(cuid())
-  questionId  String
-  question    LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
-  playerId    String
-  player      LivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  answerId    String?
-  answer      LiveAnswer?  @relation(fields: [answerId], references: [id], onDelete: Cascade)
-  choices     String?
-  numberValue Float?
-  text        String?
-  textKey     String?
-  hidden      Boolean      @default(false)
-  elapsedMs   Int
-  points      Int          @default(0)
-  createdAt   DateTime     @default(now())
+  id            String       @id @default(cuid())
+  questionId    String
+  question      LiveQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  playerId      String
+  player        LivePlayer   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  answerId      String?
+  answer        LiveAnswer?  @relation(fields: [answerId], references: [id], onDelete: Cascade)
+  choices       String?
+  numberValue   Float?
+  text          String?
+  textKey       String?
+  hidden        Boolean      @default(false)
+  // Nur TEXT: von der Verwaltung nachträglich gewertet (true = richtig, false = falsch), null = automatisch
+  // (textMatches). Gilt für alle gleichen Antworten (textKey) einer Frage, siehe judgeLiveText.
+  judgedCorrect Boolean?
+  elapsedMs     Int
+  points        Int          @default(0)
+  createdAt     DateTime     @default(now())
 
   @@unique([questionId, playerId])
   @@index([playerId])

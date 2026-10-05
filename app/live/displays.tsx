@@ -94,18 +94,21 @@ export function QuestionImage({ imageId, className }: { imageId: string | null; 
 
 /**
  * Freitext: die richtigen Antworten (falls eingetragen) und die gegebenen, gleiche zusammengefasst,
- * häufigste zuerst, passende mit Haken. `onPick` macht sie anklickbar (Leinwand: ausblenden).
+ * häufigste zuerst, richtige mit Haken (von Hand gewertete mit Rahmen). `onPick` macht sie
+ * anklickbar (Leinwand: auswählen, dann werten oder ausblenden), `selected` hebt eine hervor.
  */
 export function TextAnswerList({
   accepted,
   answers,
   tone = 'dark',
-  onPick
+  onPick,
+  selected
 }: {
   accepted: string[]
-  answers: (WordCount & { correct: boolean })[]
+  answers: (WordCount & { correct: boolean; judged?: boolean })[]
   tone?: 'dark' | 'light'
   onPick?: (word: WordCount) => void
+  selected?: string | null
 }) {
   const dark = tone === 'dark'
   return (
@@ -121,10 +124,18 @@ export function TextAnswerList({
             const style = a.correct
               ? (dark ? 'bg-green-600 text-white' : 'bg-green-100 text-green-900')
               : (dark ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-800')
-            const content = <>{a.text}{a.correct && <span aria-label="richtig"> ✓</span>}<span className="ml-2 tabular-nums opacity-75">{a.count}</span></>
+            const mark = a.judged ? (a.correct ? 'richtig (gewertet)' : 'falsch (gewertet)') : a.correct ? 'richtig' : null
+            const content = (
+              <>
+                {a.text}
+                {mark && <span aria-label={mark} title={mark}>{a.correct ? ' ✓' : ' ✗'}</span>}
+                <span className="ml-2 tabular-nums opacity-75">{a.count}</span>
+              </>
+            )
+            const ring = selected === a.key ? 'ring-4 ring-white' : a.judged ? `outline-2 outline-dashed outline-offset-2 ${dark ? 'outline-white/70' : 'outline-gray-500'}` : ''
             return (
-              <li key={a.key} className={`${style} rounded-full ${dark ? 'px-4 py-1.5 text-xl' : 'px-3 py-1 text-sm'} font-semibold`}>
-                {onPick ? <button type="button" onClick={() => onPick(a)} className="hover:line-through">{content}</button> : content}
+              <li key={a.key} className={`${style} ${ring} rounded-full ${dark ? 'px-4 py-1.5 text-xl' : 'px-3 py-1 text-sm'} font-semibold`}>
+                {onPick ? <button type="button" onClick={() => onPick(a)} aria-pressed={selected === a.key}>{content}</button> : content}
               </li>
             )
           })}
