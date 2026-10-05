@@ -102,7 +102,9 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
                 <p className="text-lg font-semibold">{q.text}</p>
                 {remaining !== null && <span className="shrink-0 rounded-full bg-purple-700 px-3 py-1 font-bold tabular-nums">{remaining}</span>}
               </div>
-              <QuestionImage imageId={q.imageId} className="max-h-40 mx-auto" />
+              {q.imageOnScreen
+                ? <p className="text-center text-gray-300">Schau auf die Leinwand - dort wird das Bild nach und nach aufgedeckt.</p>
+                : <QuestionImage imageId={q.imageId} className="max-h-40 mx-auto" />}
               {invalid && <p className="text-amber-300 text-sm" role="alert">Das hat nicht geklappt - bitte prüfe deine Eingabe.</p>}
 
               {(q.kind === 'CHOICE' || q.kind === 'MULTI') && (

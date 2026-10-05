@@ -424,6 +424,8 @@ model LiveSession {
   questionEndsAt    DateTime?
   // Kein Beitritt mehr möglich (von der Verwaltung in der Lobby oder während des Spiels gesetzt).
   joinLocked        Boolean        @default(false)
+  // Bild aufdecken (LiveQuestion.imageReveal): von Hand zusätzlich aufgedeckte Stücke der aktuellen Frage.
+  revealSteps       Int            @default(0)
   // Steigt bei jedem Zustandswechsel - daran erkennen die Ansichten beim Long-Polling eine Änderung.
   version           Int            @default(0)
   createdAt         DateTime       @default(now())
@@ -481,23 +483,26 @@ model LiveImage {
 }
 
 model LiveQuestion {
-  id        String           @id @default(cuid())
-  sessionId String
-  session   LiveSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  position  Int
-  text      String
+  id          String           @id @default(cuid())
+  sessionId   String
+  session     LiveSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  position    Int
+  text        String
   // Sekunden, null = ohne Zeitlimit.
-  timeLimit Int?
-  kind      LiveQuestionKind @default(CHOICE)
+  timeLimit   Int?
+  kind        LiveQuestionKind @default(CHOICE)
   // Nur ESTIMATE: richtiger Wert (null = reine Umfrage), Toleranz für Punkte (null = 10 % des
   // Werts, mindestens 1) und eine Einheit zur Anzeige.
-  target    Float?
-  tolerance Float?
-  unit      String?
-  imageId   String?
-  image     LiveImage?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
-  answers   LiveAnswer[]
-  responses LiveResponse[]
+  target      Float?
+  tolerance   Float?
+  unit        String?
+  imageId     String?
+  image       LiveImage?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
+  // Bild wird auf der Leinwand Stück für Stück aufgedeckt (Promi/Ort erraten), auf den Handys erst
+  // ab der Auflösung gezeigt (app/lib/live.ts revealedTiles).
+  imageReveal Boolean          @default(false)
+  answers     LiveAnswer[]
+  responses   LiveResponse[]
 
   @@unique([sessionId, position])
 }

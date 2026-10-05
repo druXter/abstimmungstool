@@ -4,7 +4,7 @@ import { createAccount, login, prisma, unique, uniqueIp } from './helpers'
 import { readImage } from '../../app/lib/live-images'
 
 // Live-Runden, Ausbau (TODO.md E, Ideen-Punkt): Mehrfachauswahl, Schätzfrage, Wortwolke, Teilen mit
-// anderen Konten, CSV-Export und Bilder zu Fragen.
+// anderen Konten, CSV-Export und Bilder zu Fragen (auch zum Aufdecken).
 
 type Q = { text: string; kind?: LiveQuestionKind; timeLimit?: number | null; answers?: [string, boolean][]; target?: number; tolerance?: number; unit?: string }
 
@@ -78,6 +78,23 @@ test('Mehrfachauswahl: Punkte nur für genau die richtige Kombination', async ({
   expect(points.Anna).toBeGreaterThanOrEqual(500)
   expect(points.Ben).toBe(0)
   await expect(page.getByLabel('richtig')).toHaveCount(2)
+})
+
+test('Auswahl mit mehreren richtigen Antworten: jede davon zählt', async ({ page, browser }) => {
+  const { live, phones: [anna, ben, cleo] } = await startedRound(page, browser, [
+    { text: 'Nenne eine Primzahl', answers: [['2', true], ['3', true], ['4', false]] }
+  ], ['Anna', 'Ben', 'Cleo'])
+  await anna.getByRole('button', { name: /^Dreieck 2/ }).click()
+  await ben.getByRole('button', { name: /^Raute 3/ }).click()
+  await cleo.getByRole('button', { name: /^Kreis 4/ }).click()
+
+  await expect(anna.getByText('Richtig!')).toBeVisible()
+  await expect(ben.getByText('Richtig!')).toBeVisible()
+  await expect(cleo.getByText('Richtig war: 2 / 3')).toBeVisible()
+  const points = await pointsOf(live.id)
+  expect(points.Anna).toBeGreaterThanOrEqual(500)
+  expect(points.Ben).toBeGreaterThanOrEqual(500)
+  expect(points.Cleo).toBe(0)
 })
 
 test('Schätzfrage: Punkte nach Nähe, Komma als Dezimaltrenner, Verteilung auf der Leinwand', async ({ page, browser }) => {
@@ -234,6 +251,83 @@ test('Bilder: im Browser verkleinert und neu kodiert, beim Bearbeiten behalten, 
   expect((await prisma.liveQuestion.findFirstOrThrow({ where: { sessionId: id } })).imageId).toBeNull()
   expect(await prisma.liveImage.count({ where: { sessionId: id } })).toBe(0)
   await stranger.context().close()
+})
+
+test('Bild aufdecken: Kacheln auf der Leinwand, auf den Handys erst ab der Auflösung', async ({ page, browser }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/live/neu')
+  await page.getByLabel('Titel').fill('Wer ist das?')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Wer ist das?')
+  await page.getByLabel('Frage 1, Antwort 1').fill('Goethe')
+  await page.getByLabel('Frage 1, Antwort 2').fill('Schiller')
+  await page.getByLabel('Frage 1, Antwort 1').locator('xpath=..').getByLabel('richtig').check()
+  await page.getByLabel('Zeitlimit').selectOption('0')
+  await page.getByLabel('Frage 1, Bild').setInputFiles({ name: 'foto.png', mimeType: 'image/png', buffer: PNG })
+  await page.getByLabel('Nach und nach aufdecken').check()
+  await expect(page.getByText('die du mit "Stück aufdecken" einzeln öffnest')).toBeVisible()
+  await page.getByRole('button', { name: 'Live-Runde anlegen' }).click()
+  await page.waitForURL(/verwalten\?angelegt=1/)
+
+  const id = new URL(page.url()).pathname.split('/')[2]
+  const question = await prisma.liveQuestion.findFirstOrThrow({ where: { sessionId: id } })
+  expect(question.imageReveal).toBe(true)
+  const imageUrl = `/api/live/bild/${question.imageId}`
+  const fetchStatus = (p: Page) => p.evaluate(async url => (await fetch(url, { cache: 'no-store' })).status, imageUrl)
+
+  const live = await prisma.liveSession.findUniqueOrThrow({ where: { id } })
+  await page.goto(`/live/${id}/praesentieren`)
+  const anna = await joinAs(browser, live.pin!, 'Anna')
+  const ben = await joinAs(browser, live.pin!, 'Ben')
+  // Vorab kommt niemand ans ganze Bild - weder über die Ansicht noch über die Bild-Adresse.
+  expect(await fetchStatus(anna)).toBe(404)
+  await page.getByRole('button', { name: 'Starten' }).click()
+
+  const tiles = page.getByTestId('reveal-tiles').locator('span')
+  await expect(tiles).toHaveCount(25)
+  await expect(tiles.and(page.locator('[data-open]'))).toHaveCount(0)
+  await expect(anna.getByText('Schau auf die Leinwand')).toBeVisible()
+  await expect(anna.getByRole('img', { name: 'Bild zur Frage' })).toHaveCount(0)
+  const state = await anna.evaluate(async url => (await fetch(url)).json(), `/api/live/${id}`)
+  expect(state.question.imageId).toBeNull()
+  expect(await fetchStatus(anna)).toBe(404)
+  expect(await fetchStatus(page)).toBe(200)
+
+  // Ohne Zeitlimit nur per Knopf, ein Stück pro Klick.
+  await page.getByRole('button', { name: 'Stück aufdecken' }).click()
+  await expect(tiles.and(page.locator('[data-open]'))).toHaveCount(1)
+  await page.getByRole('button', { name: 'Stück aufdecken' }).click()
+  await expect(tiles.and(page.locator('[data-open]'))).toHaveCount(2)
+
+  await anna.getByRole('button', { name: /^Dreieck Goethe/ }).click()
+  await ben.getByRole('button', { name: /^Raute Schiller/ }).click()
+  // Auflösung: ganzes Bild auf der Leinwand, Handys dürfen es jetzt laden.
+  await expect(page.getByLabel('richtig')).toBeVisible()
+  await expect(page.getByTestId('reveal-tiles')).toHaveCount(0)
+  await expect(page.getByRole('img', { name: 'Bild zur Frage' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Stück aufdecken' })).toHaveCount(0)
+  expect(await fetchStatus(anna)).toBe(200)
+  await anna.context().close()
+  await ben.context().close()
+})
+
+test('Bild aufdecken mit Zeitlimit: Kacheln gehen von selbst auf', async ({ page, browser }) => {
+  const owner = await createAccount()
+  const live = await createLive(owner.id, [{ text: 'Welcher Ort?', timeLimit: 5, answers: [['Paris', true], ['Rom', false]] }])
+  const image = await prisma.liveImage.create({ data: { sessionId: live.id, type: 'image/png', data: PNG } })
+  await prisma.liveQuestion.updateMany({ where: { sessionId: live.id }, data: { imageId: image.id, imageReveal: true } })
+  await login(page, owner.email)
+  await page.goto(`/live/${live.id}/praesentieren`)
+  const anna = await joinAs(browser, live.pin!, 'Anna')
+  await page.getByRole('button', { name: 'Starten' }).click()
+
+  const open = page.getByTestId('reveal-tiles').locator('span[data-open]')
+  // 25 Stücke in 5 s: nach gut 2 s ist rund die Hälfte offen, aber nicht alles.
+  await page.waitForTimeout(2500)
+  const count = await open.count()
+  expect(count).toBeGreaterThanOrEqual(8)
+  expect(count).toBeLessThan(25)
+  await anna.context().close()
 })
 
 test('Bildprüfung: nur echte Rasterbilder bis 1,5 MB, kein SVG', async () => {

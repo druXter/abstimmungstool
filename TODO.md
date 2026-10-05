@@ -132,6 +132,9 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
 - [x] Ausbau (2026-10-04): Live-Runde mit anderen Konten teilen (`LiveAccess`, wie `PollAccess`), CSV-Export der
       Ergebnisse, weitere Fragearten (Mehrfachauswahl, Schätzfrage, Wortwolke mit Ausblenden), Bilder zu Fragen
       (im Browser verkleinert/neu kodiert, in der DB gespeichert). Tests: `tests/e2e/live-extras.spec.ts`.
+- [x] Nutzerwunsch (2026-10-05): Bild nach und nach aufdecken (Kacheln auf der Leinwand, mit Zeitlimit von
+      selbst und per Knopf, Handys erst ab der Auflösung). Dazu Fehler behoben: Bei "Auswahl" mit mehreren
+      richtig markierten Antworten bekam niemand Punkte - jetzt zählt jede davon.
 
 ---
 

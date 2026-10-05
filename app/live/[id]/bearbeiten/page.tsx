@@ -53,7 +53,8 @@ export default async function EditLivePage({ params, searchParams }: { params: P
               target: q.target !== null ? String(q.target).replace('.', ',') : '',
               tolerance: q.tolerance !== null ? String(q.tolerance).replace('.', ',') : '',
               unit: q.unit ?? '',
-              imageId: q.imageId
+              imageId: q.imageId,
+              imageReveal: q.imageReveal
             }))}
           />
           <SubmitButton>Speichern</SubmitButton>

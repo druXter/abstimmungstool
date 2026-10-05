@@ -8,6 +8,7 @@ import { useCountdown, useLiveView } from '../../use-live-view'
 import { ANSWER_STYLES, AnswerShape } from '../../shapes'
 import QrCode from '../../../ui/qr-code'
 import { EstimateLine, EstimateSummary, QuestionImage, WordCloud } from '../../displays'
+import RevealImage from '../../reveal-image'
 
 /**
  * Leinwand einer Live-Runde (für Beamer/Bildschirm im Raum): Lobby mit PIN und QR-Code, Frage
@@ -20,7 +21,7 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
   const [confirmKick, setConfirmKick] = useState<string | null>(null)
   const remaining = useCountdown(view.question?.endsAt ?? null, offset)
 
-  const control = (op: 'next' | 'finish' | 'lock' | 'unlock') =>
+  const control = (op: 'next' | 'finish' | 'lock' | 'unlock' | 'uncover') =>
     startTransition(async () => {
       await controlLiveAction(sessionId, op, view.version)
       refresh()
@@ -127,7 +128,14 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
                 : `${q.answeredCount} Antwort${q.answeredCount === 1 ? '' : 'en'}`}
               {q.kind === 'MULTI' && ' · mehrere Antworten möglich'}
             </p>
-            <QuestionImage imageId={q.imageId} className="max-h-[35vh] mx-auto" />
+            {q.reveal && q.imageId ? (
+              <RevealImage
+                imageId={q.imageId} questionId={q.id} startedAt={q.reveal.startedAt} steps={q.reveal.steps}
+                timeLimit={q.timeLimit} offset={offset} className="max-h-[45vh]"
+              />
+            ) : (
+              <QuestionImage imageId={q.imageId} className="max-h-[35vh] mx-auto" />
+            )}
             {(q.kind === 'CHOICE' || q.kind === 'MULTI') && (
               <AnswerGrid answers={q.answers} revealed={view.phase === 'REVEAL'} total={q.answeredCount} />
             )}
@@ -186,12 +194,22 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
               </button>
             )}
           </div>
-          <button
-            type="button" disabled={pending || (view.phase === 'LOBBY' && view.playerCount === 0)} onClick={() => control('next')}
-            className="rounded-lg bg-white text-gray-900 font-bold text-xl px-8 py-3 hover:bg-gray-200 disabled:opacity-50"
-          >
-            {nextLabel}
-          </button>
+          <span className="flex flex-wrap gap-2">
+            {q?.reveal && (
+              <button
+                type="button" disabled={pending} onClick={() => control('uncover')}
+                className="rounded-lg bg-purple-700 font-bold text-xl px-6 py-3 hover:bg-purple-600 disabled:opacity-50"
+              >
+                Stück aufdecken
+              </button>
+            )}
+            <button
+              type="button" disabled={pending || (view.phase === 'LOBBY' && view.playerCount === 0)} onClick={() => control('next')}
+              className="rounded-lg bg-white text-gray-900 font-bold text-xl px-8 py-3 hover:bg-gray-200 disabled:opacity-50"
+            >
+              {nextLabel}
+            </button>
+          </span>
         </footer>
       )}
     </Shell>

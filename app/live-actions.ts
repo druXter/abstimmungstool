@@ -31,6 +31,8 @@ type QuestionInput = {
   unit: string | null
   /** Bestehendes Bild behalten (ID aus dem Editor) oder neues hochgeladenes. */
   keepImageId: string | null
+  /** Bild auf der Leinwand nach und nach aufdecken. */
+  imageReveal: boolean
   newImage: { type: string; data: Uint8Array<ArrayBuffer> } | null
 }
 
@@ -43,7 +45,8 @@ function parseNumber(raw: string): number | null {
 /**
  * Liest die Fragen aus dem Editor (app/live/questions-editor.tsx): q<i>_text, q<i>_kind, q<i>_time,
  * bei Auswahl q<i>_a<j>/q<i>_c<j>, bei Schätzfragen q<i>_target/q<i>_tolerance/q<i>_unit, dazu
- * q<i>_image (neues Bild), q<i>_imageId (bisheriges behalten) bzw. q<i>_noimage. Unvollständige
+ * q<i>_image (neues Bild), q<i>_imageId (bisheriges behalten) bzw. q<i>_noimage, q<i>_reveal (Bild
+ * aufdecken). Unvollständige
  * Fragen fallen still weg, ebenso Häkchen an leeren Antworten.
  */
 async function parseQuestions(formData: FormData): Promise<QuestionInput[]> {
@@ -73,6 +76,7 @@ async function parseQuestions(formData: FormData): Promise<QuestionInput[]> {
       tolerance: tolerance !== null && tolerance > 0 ? tolerance : null,
       unit: kind === 'ESTIMATE' ? formString(formData, `q${i}_unit`, MAX_UNIT_LENGTH) || null : null,
       keepImageId: noImage ? null : formString(formData, `q${i}_imageId`, 50) || null,
+      imageReveal: formData.get(`q${i}_reveal`) === 'on',
       newImage: noImage ? null : await readImage(formData.get(`q${i}_image`))
     })
   }
@@ -91,6 +95,7 @@ async function writeQuestions(tx: Prisma.TransactionClient, sessionId: string, q
     await tx.liveQuestion.create({
       data: {
         sessionId, position, text: q.text, kind: q.kind, timeLimit: q.timeLimit, target: q.target, tolerance: q.tolerance, unit: q.unit, imageId,
+        imageReveal: q.imageReveal && imageId !== null,
         answers: { create: q.answers.map((a, index) => ({ position: index, label: a.label, isCorrect: a.isCorrect })) }
       }
     })
@@ -201,7 +206,7 @@ export async function unshareLive(formData: FormData) {
 
 /** Leinwand: weiterschalten, beenden, Beitritt sperren/öffnen (siehe controlLive). */
 export async function controlLiveAction(sessionId: string, op: LiveControl, version: number): Promise<boolean> {
-  if (typeof sessionId !== 'string' || !['next', 'finish', 'lock', 'unlock'].includes(op) || !Number.isInteger(version)) return false
+  if (typeof sessionId !== 'string' || !['next', 'finish', 'lock', 'unlock', 'uncover'].includes(op) || !Number.isInteger(version)) return false
   const session = await manageableSession(sessionId)
   if (!session) return false
   return controlLive(session.id, op, version)

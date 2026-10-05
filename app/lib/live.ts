@@ -67,6 +67,21 @@ export function estimatePoints(value: number, target: number, tolerance: number 
   return Math.round(1000 * (1 - distance / tol / 2))
 }
 
+// Bild aufdecken: Kacheln und Reihenfolge rechnet ./live-reveal (auch im Browser gebraucht).
+
+/**
+ * Ob Teilnehmende das Bild einer Frage schon sehen dürfen: Aufdeck-Bilder erst ab der Auflösung
+ * (sonst ließe es sich auf dem Handy oder über die Bild-Adresse vorab ganz ansehen).
+ */
+export function imageVisibleToPlayers(
+  question: { position: number; imageReveal: boolean },
+  session: { phase: LivePhase; currentIndex: number }
+): boolean {
+  if (!question.imageReveal || session.phase === 'FINISHED') return true
+  if (question.position !== session.currentIndex) return question.position < session.currentIndex
+  return session.phase === 'REVEAL' || session.phase === 'LEADERBOARD'
+}
+
 /** Wortwolke: Beitrag bereinigen wie einen Spitznamen; Schlüssel zum Zählen/Ausblenden ist klein geschrieben. */
 export function cleanWord(input: string): { text: string; key: string } | null {
   const text = input.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORD_LENGTH)
@@ -178,12 +193,14 @@ export async function settleQuestion(sessionId: string): Promise<void> {
   if (count > 0) notifyLive(sessionId)
 }
 
-export type LiveControl = 'next' | 'finish' | 'lock' | 'unlock'
+export type LiveControl = 'next' | 'finish' | 'lock' | 'unlock' | 'uncover'
 
 /**
  * Schaltet die Runde weiter (nur Verwaltung, Berechtigung prüft der Aufrufer). `version` ist der
  * Stand, den die Leinwand gesehen hat - ein doppelter Klick oder zwei Leinwände schalten so nicht
  * zweimal weiter. Gibt false zurück, wenn sich inzwischen etwas geändert hat.
+ *
+ * 'uncover' deckt bei einer Frage mit Aufdeck-Bild ein weiteres Stück auf.
  *
  * LOBBY -> Frage 1 -> (Zeitablauf/alle/Knopf) REVEAL -> [LEADERBOARD nach Quizfragen] -> Frage 2 … -> FINISHED
  */
@@ -202,6 +219,11 @@ export async function controlLive(sessionId: string, op: LiveControl, version: n
 
   if (op === 'lock' || op === 'unlock') {
     data = { joinLocked: op === 'lock' }
+  } else if (op === 'uncover') {
+    // Bild aufdecken: ein Stück mehr, nur während einer Frage mit Aufdeck-Bild.
+    const current = session.questions[session.currentIndex]
+    if (session.phase !== 'QUESTION' || !current?.imageReveal || !current.imageId) return false
+    data = { revealSteps: { increment: 1 } }
   } else if (op === 'finish') {
     if (session.phase === 'FINISHED') return false
     data = finish
@@ -214,6 +236,7 @@ export async function controlLive(sessionId: string, op: LiveControl, version: n
         currentIndex: index,
         questionStartedAt: now,
         questionEndsAt: question.timeLimit ? new Date(now.getTime() + question.timeLimit * 1000) : null,
+        revealSteps: 0,
         ...(session.startedAt ? {} : { startedAt: now })
       }
     }
@@ -340,7 +363,10 @@ export function describeResponse(
   }
 }
 
-/** Ob eine Antwort richtig ist (nur Quizfragen; MULTI = genau die richtige Kombination, ESTIMATE = in der Toleranz). */
+/**
+ * Ob eine Antwort richtig ist (nur Quizfragen). CHOICE: die gewählte Antwort ist eine der richtigen
+ * (mehrere markierte = jede zählt), MULTI: genau die richtige Kombination, ESTIMATE: in der Toleranz.
+ */
 export function isCorrectResponse(
   q: { kind: LiveQuestionKind; target: number | null; tolerance: number | null; answers: { id: string; isCorrect: boolean }[] },
   r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue'>
@@ -349,6 +375,7 @@ export function isCorrectResponse(
   if (q.kind === 'ESTIMATE') return r.numberValue !== null && estimatePoints(r.numberValue, q.target!, q.tolerance) > 0
   const ids = chosenIds(r)
   const correct = q.answers.filter(a => a.isCorrect).map(a => a.id)
+  if (q.kind === 'CHOICE') return ids.length === 1 && correct.includes(ids[0])
   return ids.length === correct.length && correct.every(id => ids.includes(id))
 }
 
@@ -385,8 +412,15 @@ export type LiveView = {
     timeLimit: number | null
     endsAt: number | null
     quiz: boolean
-    /** Bild zur Frage (app/api/live/bild/[imageId]). */
+    /** Bild zur Frage (app/api/live/bild/[imageId]). Aufdeck-Bilder auf den Handys erst ab der Auflösung. */
     imageId: string | null
+    /**
+     * Nur Leinwand, nur während einer Frage mit Aufdeck-Bild: Stand des Aufdeckens (Fragebeginn in
+     * Serverzeit, von Hand aufgedeckte Stücke) - die Stücke selbst rechnet revealedTiles aus.
+     */
+    reveal?: { startedAt: number; steps: number }
+    /** Teilnehmende: Das Bild wird gerade auf der Leinwand aufgedeckt (imageId ist dann null). */
+    imageOnScreen?: boolean
     unit: string | null
     /** Nur CHOICE/MULTI. */
     answers: LiveAnswerView[]
@@ -462,12 +496,16 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
       timeLimit: current.timeLimit,
       endsAt: session.phase === 'QUESTION' && session.questionEndsAt ? session.questionEndsAt.getTime() : null,
       quiz: quizNow,
-      imageId: current.imageId,
+      imageId: host || imageVisibleToPlayers(current, session) ? current.imageId : null,
       unit: current.unit,
       answers: current.kind === 'CHOICE' || current.kind === 'MULTI'
         ? current.answers.map(a => ({ id: a.id, label: a.label, ...(revealed ? { correct: a.isCorrect, count: counts.get(a.id) ?? 0 } : {}) }))
         : [],
       answeredCount: responses.length
+    }
+    if (current.imageReveal && current.imageId && session.phase === 'QUESTION') {
+      if (host) question.reveal = { startedAt: session.questionStartedAt?.getTime() ?? 0, steps: session.revealSteps }
+      else question.imageOnScreen = true
     }
     if (current.kind === 'ESTIMATE' && revealed) {
       const values = responses.map(r => r.numberValue).filter((v): v is number => v !== null)

@@ -490,7 +490,7 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
 
   | Art | Handy | Quiz, wenn … | Punkte |
   | --- | --- | --- | --- |
-  | `CHOICE` Auswahl | ein farbiger Knopf | eine Antwort als richtig markiert | 500-1000 nach Schnelligkeit |
+  | `CHOICE` Auswahl | ein farbiger Knopf | mindestens eine Antwort als richtig markiert (bei mehreren zählt jede davon) | 500-1000 nach Schnelligkeit |
   | `MULTI` Mehrfachauswahl | Knöpfe an-/abwählen, abschicken | Antworten als richtig markiert | wie oben, nur bei genau der richtigen Kombination |
   | `ESTIMATE` Schätzfrage | Zahl (Komma oder Punkt), optional Einheit | ein richtiger Wert eingetragen | nach Nähe: genau 1000, am Rand der Toleranz 500, außerhalb 0 (`estimatePoints`; Toleranz Standard 10 %) |
   | `WORDCLOUD` Wortwolke | ein Begriff (höchstens 40 Zeichen) | nie | keine |
@@ -507,6 +507,13 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
   Runde gelöscht), ausgeliefert unter `/api/live/bild/<id>` nur an Verwaltende und Beigetretene, mit
   strenger CSP. Da alle Fragen in einer Server Action gehen, ist `serverActions.bodySizeLimit` in
   `next.config.ts` auf 16 MB gesetzt.
+* **Bild aufdecken** (`LiveQuestion.imageReveal`, z.B. Promi oder Sehenswürdigkeit erraten): Die Leinwand
+  legt 5 × 5 Kacheln über das Bild, die in einer pro Frage festen, zufälligen Reihenfolge aufgehen
+  (`app/lib/live-reveal.ts`) - mit Zeitlimit gleichmäßig bis zum Ablauf, zusätzlich per Knopf "Stück
+  aufdecken" (`LiveSession.revealSteps`, ohne Zeitlimit der einzige Weg). Wer früher richtig antwortet,
+  bekommt wie immer mehr Punkte. Die Handys zeigen währenddessen nur einen Hinweis auf die Leinwand; die
+  Bild-Adresse liefert Teilnehmenden ein solches Bild erst ab der Auflösung, damit es niemand vorab ganz
+  ansehen kann.
 * **Beitreten** ohne Konto auf `/live` (auch über das Feld auf der Startseite): 6-stellige PIN von der
   Leinwand bzw. QR-Code (füllt die PIN vor) und ein Spitzname (eindeutig pro Runde, Groß-/Kleinschreibung
   egal, höchstens 24 Zeichen). Der Browser bekommt ein Cookie `live_<id>` (12 Stunden), in der Datenbank
@@ -531,7 +538,7 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
   WebSocket/SSE: normale HTTP-Antworten laufen ohne Sonderkonfiguration durch Cloudflare und Nginx.
   Läuft das Tool je in mehreren Prozessen, funktioniert es weiter, nur mit bis zu 5 s Verzögerung.
 * **Vor der Auflösung** enthält keine Ansicht (auch nicht die der Leinwand) die richtige Antwort oder die
-  Verteilung.
+  Verteilung, die Ansicht der Handys auch kein Bild, das aufgedeckt wird.
 * **Verwaltungsseite** (`/live/<id>/verwalten`): Beitrittslink mit QR-Code, Ergebnisse je Frage,
   Rangliste, **CSV-Export** (`/live/<id>/verwalten/export`: Verteilung je Frage, Rangliste und jede Antwort
   mit Spitzname, richtig, Punkten und Antwortzeit; Schutz vor CSV-Injection wie beim Abstimmungs-Export,

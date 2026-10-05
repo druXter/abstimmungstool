@@ -15,6 +15,8 @@ export type EditorQuestion = {
   unit: string
   /** Bereits gespeichertes Bild (beim Bearbeiten). */
   imageId: string | null
+  /** Bild auf der Leinwand nach und nach aufdecken. */
+  imageReveal: boolean
 }
 
 // Spiegeln die Grenzen aus app/lib/live.ts und app/lib/live-images.ts (die Server Action prüft selbst noch einmal).
@@ -33,7 +35,7 @@ const KINDS: { kind: LiveQuestionKind; label: string; hint: string }[] = [
 
 function emptyQuestion(): EditorQuestion {
   return {
-    text: '', kind: 'CHOICE', timeLimit: 20, target: '', tolerance: '', unit: '', imageId: null,
+    text: '', kind: 'CHOICE', timeLimit: 20, target: '', tolerance: '', unit: '', imageId: null, imageReveal: false,
     answers: Array.from({ length: 4 }, () => ({ label: '', correct: false }))
   }
 }
@@ -65,7 +67,7 @@ async function shrinkImage(file: File): Promise<File> {
 
 /**
  * Fragen einer Live-Runde bearbeiten: Text, Art, Zeitlimit, je nach Art Antworten (mit richtigen)
- * oder Schätzwert, optional ein Bild. Die Felder heißen q<i>_… (gelesen von parseQuestions in
+ * oder Schätzwert, optional ein Bild (auch zum Aufdecken). Die Felder heißen q<i>_… (gelesen von parseQuestions in
  * app/live-actions.ts) und werden nach jedem Verschieben/Löschen neu durchnummeriert.
  */
 export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[] }) {
@@ -193,9 +195,13 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   </button>
                 )}
                 <p className="text-xs text-gray-500">
-                  {q.answers.some(a => a.correct)
-                    ? 'Quizfrage: Wer richtig antwortet, bekommt Punkte - je schneller, desto mehr.'
-                    : 'Ohne richtige Antwort ist es eine reine Umfragefrage (keine Punkte).'}
+                  {!q.answers.some(a => a.correct)
+                    ? 'Ohne richtige Antwort ist es eine reine Umfragefrage (keine Punkte).'
+                    : q.kind === 'CHOICE' && q.answers.filter(a => a.correct).length > 1
+                      ? 'Quizfrage mit mehreren richtigen Antworten: Gewählt wird nur eine, jede der markierten zählt als richtig. Sollen alle zusammen gewählt werden, nimm "Mehrfachauswahl".'
+                      : q.kind === 'MULTI'
+                        ? 'Quizfrage: Punkte nur, wer genau alle markierten Antworten wählt - je schneller, desto mehr.'
+                        : 'Quizfrage: Wer richtig antwortet, bekommt Punkte - je schneller, desto mehr.'}
                 </p>
               </>
             )}
@@ -246,13 +252,32 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 <div className="flex items-start gap-3">
                   {/* eslint-disable-next-line @next/next/no-img-element -- Vorschau aus dem eigenen Speicher bzw. lokaler Datei */}
                   <img src={q.preview ?? `/api/live/bild/${q.imageId}`} alt={`Bild zu Frage ${i + 1}`} className="max-h-32 rounded border" />
-                  {q.imageId && !q.preview && (
+                  <div className="space-y-2">
                     <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
-                      <input type="checkbox" name={`q${i}_noimage`} className="w-4 h-4" />
-                      Bild entfernen
+                      <input
+                        type="checkbox" name={`q${i}_reveal`} checked={q.imageReveal}
+                        onChange={e => update(i, () => ({ imageReveal: e.target.checked }))}
+                        className="w-4 h-4"
+                      />
+                      Nach und nach aufdecken
                     </label>
-                  )}
+                    {q.imageId && !q.preview && (
+                      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                        <input type="checkbox" name={`q${i}_noimage`} className="w-4 h-4" />
+                        Bild entfernen
+                      </label>
+                    )}
+                  </div>
                 </div>
+              )}
+              {q.imageReveal && (q.preview || q.imageId) && (
+                <p className="text-xs text-gray-500">
+                  Zum Erraten (z.B. Promi oder Sehenswürdigkeit): Die Leinwand legt 25 Kacheln über das Bild,{' '}
+                  {q.timeLimit
+                    ? 'die bis zum Ende des Zeitlimits nach und nach aufgehen; mit "Stück aufdecken" geht es schneller.'
+                    : 'die du mit "Stück aufdecken" einzeln öffnest.'}
+                  {' '}Auf den Handys erscheint das Bild erst bei der Auflösung.
+                </p>
               )}
             </div>
           </fieldset>
