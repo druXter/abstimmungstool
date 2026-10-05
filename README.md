@@ -494,12 +494,18 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
   | `MULTI` Mehrfachauswahl | Knöpfe an-/abwählen, abschicken | Antworten als richtig markiert | wie oben, nur bei genau der richtigen Kombination |
   | `ESTIMATE` Schätzfrage | Zahl (Komma oder Punkt), optional Einheit | ein richtiger Wert eingetragen | nach Nähe: genau 1000, am Rand der Toleranz 500, außerhalb 0 (`estimatePoints`; Toleranz Standard 10 %) |
   | `WORDCLOUD` Wortwolke | ein Begriff (höchstens 40 Zeichen) | nie | keine |
+  | `TEXT` Freitext | Antwort eintippen (höchstens 100 Zeichen) | mindestens eine richtige Antwort eingetragen (weitere Schreibweisen möglich) | wie `CHOICE`, wenn die Antwort passt (`textMatches`) |
 
   Ohne richtige Lösung ist eine Frage eine Umfrage. Die Schätzfrage zeigt nach der Auflösung einen
   Zahlenstrahl mit allen Schätzungen und dem richtigen Wert sowie Median, Durchschnitt und Spanne. Die
   Wortwolke wächst auf der Leinwand schon während der Frage mit (sie verrät nichts), gleiche Begriffe
   zählen unabhängig von Groß-/Kleinschreibung zusammen; ein Klick auf ein Wort blendet es aus
   (`LiveResponse.hidden`, auch im Ergebnis und auf den Handys) - gegen Unpassendes an der Wand.
+  Freitext vergleicht ohne Groß-/Kleinschreibung, Akzente, ß/ss, Satzzeichen und Leerzeichen und verzeiht
+  kleine Tippfehler (ab 5 Zeichen einer, ab 9 zwei; vertauschte Nachbarn zählen als einer). Abkürzungen
+  oder Spitznamen trägt man als weitere Schreibweise ein. Nach der Auflösung zeigt die Leinwand die
+  richtigen Antworten, "x von y richtig" und die gegebenen Antworten (zusammengefasst, passende grün,
+  antippen = ausblenden); ohne eingetragene Antwort ist es eine offene Frage, die nur die Antworten zeigt.
 * **Bilder zu Fragen** (`LiveImage`): Der Editor verkleinert das Bild im Browser auf höchstens 1600 px und
   kodiert es als JPEG neu - das hält den Upload klein und entfernt EXIF-Daten wie den Aufnahmeort.
   Der Server prüft Größe (höchstens 1,5 MB) und Format am Dateiinhalt (JPEG, PNG, WebP, GIF; kein SVG,

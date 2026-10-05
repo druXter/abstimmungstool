@@ -1,9 +1,9 @@
 import { prisma } from '../../../../lib/prisma'
 import { getCurrentUser } from '../../../../lib/auth'
-import { describeResponse, formatNumber, getLiveLevel, isCorrectResponse, loadLiveResults } from '../../../../lib/live'
+import { describeResponse, formatNumber, getLiveLevel, isCorrectResponse, loadLiveResults, textMatches } from '../../../../lib/live'
 import { csvResponse } from '../../../../lib/csv'
 
-const KIND_LABELS = { CHOICE: 'Auswahl', MULTI: 'Mehrfachauswahl', ESTIMATE: 'Schätzfrage', WORDCLOUD: 'Wortwolke' } as const
+const KIND_LABELS = { CHOICE: 'Auswahl', MULTI: 'Mehrfachauswahl', ESTIMATE: 'Schätzfrage', WORDCLOUD: 'Wortwolke', TEXT: 'Freitext' } as const
 
 /**
  * CSV-Export einer Live-Runde für alle, die sie verwalten dürfen (getLiveLevel): je Frage die
@@ -31,6 +31,10 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         rows.push([nr, q.text, KIND_LABELS[q.kind], `Median: ${formatNumber(q.estimate.median)}${unit}`, String(q.estimate.count), ''])
         rows.push([nr, q.text, KIND_LABELS[q.kind], `Durchschnitt: ${formatNumber(q.estimate.mean)}${unit}`, String(q.estimate.count), ''])
       }
+    } else if (q.kind === 'TEXT') {
+      const accepted = q.answers.filter(a => a.isCorrect).map(a => a.label)
+      for (const label of accepted) rows.push([nr, q.text, KIND_LABELS[q.kind], `richtig: ${label}`, '', 'ja'])
+      for (const w of q.words) rows.push([nr, q.text, KIND_LABELS[q.kind], w.text, String(w.count), q.quiz && textMatches(w.text, accepted) ? 'ja' : ''])
     } else {
       for (const w of q.words) rows.push([nr, q.text, KIND_LABELS[q.kind], w.text, String(w.count), ''])
     }

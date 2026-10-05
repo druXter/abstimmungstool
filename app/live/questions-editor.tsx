@@ -29,6 +29,7 @@ const IMAGE_MAX_SIDE = 1600
 const KINDS: { kind: LiveQuestionKind; label: string; hint: string }[] = [
   { kind: 'CHOICE', label: 'Auswahl', hint: 'Eine Antwort wählen. Mit markierter richtiger Antwort eine Quizfrage (Punkte nach Schnelligkeit).' },
   { kind: 'MULTI', label: 'Mehrfachauswahl', hint: 'Mehrere Antworten wählen. Als Quiz zählt nur genau die richtige Kombination.' },
+  { kind: 'TEXT', label: 'Freitext', hint: 'Antwort frei eintippen (z.B. zum Bild-Rätsel). Mit richtigen Antworten eine Quizfrage: Groß-/Kleinschreibung, Akzente, Satzzeichen und kleine Tippfehler zählen nicht.' },
   { kind: 'ESTIMATE', label: 'Schätzfrage', hint: 'Eine Zahl schätzen. Mit richtigem Wert eine Quizfrage: Punkte nach Nähe, außerhalb der Toleranz keine.' },
   { kind: 'WORDCLOUD', label: 'Wortwolke', hint: 'Ein kurzer Begriff pro Person, die Leinwand zeigt eine Wortwolke. Keine Punkte; Unpassendes lässt sich dort ausblenden.' }
 ]
@@ -66,8 +67,8 @@ async function shrinkImage(file: File): Promise<File> {
 }
 
 /**
- * Fragen einer Live-Runde bearbeiten: Text, Art, Zeitlimit, je nach Art Antworten (mit richtigen)
- * oder Schätzwert, optional ein Bild (auch zum Aufdecken). Die Felder heißen q<i>_… (gelesen von parseQuestions in
+ * Fragen einer Live-Runde bearbeiten: Text, Art, Zeitlimit, je nach Art Antworten (mit richtigen),
+ * richtige Freitext-Antworten oder Schätzwert, optional ein Bild (auch zum Aufdecken). Die Felder heißen q<i>_… (gelesen von parseQuestions in
  * app/live-actions.ts) und werden nach jedem Verschieben/Löschen neu durchnummeriert.
  */
 export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[] }) {
@@ -204,6 +205,45 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         : 'Quizfrage: Wer richtig antwortet, bekommt Punkte - je schneller, desto mehr.'}
                 </p>
               </>
+            )}
+
+            {q.kind === 'TEXT' && (
+              <div className="space-y-2">
+                <ul className="space-y-2">
+                  {q.answers.map((a, j) => (
+                    <li key={j} className="flex items-center gap-2">
+                      <input
+                        name={`q${i}_a${j}`} maxLength={100} value={a.label} aria-label={`Frage ${i + 1}, richtige Antwort ${j + 1}`}
+                        onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) }))}
+                        placeholder={j === 0 ? 'Richtige Antwort (optional), z.B. Eiffelturm' : 'Weitere Schreibweise (optional)'}
+                        className="grow min-w-0 border border-gray-300 p-2 rounded"
+                      />
+                      {q.answers.length > 1 && (
+                        <button
+                          type="button" aria-label={`Richtige Antwort ${j + 1} entfernen`}
+                          onClick={() => update(i, prev => ({ answers: prev.answers.filter((_, k) => k !== j) }))}
+                          className="text-gray-400 hover:text-red-700 px-1"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+                {q.answers.length < MAX_ANSWERS && (
+                  <button
+                    type="button" onClick={() => update(i, prev => ({ answers: [...prev.answers, { label: '', correct: false }] }))}
+                    className="text-sm text-blue-600 hover:underline"
+                  >
+                    + Weitere Schreibweise
+                  </button>
+                )}
+                <p className="text-xs text-gray-500">
+                  {q.answers.some(a => a.label.trim())
+                    ? 'Quizfrage: Jede eingetragene Antwort zählt als richtig, je schneller, desto mehr Punkte. Abkürzungen oder Spitznamen (z.B. "Arnie") als eigene Schreibweise eintragen.'
+                    : 'Ohne richtige Antwort eine offene Frage: Die Leinwand zeigt nach der Auflösung alle Antworten (keine Punkte).'}
+                </p>
+              </div>
             )}
 
             {q.kind === 'ESTIMATE' && (

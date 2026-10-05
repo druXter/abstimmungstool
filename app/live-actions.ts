@@ -11,7 +11,7 @@ import { clientIp, liveJoinRule, livePinRule, refund, reserve } from './lib/thro
 import { currentPlayer, issuePlayerToken } from './lib/live-player'
 import { deleteUnusedImages, readImage } from './lib/live-images'
 import {
-  ANSWER_GRACE_MS, cleanNickname, cleanWord, controlLive, estimatePoints, freePin, getLiveLevel, isCorrectResponse, isQuiz,
+  ANSWER_GRACE_MS, cleanNickname, cleanTextAnswer, cleanWord, controlLive, estimatePoints, freePin, getLiveLevel, isCorrectResponse, isQuiz,
   LIVE_QUESTION_KINDS, MAX_ANSWER_LENGTH, MAX_ANSWERS, MAX_PLAYERS, MAX_QUESTION_LENGTH, MAX_QUESTIONS, MIN_ANSWERS,
   nicknameKey, notifyLive, pointsFor, settleQuestion, TIME_LIMITS, type LiveControl, type LiveLevel
 } from './lib/live'
@@ -44,7 +44,7 @@ function parseNumber(raw: string): number | null {
 
 /**
  * Liest die Fragen aus dem Editor (app/live/questions-editor.tsx): q<i>_text, q<i>_kind, q<i>_time,
- * bei Auswahl q<i>_a<j>/q<i>_c<j>, bei Schätzfragen q<i>_target/q<i>_tolerance/q<i>_unit, dazu
+ * bei Auswahl q<i>_a<j>/q<i>_c<j>, bei Freitext q<i>_a<j> (richtige Antworten), bei Schätzfragen q<i>_target/q<i>_tolerance/q<i>_unit, dazu
  * q<i>_image (neues Bild), q<i>_imageId (bisheriges behalten) bzw. q<i>_noimage, q<i>_reveal (Bild
  * aufdecken). Unvollständige
  * Fragen fallen still weg, ebenso Häkchen an leeren Antworten.
@@ -62,6 +62,12 @@ async function parseQuestions(formData: FormData): Promise<QuestionInput[]> {
         if (label) answers.push({ label, isCorrect: formData.get(`q${i}_c${j}`) === 'on' })
       }
       if (answers.length < MIN_ANSWERS) continue
+    } else if (kind === 'TEXT') {
+      // Alle eingetragenen Antworten sind richtig (Schreibweisen); keine = offene Frage ohne Punkte.
+      for (let j = 0; j < MAX_ANSWERS; j++) {
+        const label = formString(formData, `q${i}_a${j}`, MAX_ANSWER_LENGTH)
+        if (label) answers.push({ label, isCorrect: true })
+      }
     }
     const time = Number.parseInt(formString(formData, `q${i}_time`, 5), 10)
     const target = kind === 'ESTIMATE' ? parseNumber(formString(formData, `q${i}_target`, 30)) : null
@@ -290,6 +296,7 @@ export type LiveAnswerInput = { answerId?: string; answerIds?: string[]; value?:
  * ab Fragebeginn, die Punkte stehen damit sofort fest:
  * - CHOICE/MULTI: Schnelligkeit (pointsFor), MULTI nur bei genau der richtigen Kombination
  * - ESTIMATE: Nähe zum richtigen Wert (estimatePoints)
+ * - TEXT: Schnelligkeit, wenn die Antwort zu einer richtigen passt (textMatches)
  * - WORDCLOUD: nie Punkte
  */
 export async function answerLive(sessionId: string, index: number, input: LiveAnswerInput): Promise<AnswerResult> {
@@ -309,7 +316,7 @@ export async function answerLive(sessionId: string, index: number, input: LiveAn
 
   const question = await prisma.liveQuestion.findUnique({
     where: { sessionId_position: { sessionId, position: index } },
-    include: { answers: { select: { id: true, isCorrect: true } } }
+    include: { answers: { select: { id: true, label: true, isCorrect: true } } }
   })
   if (!question) return { ok: false, reason: 'invalid' }
   const elapsedMs = Math.max(now - session.questionStartedAt.getTime(), 0)
@@ -332,8 +339,9 @@ export async function answerLive(sessionId: string, index: number, input: LiveAn
       data = { numberValue: input.value }
       break
     }
-    case 'WORDCLOUD': {
-      const word = typeof input.text === 'string' ? cleanWord(input.text) : null
+    case 'WORDCLOUD':
+    case 'TEXT': {
+      const word = typeof input.text === 'string' ? (question.kind === 'TEXT' ? cleanTextAnswer : cleanWord)(input.text) : null
       if (!word) return { ok: false, reason: 'invalid' }
       data = { text: word.text, textKey: word.key }
       break
@@ -343,7 +351,7 @@ export async function answerLive(sessionId: string, index: number, input: LiveAn
   let points = 0
   if (isQuiz(question)) {
     if (question.kind === 'ESTIMATE') points = estimatePoints(data.numberValue as number, question.target!, question.tolerance)
-    else points = pointsFor(isCorrectResponse(question, { answerId: data.answerId ?? null, choices: data.choices ?? null, numberValue: null }), elapsedMs, question.timeLimit)
+    else points = pointsFor(isCorrectResponse(question, { answerId: data.answerId ?? null, choices: data.choices ?? null, numberValue: null, text: data.text ?? null }), elapsedMs, question.timeLimit)
   }
 
   try {

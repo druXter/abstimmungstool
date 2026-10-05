@@ -135,6 +135,8 @@ Leinwand Frage für Frage vorführt, während alle auf dem Handy antworten.
 - [x] Nutzerwunsch (2026-10-05): Bild nach und nach aufdecken (Kacheln auf der Leinwand, mit Zeitlimit von
       selbst und per Knopf, Handys erst ab der Auflösung). Dazu Fehler behoben: Bei "Auswahl" mit mehreren
       richtig markierten Antworten bekam niemand Punkte - jetzt zählt jede davon.
+- [x] Nutzerwunsch (2026-10-05): Frageart Freitext (`TEXT`) mit richtigen Antworten/Schreibweisen, tolerantem
+      Abgleich (Groß-/Kleinschreibung, Akzente, Satzzeichen, kleine Tippfehler) oder als offene Frage.
 
 ---
 

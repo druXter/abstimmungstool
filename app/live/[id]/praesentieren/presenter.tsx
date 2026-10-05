@@ -7,7 +7,7 @@ import { controlLiveAction, hideLiveWord, kickLivePlayer } from '../../../live-a
 import { useCountdown, useLiveView } from '../../use-live-view'
 import { ANSWER_STYLES, AnswerShape } from '../../shapes'
 import QrCode from '../../../ui/qr-code'
-import { EstimateLine, EstimateSummary, QuestionImage, WordCloud } from '../../displays'
+import { EstimateLine, EstimateSummary, QuestionImage, TextAnswerList, WordCloud } from '../../displays'
 import RevealImage from '../../reveal-image'
 
 /**
@@ -35,7 +35,7 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
     })
 
   const hideWord = (questionId: string, key: string, text: string) => {
-    if (!confirm(`"${text}" aus der Wortwolke ausblenden?`)) return
+    if (!confirm(`"${text}" ausblenden?`)) return
     startTransition(async () => {
       await hideLiveWord(sessionId, questionId, key)
       refresh()
@@ -145,6 +145,15 @@ export default function Presenter({ sessionId, initial, joinUrl }: { sessionId: 
               <div className="space-y-4">
                 <EstimateLine values={q.estimate?.values ?? []} target={q.estimate?.target ?? null} unit={q.unit} />
                 <p className="text-xl text-center text-gray-200"><EstimateSummary stats={q.estimate?.stats ?? null} unit={q.unit} /></p>
+              </div>
+            ))}
+            {q.kind === 'TEXT' && (view.phase === 'QUESTION' ? (
+              <p className="text-3xl text-center font-semibold">Tippt eure Antwort auf dem Handy ein!</p>
+            ) : (
+              <div className="space-y-3">
+                {q.quiz && <p className="text-xl text-center text-gray-200">{q.textResult?.correctCount ?? 0} von {q.answeredCount} richtig</p>}
+                <TextAnswerList accepted={q.textResult?.accepted ?? []} answers={q.textResult?.answers ?? []} onPick={w => hideWord(q.id, w.key, w.text)} />
+                {(q.textResult?.answers?.length ?? 0) > 0 && <p className="text-xs text-center text-gray-500">Eine Antwort antippen, um sie auszublenden.</p>}
               </div>
             ))}
             {q.kind === 'WORDCLOUD' && (

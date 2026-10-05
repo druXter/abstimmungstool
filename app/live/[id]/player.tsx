@@ -11,7 +11,7 @@ import { EstimateSummary, formatDe, QuestionImage, WordCloud } from '../displays
 /**
  * Ansicht der Teilnehmenden (Handy): warten, antworten, danach das eigene Ergebnis. Je nach Art:
  * farbige Knöpfe wie auf der Leinwand (Auswahl), Knöpfe zum An-/Abwählen und Abschicken
- * (Mehrfachauswahl), Zahlenfeld (Schätzfrage) oder Textfeld (Wortwolke). Die Frage steht klein
+ * (Mehrfachauswahl), Zahlenfeld (Schätzfrage) oder Textfeld (Wortwolke, Freitext). Die Frage steht klein
  * mit, damit man auch ohne Blick nach vorn antworten kann.
  */
 export default function Player({ sessionId, initial }: { sessionId: string; initial: LiveView }) {
@@ -154,11 +154,11 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
                 </form>
               )}
 
-              {q.kind === 'WORDCLOUD' && (
+              {(q.kind === 'WORDCLOUD' || q.kind === 'TEXT') && (
                 <form onSubmit={e => { e.preventDefault(); if (current.text.trim()) submit({ text: current.text }) }} className="space-y-3">
                   <input
-                    maxLength={40} autoComplete="off" value={current.text} onChange={e => setCurrent({ text: e.target.value })}
-                    placeholder="Dein Begriff" aria-label="Dein Begriff"
+                    maxLength={q.kind === 'TEXT' ? 100 : 40} autoComplete="off" autoCorrect="off" spellCheck={false} value={current.text} onChange={e => setCurrent({ text: e.target.value })}
+                    placeholder={q.kind === 'TEXT' ? 'Deine Antwort' : 'Dein Begriff'} aria-label={q.kind === 'TEXT' ? 'Deine Antwort' : 'Dein Begriff'}
                     className="w-full rounded-lg p-4 text-2xl bg-white text-gray-900 text-center placeholder:text-gray-400"
                   />
                   <button type="submit" disabled={pending || !current.text.trim()} className="w-full rounded-lg bg-white text-gray-900 font-bold text-lg py-3 disabled:opacity-50">
@@ -180,7 +180,9 @@ export default function Player({ sessionId, initial }: { sessionId: string; init
                 title={!me.answered ? 'Keine Antwort' : q.kind === 'ESTIMATE' ? 'Leider zu weit weg' : 'Leider falsch'}
                 text={q.kind === 'ESTIMATE'
                   ? `Richtig: ${formatDe(q.estimate?.target ?? 0)}${q.unit ? ` ${q.unit}` : ''}${me.answerText ? ` - du: ${me.answerText}` : ''}`
-                  : `Richtig war: ${q.answers.filter(a => a.correct).map(a => a.label).join(q.kind === 'MULTI' ? ' + ' : ' / ')}`}
+                  : q.kind === 'TEXT'
+                    ? `Richtig war: ${q.textResult?.accepted.join(' / ') ?? ''}${me.answerText ? ` - du: ${me.answerText}` : ''}`
+                    : `Richtig war: ${q.answers.filter(a => a.correct).map(a => a.label).join(q.kind === 'MULTI' ? ' + ' : ' / ')}`}
               />
             )
           ) : q.kind === 'WORDCLOUD' ? (

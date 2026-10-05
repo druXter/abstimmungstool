@@ -2,9 +2,10 @@ import { expect, test, type Browser, type Page } from '@playwright/test'
 import type { LiveQuestionKind } from '@prisma/client'
 import { createAccount, login, prisma, unique, uniqueIp } from './helpers'
 import { readImage } from '../../app/lib/live-images'
+import { textMatches } from '../../app/lib/live'
 
 // Live-Runden, Ausbau (TODO.md E, Ideen-Punkt): Mehrfachauswahl, Schätzfrage, Wortwolke, Teilen mit
-// anderen Konten, CSV-Export und Bilder zu Fragen (auch zum Aufdecken).
+// anderen Konten, CSV-Export, Bilder zu Fragen (auch zum Aufdecken) und Freitext.
 
 type Q = { text: string; kind?: LiveQuestionKind; timeLimit?: number | null; answers?: [string, boolean][]; target?: number; tolerance?: number; unit?: string }
 
@@ -95,6 +96,82 @@ test('Auswahl mit mehreren richtigen Antworten: jede davon zählt', async ({ pag
   expect(points.Anna).toBeGreaterThanOrEqual(500)
   expect(points.Ben).toBeGreaterThanOrEqual(500)
   expect(points.Cleo).toBe(0)
+})
+
+test('Freitext: Abgleich ohne Groß-/Kleinschreibung, Akzente, Satzzeichen, kleine Tippfehler', () => {
+  expect(textMatches('eiffel turm!', ['Eiffelturm'])).toBe(true)
+  expect(textMatches('Eifelturm', ['Eiffelturm'])).toBe(true)
+  expect(textMatches('Eifeltrum', ['Eiffelturm'])).toBe(true) // zwei Fehler (einer vertauscht) bei 10 Zeichen
+  expect(textMatches('Tour Eiffel', ['Eiffelturm', 'Tour Eiffel'])).toBe(true)
+  expect(textMatches('Beyonce', ['Beyoncé'])).toBe(true)
+  expect(textMatches('Strasse', ['Straße'])).toBe(true)
+  expect(textMatches('Goehte', ['Goethe'])).toBe(true) // vertauscht = ein Fehler
+  expect(textMatches('Gothe', ['Goethe'])).toBe(true)
+  expect(textMatches('Gotte', ['Goethe'])).toBe(false) // zwei Fehler bei 6 Zeichen
+  expect(textMatches('Rom', ['Ron'])).toBe(false) // kurze Antworten genau
+  expect(textMatches('Big Ben', ['Eiffelturm'])).toBe(false)
+  expect(textMatches('', ['Eiffelturm'])).toBe(false)
+})
+
+test('Freitext: Punkte für passende Antworten, Leinwand zeigt richtige und gegebene Antworten', async ({ page, browser }) => {
+  const { live, phones: [anna, ben, cleo] } = await startedRound(page, browser, [
+    { text: 'Welches Bauwerk ist das?', kind: 'TEXT', answers: [['Eiffelturm', true], ['Tour Eiffel', true]] }
+  ], ['Anna', 'Ben', 'Cleo'])
+  await expect(page.getByText('Tippt eure Antwort auf dem Handy ein!')).toBeVisible()
+  // Vor der Auflösung verrät die Ansicht die richtigen Antworten nicht.
+  const state = await anna.evaluate(async url => (await fetch(url)).json(), `/api/live/${live.id}`)
+  expect(JSON.stringify(state)).not.toContain('Eiffelturm')
+
+  await anna.getByLabel('Deine Antwort').fill('eiffel turm!')
+  await anna.getByRole('button', { name: 'Abschicken' }).click()
+  await expect(anna.getByText('Antwort gespeichert')).toBeVisible()
+  await ben.getByLabel('Deine Antwort').fill('Eifelturm')
+  await ben.getByRole('button', { name: 'Abschicken' }).click()
+  await cleo.getByLabel('Deine Antwort').fill('Big Ben')
+  await cleo.getByRole('button', { name: 'Abschicken' }).click()
+
+  await expect(anna.getByText('Richtig!')).toBeVisible()
+  await expect(ben.getByText('Richtig!')).toBeVisible()
+  await expect(cleo.getByText('Richtig war: Eiffelturm / Tour Eiffel - du: Big Ben')).toBeVisible()
+  await expect(page.getByText('Richtig: Eiffelturm / Tour Eiffel')).toBeVisible()
+  await expect(page.getByText('2 von 3 richtig')).toBeVisible()
+  const given = page.getByRole('list', { name: 'Gegebene Antworten' })
+  await expect(given.getByLabel('richtig')).toHaveCount(2)
+  const points = await pointsOf(live.id)
+  expect(points.Anna).toBeGreaterThanOrEqual(500)
+  expect(points.Ben).toBeGreaterThanOrEqual(500)
+  expect(points.Cleo).toBe(0)
+
+  // Unpassendes lässt sich ausblenden wie bei der Wortwolke.
+  page.once('dialog', dialog => dialog.accept())
+  await given.getByRole('button', { name: /Big Ben/ }).click()
+  await expect(given.getByText('Big Ben')).toHaveCount(0)
+  await expect(given.getByRole('listitem')).toHaveCount(2)
+})
+
+test('Freitext anlegen: eingetragene Schreibweisen sind richtig, ohne Eintrag eine offene Frage', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/live/neu')
+  await page.getByLabel('Titel').fill('Rätselrunde')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Wer ist das?')
+  await page.getByLabel('Art').selectOption('TEXT')
+  await page.getByLabel('Frage 1, richtige Antwort 1').fill('Arnold Schwarzenegger')
+  await page.getByLabel('Frage 1, richtige Antwort 2').fill('Arnie')
+  await expect(page.getByText('Quizfrage: Jede eingetragene Antwort zählt als richtig')).toBeVisible()
+  await page.getByRole('button', { name: '+ Weitere Frage' }).click()
+  await page.getByLabel('Frage 2', { exact: true }).fill('Was fällt dir dazu ein?')
+  await page.getByLabel('Art').nth(1).selectOption('TEXT')
+  await page.getByRole('button', { name: 'Live-Runde anlegen' }).click()
+  await page.waitForURL(/verwalten\?angelegt=1/)
+
+  const id = new URL(page.url()).pathname.split('/')[2]
+  const questions = await prisma.liveQuestion.findMany({ where: { sessionId: id }, orderBy: { position: 'asc' }, include: { answers: { orderBy: { position: 'asc' } } } })
+  expect(questions.map(q => q.kind)).toEqual(['TEXT', 'TEXT'])
+  expect(questions[0].answers.map(a => [a.label, a.isCorrect])).toEqual([['Arnold Schwarzenegger', true], ['Arnie', true]])
+  expect(questions[1].answers).toHaveLength(0)
+  await expect(page.getByText('Freitext · 20 s · Quiz')).toBeVisible()
+  await expect(page.getByText('Richtig: Arnold Schwarzenegger / Arnie')).toBeVisible()
 })
 
 test('Schätzfrage: Punkte nach Nähe, Komma als Dezimaltrenner, Verteilung auf der Leinwand', async ({ page, browser }) => {

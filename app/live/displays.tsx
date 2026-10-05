@@ -91,3 +91,45 @@ export function QuestionImage({ imageId, className }: { imageId: string | null; 
   // eslint-disable-next-line @next/next/no-img-element -- Bild aus dem eigenen, zugriffsgeschützten Speicher
   return <img src={`/api/live/bild/${imageId}`} alt="Bild zur Frage" className={`${className} object-contain rounded-lg`} />
 }
+
+/**
+ * Freitext: die richtigen Antworten (falls eingetragen) und die gegebenen, gleiche zusammengefasst,
+ * häufigste zuerst, passende mit Haken. `onPick` macht sie anklickbar (Leinwand: ausblenden).
+ */
+export function TextAnswerList({
+  accepted,
+  answers,
+  tone = 'dark',
+  onPick
+}: {
+  accepted: string[]
+  answers: (WordCount & { correct: boolean })[]
+  tone?: 'dark' | 'light'
+  onPick?: (word: WordCount) => void
+}) {
+  const dark = tone === 'dark'
+  return (
+    <div className="space-y-3">
+      {accepted.length > 0 && (
+        <p className={dark ? 'text-3xl md:text-4xl font-bold text-center text-green-300' : 'text-sm font-semibold text-green-800'}>
+          Richtig: {accepted.join(' / ')}
+        </p>
+      )}
+      {answers.length > 0 && (
+        <ul className={`flex flex-wrap gap-2 ${dark ? 'justify-center' : ''}`} aria-label="Gegebene Antworten">
+          {answers.map(a => {
+            const style = a.correct
+              ? (dark ? 'bg-green-600 text-white' : 'bg-green-100 text-green-900')
+              : (dark ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-800')
+            const content = <>{a.text}{a.correct && <span aria-label="richtig"> ✓</span>}<span className="ml-2 tabular-nums opacity-75">{a.count}</span></>
+            return (
+              <li key={a.key} className={`${style} rounded-full ${dark ? 'px-4 py-1.5 text-xl' : 'px-3 py-1 text-sm'} font-semibold`}>
+                {onPick ? <button type="button" onClick={() => onPick(a)} className="hover:line-through">{content}</button> : content}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </div>
+  )
+}

@@ -3,19 +3,19 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
-import { formatNumber, getLiveLevel, loadLiveResults } from '../../../lib/live'
+import { formatNumber, getLiveLevel, loadLiveResults, textMatches } from '../../../lib/live'
 import { deleteLive, resetLive, shareLive, unshareLive } from '../../../live-actions'
 import CopyableField from '../../../ui/copyable-field'
 import ConfirmForm from '../../../ui/confirm-form'
 import Notice from '../../../ui/notice'
 import QrCode from '../../../ui/qr-code'
 import { ANSWER_STYLES, AnswerShape } from '../../shapes'
-import { EstimateSummary, QuestionImage, WordCloud } from '../../displays'
+import { EstimateSummary, QuestionImage, TextAnswerList, WordCloud } from '../../displays'
 
 export const dynamic = 'force-dynamic'
 
 const PHASE_LABELS = { LOBBY: 'Lobby', QUESTION: 'läuft', REVEAL: 'läuft', LEADERBOARD: 'läuft', FINISHED: 'beendet' } as const
-const KIND_LABELS = { CHOICE: 'Auswahl', MULTI: 'Mehrfachauswahl', ESTIMATE: 'Schätzfrage', WORDCLOUD: 'Wortwolke' } as const
+const KIND_LABELS = { CHOICE: 'Auswahl', MULTI: 'Mehrfachauswahl', ESTIMATE: 'Schätzfrage', WORDCLOUD: 'Wortwolke', TEXT: 'Freitext' } as const
 const SHARE_ERRORS: Record<string, string> = {
   unbekannt: 'Zu dieser E-Mail-Adresse gibt es kein Konto. Lade die Person zuerst unter "Konten" ein.',
   owner: 'Diese Person besitzt die Live-Runde bereits.'
@@ -213,6 +213,12 @@ export default async function ManageLivePage({
                 )}
 
                 {q.kind === 'WORDCLOUD' && played && <WordCloud words={q.words} tone="light" max={2} min={0.85} />}
+
+                {q.kind === 'TEXT' && (() => {
+                  const accepted = q.answers.filter(a => a.isCorrect).map(a => a.label)
+                  const answers = played ? q.words.map(w => ({ ...w, correct: q.quiz && textMatches(w.text, accepted) })) : []
+                  return <TextAnswerList accepted={accepted} answers={answers} tone="light" />
+                })()}
               </section>
             )
           })}

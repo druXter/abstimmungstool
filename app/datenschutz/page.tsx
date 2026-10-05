@@ -87,7 +87,8 @@ export default function DatenschutzPage() {
             sieht zusätzlich auf der Verwaltungsseite die Rangliste mit allen Punkten und jede einzelne Antwort (auch
             als CSV-Export); das gilt auch für Konten, mit denen die Runde zum gemeinsamen Moderieren geteilt ist.
             Wähle daher am besten keinen vollen Namen. Ein Konto brauchst du nicht. Bei einer Wortwolke erscheint dein
-            Begriff ohne Namen auf der Leinwand; die Verwaltung kann einzelne Begriffe ausblenden.
+            Begriff, bei einer Freitext-Frage nach der Auflösung deine Antwort ohne Namen auf der Leinwand; die
+            Verwaltung kann einzelne Begriffe und Antworten ausblenden.
           </p>
         </div>
 

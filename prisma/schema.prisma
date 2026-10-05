@@ -464,6 +464,8 @@ enum LiveQuestionKind {
   MULTI
   ESTIMATE
   WORDCLOUD
+  // Freitext: Antwort eintippen; mit eingetragenen richtigen Antworten (LiveAnswer, alle isCorrect) ein Quiz.
+  TEXT
 }
 
 // Bild zu einer Frage. Bewusst in der Datenbank statt im Dateisystem: So ist es in der täglichen

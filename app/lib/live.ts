@@ -17,7 +17,7 @@ export const MAX_QUESTION_LENGTH = 200
 export const MAX_ANSWER_LENGTH = 100
 /** Wortwolke: so lang darf ein Beitrag sein. */
 export const MAX_WORD_LENGTH = 40
-export const LIVE_QUESTION_KINDS: readonly LiveQuestionKind[] = ['CHOICE', 'MULTI', 'ESTIMATE', 'WORDCLOUD']
+export const LIVE_QUESTION_KINDS: readonly LiveQuestionKind[] = ['CHOICE', 'MULTI', 'ESTIMATE', 'WORDCLOUD', 'TEXT']
 export const MAX_NICKNAME_LENGTH = 24
 export const MAX_PLAYERS = 500
 /** Auswahl beim Anlegen, in Sekunden. 0 = ohne Zeitlimit. */
@@ -43,7 +43,7 @@ export async function getLiveLevel(user: CurrentUser | null, session: { id: stri
 /** Was eine Frage für die Auswertung braucht. */
 export type QuestionLike = { kind: LiveQuestionKind; target: number | null; answers: { isCorrect: boolean }[] }
 
-/** Quizfrage = es gibt eine richtige Lösung und damit Punkte (Wortwolken nie). */
+/** Quizfrage = es gibt eine richtige Lösung und damit Punkte (Wortwolken nie; Freitext mit eingetragener Antwort). */
 export function isQuiz(q: QuestionLike): boolean {
   if (q.kind === 'WORDCLOUD') return false
   if (q.kind === 'ESTIMATE') return q.target !== null
@@ -86,6 +86,50 @@ export function imageVisibleToPlayers(
 export function cleanWord(input: string): { text: string; key: string } | null {
   const text = input.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_WORD_LENGTH)
   return text ? { text, key: text.toLocaleLowerCase('de-DE') } : null
+}
+
+/**
+ * Freitext: Schlüssel zum Vergleichen und Zusammenfassen - klein, ohne Akzente/Umlaut-Punkte, ß = ss,
+ * Satzzeichen als Leerraum ("Goethe!" = "goethe", "Müller" = "muller").
+ */
+export function answerKey(text: string): string {
+  const key = text.normalize('NFKD').replace(/\p{M}/gu, '').toLocaleLowerCase('de-DE').replace(/ß/g, 'ss')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ').trim()
+  // Nur Satzzeichen/Emoji: dann eben wörtlich, sonst fiele alles auf denselben leeren Schlüssel.
+  return key || text.toLocaleLowerCase('de-DE')
+}
+
+/** Freitext-Antwort bereinigen; Schlüssel siehe answerKey. Leer -> null. */
+export function cleanTextAnswer(input: string): { text: string; key: string } | null {
+  const text = input.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2060-\u206f]/g, '').replace(/\s+/g, ' ').trim().slice(0, MAX_ANSWER_LENGTH)
+  return text ? { text, key: answerKey(text) } : null
+}
+
+/** Tippfehler zählen: einfügen, löschen, ersetzen und zwei Nachbarn vertauschen kosten je 1. */
+function editDistance(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => Array.from({ length: b.length + 1 }, (_, j) => (i === 0 ? j : j === 0 ? i : 0)))
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1))
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1)
+    }
+  }
+  return d[a.length][b.length]
+}
+
+/**
+ * Ob eine Freitext-Antwort zu einer der richtigen passt: gleicher Schlüssel (answerKey), Leerzeichen
+ * egal ("Eiffel Turm" = "Eiffelturm"), dazu kleine Tippfehler - ab 5 Zeichen einer, ab 9 zwei.
+ */
+export function textMatches(given: string, accepted: string[]): boolean {
+  const compact = (s: string) => answerKey(s).replace(/ /g, '')
+  const mine = compact(given)
+  return accepted.some(label => {
+    const target = compact(label)
+    if (!target) return false
+    const allowed = target.length >= 9 ? 2 : target.length >= 5 ? 1 : 0
+    return mine === target || (allowed > 0 && Math.abs(mine.length - target.length) <= allowed && editDistance(mine, target) <= allowed)
+  })
 }
 
 /** Kahoot-Formel: richtig = 1000 bei sofortiger Antwort, linear bis 500 bei Zeitablauf; ohne Zeitlimit 1000. */
@@ -355,6 +399,7 @@ export function describeResponse(
     case 'ESTIMATE':
       return r.numberValue === null ? '' : `${formatNumber(r.numberValue)}${q.unit ? ` ${q.unit}` : ''}`
     case 'WORDCLOUD':
+    case 'TEXT':
       return r.text ?? ''
     default: {
       const ids = chosenIds(r)
@@ -365,14 +410,16 @@ export function describeResponse(
 
 /**
  * Ob eine Antwort richtig ist (nur Quizfragen). CHOICE: die gewählte Antwort ist eine der richtigen
- * (mehrere markierte = jede zählt), MULTI: genau die richtige Kombination, ESTIMATE: in der Toleranz.
+ * (mehrere markierte = jede zählt), MULTI: genau die richtige Kombination, ESTIMATE: in der Toleranz,
+ * TEXT: passt zu einer der eingetragenen Antworten (textMatches).
  */
 export function isCorrectResponse(
-  q: { kind: LiveQuestionKind; target: number | null; tolerance: number | null; answers: { id: string; isCorrect: boolean }[] },
-  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue'>
+  q: { kind: LiveQuestionKind; target: number | null; tolerance: number | null; answers: { id: string; label: string; isCorrect: boolean }[] },
+  r: Pick<ResponseLike, 'answerId' | 'choices' | 'numberValue' | 'text'>
 ): boolean {
   if (!isQuiz(q)) return false
   if (q.kind === 'ESTIMATE') return r.numberValue !== null && estimatePoints(r.numberValue, q.target!, q.tolerance) > 0
+  if (q.kind === 'TEXT') return r.text !== null && textMatches(r.text, q.answers.filter(a => a.isCorrect).map(a => a.label))
   const ids = chosenIds(r)
   const correct = q.answers.filter(a => a.isCorrect).map(a => a.id)
   if (q.kind === 'CHOICE') return ids.length === 1 && correct.includes(ids[0])
@@ -429,6 +476,11 @@ export type LiveView = {
     estimate?: { target: number | null; stats: EstimateStats | null; values?: number[] }
     /** Nur WORDCLOUD: Leinwand schon während der Frage (live), Handys ab der Auflösung. */
     words?: WordCount[]
+    /**
+     * Nur TEXT, ab der Auflösung: die richtigen Antworten (leer = Umfrage), wie viele richtig lagen und
+     * für die Leinwand die häufigsten Antworten (ohne ausgeblendete).
+     */
+    textResult?: { accepted: string[]; correctCount: number; answers?: (WordCount & { correct: boolean })[] }
   }
   /** Nur Leinwand: alle Teilnehmenden (Lobby, zum Entfernen). */
   players?: { id: string; nickname: string }[]
@@ -512,6 +564,14 @@ export async function loadView(sessionId: string, playerId: string | null): Prom
       question.estimate = { target: current.target, stats: estimateStats(values), ...(host ? { values: values.slice(0, 500) } : {}) }
     }
     if (current.kind === 'WORDCLOUD' && (host || revealed)) question.words = wordCounts(responses)
+    if (current.kind === 'TEXT' && revealed) {
+      const accepted = current.answers.filter(a => a.isCorrect).map(a => a.label)
+      question.textResult = {
+        accepted,
+        correctCount: responses.filter(r => isCorrectResponse(current, r)).length,
+        ...(host ? { answers: wordCounts(responses, 30).map(w => ({ ...w, correct: quizNow && textMatches(w.text, accepted) })) } : {})
+      }
+    }
   }
 
   const view: Omit<LiveView, 'sig' | 'now'> = {
@@ -581,7 +641,7 @@ export async function loadLiveResults(sessionId: string) {
         quiz: isQuiz(q),
         counts: answerCounts(q.responses),
         estimate: q.kind === 'ESTIMATE' ? estimateStats(values) : null,
-        words: q.kind === 'WORDCLOUD' ? wordCounts(q.responses, 1000) : []
+        words: q.kind === 'WORDCLOUD' || q.kind === 'TEXT' ? wordCounts(q.responses, 1000) : []
       }
     })
   }
