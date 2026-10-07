@@ -102,8 +102,8 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 - [x] Web-Push-Benachrichtigungen als Grundlage (für die Terminabstimmung unter B, aber auch z.B. "Abstimmung
       geschlossen"). Löst die bisherige Entscheidung "keine Push-Benachrichtigungen" ab - README und
       Datenschutzerklärung (Push-Abos sind personenbezogen) anpassen.
-  - Umgesetzt für Konten ("Abstimmung beendet"), ohne Zusatzpaket. Noch offen: Push für Abstimmende ohne
-    Konto - hängt an der Terminabstimmung (Abschnitt B), dort erst entscheiden.
+  - Umgesetzt für Konten ("Abstimmung beendet"), ohne Zusatzpaket. Push für Abstimmende ohne
+    Konto: bei der Terminabstimmung (Abschnitt B) entschieden - Push nur mit Konto, sonst Mail.
 
 ---
 
