@@ -3,10 +3,11 @@ import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { sanitizeNextPath } from 'suite-kit'
 import { getCurrentUser } from '../lib/auth'
-import { getIdps, idpLabel } from '../lib/suite'
+import { getIdps, idpLabel, loginRedirectIdp, shouldAutoRedirect } from '../lib/suite'
 import { loginUser } from '../auth-actions'
 import SubmitButton from '../ui/submit-button'
 import Notice from '../ui/notice'
+import HardRedirect from './weiter/hard-redirect'
 
 export const dynamic = 'force-dynamic'
 
@@ -24,12 +25,32 @@ const ERRORS: Record<string, string> = {
 export default async function AnmeldenPage({
   searchParams
 }: {
-  searchParams: Promise<{ error?: string; next?: string; reset?: string }>
+  searchParams: Promise<{ error?: string; next?: string; reset?: string; local?: string }>
 }) {
-  const { error, next, reset } = await searchParams
+  const params = await searchParams
+  const { error, next, reset } = params
   const target = sanitizeNextPath(next, '/meine-abstimmungen')
 
   if (await getCurrentUser()) redirect(target)
+
+  // Bevorzugter Anbieter (SUITE_LOGIN_REDIRECT): direkt weiter, per echtem Seitenwechsel - die Seite
+  // wird auch über Client-Links erreicht, und der Route Handler leitet zu einer anderen Domain weiter.
+  const preferred = loginRedirectIdp()
+  if (preferred && shouldAutoRedirect(params, target)) {
+    return (
+      <main className="bg-gray-50 flex items-center justify-center px-4 py-12">
+        <div className="max-w-sm w-full bg-white p-8 rounded-lg shadow space-y-4 text-gray-900">
+          <h1 className="text-xl font-bold">Anmelden mit {idpLabel(preferred)}</h1>
+          <HardRedirect to={`/api/suite/login?idp=${encodeURIComponent(preferred.issuer)}&next=${encodeURIComponent(target)}`} />
+          <p className="text-sm">
+            <Link href={`/anmelden?local=1&next=${encodeURIComponent(target)}`} className="text-blue-700 hover:underline">
+              Stattdessen mit E-Mail und Passwort anmelden
+            </Link>
+          </p>
+        </div>
+      </main>
+    )
+  }
 
   const idps = getIdps()
 

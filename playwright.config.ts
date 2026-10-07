@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { TEST_SUITE_IDPS } from './tests/e2e/suite-server'
+import { SUITE_TOOLS, TEST_SUITE_IDPS } from './tests/e2e/suite-server'
 import { MAIL_PORT } from './tests/e2e/mail-server'
 import { RSVP_ORIGIN } from './tests/e2e/rsvp-server'
 import { createECDH, createHash } from 'node:crypto'
@@ -12,6 +12,10 @@ import { createECDH, createHash } from 'node:crypto'
 // nicht sehen; ebenso eine parallel laufende Entwicklungsinstanz (localhost:3600).
 const PORT = 3601
 export const BASE_URL = `http://127.0.0.1:${PORT}`
+// Zweite Instanz mit demselben Build, derselben Datenbank und derselben BASE_URL, aber mit
+// SUITE_LOGIN_REDIRECT (bevorzugter Anbieter Tool A): Ihre Login-Seite leitet direkt weiter, der
+// Rücksprung landet über BASE_URL bei der ersten Instanz (tests/e2e/login-redirect.spec.ts).
+export const REDIRECT_PORT = 3602
 
 // Gilt für den Server UND für die Testprozesse (tests/e2e/helpers.ts greift direkt auf die
 // Datenbank zu). Relative SQLite-Pfade löst Prisma relativ zu prisma/schema.prisma auf.
@@ -29,6 +33,38 @@ vapid.setPrivateKey(createHash('sha256').update('e2e-vapid').digest())
 export const TEST_VAPID_PUBLIC_KEY = vapid.getPublicKey().toString('base64url')
 const TEST_VAPID_PRIVATE_KEY = vapid.getPrivateKey().toString('base64url')
 
+const SERVER_ENV: Record<string, string> = {
+  DATABASE_URL: 'file:./test.db',
+  BASE_URL,
+  // Ein Proxy: Die Tests spielen ihn selbst und setzen X-Forwarded-For, damit sich die
+  // Drossel-Zähler verschiedener Tests nicht in die Quere kommen.
+  TRUST_PROXY_HOPS: '1',
+  // Konto-Föderation: Test-Doppel anderer Tools aus tests/e2e/suite-server.ts.
+  SUITE_IDPS: TEST_SUITE_IDPS,
+  SUITE_APP_NAME: 'Abstimmungstool Test',
+  RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
+  // rsvp-app spielt tests/e2e/rsvp-server.ts (Terminabstimmung, Ergebnis-Meldung).
+  RSVP_APP_BASE_URL: RSVP_ORIGIN,
+  // Mailversand an den Test-Mailserver (tests/e2e/mail-server.ts): ohne TLS, ohne Anmeldung.
+  SMTP_HOST: '127.0.0.1',
+  SMTP_PORT: String(MAIL_PORT),
+  SMTP_USER: '',
+  SMTP_PASS: '',
+  SMTP_FROM: 'Abstimmungstool Test <test@example.test>',
+  // Werte aus einer lokalen .env ausdrücklich leeren (gesetzte Variablen - auch leere - haben
+  // Vorrang vor .env): keine Anbieter-Rolle.
+  SUITE_SIGNING_KEY: '',
+  SUITE_TRUSTED_APPS: '',
+
+  // Push-Mitteilungen gehen an den Test-Push-Dienst (tests/e2e/push-server.ts).
+  VAPID_PUBLIC_KEY: TEST_VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY: TEST_VAPID_PRIVATE_KEY,
+  VAPID_SUBJECT: 'mailto:test@example.test',
+  // Cron-Endpunkte (Auto-Schließen) rufen die Tests selbst auf.
+  CRON_SECRET: TEST_CRON_SECRET,
+  TZ: 'Europe/Berlin'
+}
+
 export default defineConfig({
   testDir: './tests/e2e',
   // Alle Tests teilen sich eine Datenbank und die Drossel-Zähler - nacheinander ausführen.
@@ -42,7 +78,7 @@ export default defineConfig({
     ...devices['Desktop Chrome'],
     locale: 'de-DE'
   },
-  webServer: {
+  webServer: [{
     // Datenbank bei jedem Lauf frisch anlegen (nur die eigene Testdatei löschen - bewusst kein
     // `prisma db push --force-reset`, das bei falsch gesetzter DATABASE_URL eine fremde
     // Datenbank leeren würde), dann wie in Produktion bauen und starten.
@@ -52,36 +88,15 @@ export default defineConfig({
     timeout: 240_000,
     stdout: 'ignore',
     stderr: 'pipe',
-    env: {
-      DATABASE_URL: 'file:./test.db',
-      BASE_URL,
-      // Ein Proxy: Die Tests spielen ihn selbst und setzen X-Forwarded-For, damit sich die
-      // Drossel-Zähler verschiedener Tests nicht in die Quere kommen.
-      TRUST_PROXY_HOPS: '1',
-      // Konto-Föderation: Test-Doppel anderer Tools aus tests/e2e/suite-server.ts.
-      SUITE_IDPS: TEST_SUITE_IDPS,
-      SUITE_APP_NAME: 'Abstimmungstool Test',
-      RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
-      // rsvp-app spielt tests/e2e/rsvp-server.ts (Terminabstimmung, Ergebnis-Meldung).
-      RSVP_APP_BASE_URL: RSVP_ORIGIN,
-      // Mailversand an den Test-Mailserver (tests/e2e/mail-server.ts): ohne TLS, ohne Anmeldung.
-      SMTP_HOST: '127.0.0.1',
-      SMTP_PORT: String(MAIL_PORT),
-      SMTP_USER: '',
-      SMTP_PASS: '',
-      SMTP_FROM: 'Abstimmungstool Test <test@example.test>',
-      // Werte aus einer lokalen .env ausdrücklich leeren (gesetzte Variablen - auch leere - haben
-      // Vorrang vor .env): keine Anbieter-Rolle.
-      SUITE_SIGNING_KEY: '',
-      SUITE_TRUSTED_APPS: '',
-
-      // Push-Mitteilungen gehen an den Test-Push-Dienst (tests/e2e/push-server.ts).
-      VAPID_PUBLIC_KEY: TEST_VAPID_PUBLIC_KEY,
-      VAPID_PRIVATE_KEY: TEST_VAPID_PRIVATE_KEY,
-      VAPID_SUBJECT: 'mailto:test@example.test',
-      // Cron-Endpunkte (Auto-Schließen) rufen die Tests selbst auf.
-      CRON_SECRET: TEST_CRON_SECRET,
-      TZ: 'Europe/Berlin'
-    }
-  }
+    env: SERVER_ENV
+  }, {
+    // Startet nach der ersten Instanz (Playwright richtet die Server nacheinander ein) und nutzt deren Build.
+    command: `npx next start -H 127.0.0.1 -p ${REDIRECT_PORT}`,
+    url: `http://127.0.0.1:${REDIRECT_PORT}/impressum`,
+    reuseExistingServer: false,
+    timeout: 60_000,
+    stdout: 'ignore',
+    stderr: 'pipe',
+    env: { ...SERVER_ENV, SUITE_LOGIN_REDIRECT: SUITE_TOOLS.a.origin }
+  }]
 })
