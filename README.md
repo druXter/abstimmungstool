@@ -7,6 +7,11 @@ anlegt und verwaltet (siehe "Konten" unten).
 
 ## Funktionen
 
+* **Darkmode:** folgt der Systemeinstellung des Geräts (wie rsvp-app), nur am Bildschirm (`@custom-variant dark` in
+  `app/globals.css`, Ausdrucke bleiben hell). Leinwand und Spieleransicht der Live-Runden sind unabhängig davon immer
+  dunkel. Neue Oberflächen bekommen zu jeder hellen Farbklasse ihr `dark:`-Gegenstück: `bg-white` → `dark:bg-gray-800`,
+  `bg-gray-50` → `dark:bg-gray-900`, `text-gray-900` → `dark:text-gray-100`, `text-gray-600` → `dark:text-gray-400`,
+  `border-gray-300` → `dark:border-gray-600`, `bg-X-50` → `dark:bg-X-950/50`, `text-X-700` → `dark:text-X-300`.
 * **Abstimmung anlegen (mit Konto):** Titel, optionale Beschreibung, 2-25 Optionen,
   optionales automatisches Schließungsdatum. Das Abstimmen selbst bleibt für jeden mit
   einem Link offen.

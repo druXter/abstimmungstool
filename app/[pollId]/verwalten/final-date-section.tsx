@@ -37,20 +37,20 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
   if (poll.finalizedAt && poll.finalStartsAt) {
     const transfer = parseTransfer(poll.rsvpTransfer)
     return (
-      <div className="bg-white p-6 rounded-lg shadow space-y-3">
-        <h2 className="font-bold text-gray-900">Termin festgelegt</h2>
-        <p className="text-sm text-gray-800">📅 <strong>{finalDateLabel(poll.finalStartsAt)}</strong></p>
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
+        <h2 className="font-bold text-gray-900 dark:text-gray-100">Termin festgelegt</h2>
+        <p className="text-sm text-gray-800 dark:text-gray-200">📅 <strong>{finalDateLabel(poll.finalStartsAt)}</strong></p>
         {transfer?.error === 'unreachable' && (
           <div className="space-y-2">
             <Notice tone="warning">rsvp-app war nicht erreichbar - der Termin wurde dort noch nicht übernommen.</Notice>
             <form action={retryRsvpTransfer}>
               {hidden}
-              <button type="submit" className="text-sm bg-gray-100 text-gray-800 hover:bg-gray-200 px-3 py-1.5 rounded transition">Erneut an rsvp-app übertragen</button>
+              <button type="submit" className="text-sm bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 px-3 py-1.5 rounded transition">Erneut an rsvp-app übertragen</button>
             </form>
           </div>
         )}
         {transfer && !transfer.error && (
-          <ul className="text-sm text-gray-700 list-disc list-inside space-y-1">
+          <ul className="text-sm text-gray-700 dark:text-gray-300 list-disc list-inside space-y-1">
             {transfer.updated?.map(e => <li key={e.id}>In rsvp-app übernommen: <a href={e.url} className="underline">{e.title}</a></li>)}
             {transfer.created && (
               <li>
@@ -68,8 +68,8 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
 
   if (!poll.closedAt) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow text-sm text-gray-600 space-y-1">
-        <h2 className="font-bold text-gray-900">Termin festlegen</h2>
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow text-sm text-gray-600 dark:text-gray-400 space-y-1">
+        <h2 className="font-bold text-gray-900 dark:text-gray-100">Termin festlegen</h2>
         <p>Nach dem Ende der Abstimmung bestätigst du hier den Termin (bei Gleichstand entscheidest du). Erst dann werden die Abstimmenden benachrichtigt und rsvp-app informiert.</p>
       </div>
     )
@@ -77,8 +77,8 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
 
   if (!needsDecision(poll, result)) {
     return (
-      <div className="bg-white p-6 rounded-lg shadow text-sm text-gray-600 space-y-1">
-        <h2 className="font-bold text-gray-900">Termin festlegen</h2>
+      <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow text-sm text-gray-600 dark:text-gray-400 space-y-1">
+        <h2 className="font-bold text-gray-900 dark:text-gray-100">Termin festlegen</h2>
         <p>{result.quorumMet ? 'Es wurde nicht abgestimmt - es gibt keinen Termin festzulegen.' : 'Die Mindestbeteiligung wurde verfehlt - es gibt keinen Termin festzulegen.'}</p>
       </div>
     )
@@ -89,14 +89,14 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
   const reachable = reachableCount(contacts)
 
   return (
-    <form action={confirmPollDate} className="bg-white p-6 rounded-lg shadow space-y-4 border-2 border-blue-200">
+    <form action={confirmPollDate} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-4 border-2 border-blue-200 dark:border-blue-800">
       {hidden}
-      <h2 className="font-bold text-gray-900">{tie ? 'Termin entscheiden' : 'Termin bestätigen'}</h2>
+      <h2 className="font-bold text-gray-900 dark:text-gray-100">{tie ? 'Termin entscheiden' : 'Termin bestätigen'}</h2>
       {error === 'uhrzeit' && <Notice tone="error">Bitte gib eine Uhrzeit an.</Notice>}
 
       {tie ? (
         <fieldset className="space-y-2">
-          <legend className="text-sm text-gray-700 mb-1">Gleichstand - wähle einen der gleichauf liegenden Termine:</legend>
+          <legend className="text-sm text-gray-700 dark:text-gray-300 mb-1">Gleichstand - wähle einen der gleichauf liegenden Termine:</legend>
           {result.winners.map((w, i) => (
             <label key={w.id} className="flex items-center gap-2 cursor-pointer text-sm">
               <input type="radio" name="optionId" value={w.id} required defaultChecked={i === 0} className="w-4 h-4" />
@@ -105,7 +105,7 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
           ))}
         </fieldset>
       ) : (
-        <p className="text-sm text-gray-800">
+        <p className="text-sm text-gray-800 dark:text-gray-200">
           Eindeutiges Ergebnis: <strong>{result.winners[0].label}</strong>
           <input type="hidden" name="optionId" value={result.winners[0].id} />
         </p>
@@ -114,11 +114,11 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
       {poll.optionKind === 'DATE' && (
         <div className="flex items-center gap-2 text-sm">
           <label htmlFor="final-time">Uhrzeit</label>
-          <input id="final-time" type="time" name="time" required defaultValue="18:00" className="border border-gray-300 p-1.5 rounded" />
+          <input id="final-time" type="time" name="time" required defaultValue="18:00" className="border border-gray-300 dark:border-gray-600 p-1.5 rounded" />
         </div>
       )}
 
-      <div className="text-sm text-gray-600 space-y-1">
+      <div className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
         {status.state === 'unreachable' && <p>rsvp-app ist gerade nicht erreichbar. Du kannst trotzdem festlegen und die Übergabe danach wiederholen.</p>}
         {status.state === 'ok' && status.events.length > 0 && (
           <ul className="list-disc list-inside">
@@ -130,7 +130,7 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
           </ul>
         )}
         {status.state === 'ok' && status.events.length === 0 && status.canCreate && (
-          <label className="flex items-center gap-2 cursor-pointer text-gray-800">
+          <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
             <input type="checkbox" name="createRsvpEvent" defaultChecked className="w-4 h-4" />
             In rsvp-app ein neues Event anlegen (gehört dort {poll.owner?.name || poll.owner?.email || 'dem Konto dieser Abstimmung'})
           </label>

@@ -32,7 +32,7 @@ export default function BallotInputs({
       return (
         <>
           {options.map(option => (
-            <label key={option.id} className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 cursor-pointer">
+            <label key={option.id} className="flex items-center gap-3 p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-900 cursor-pointer">
               <input
                 type={allowMultipleChoices ? 'checkbox' : 'radio'}
                 name="optionId"
@@ -41,7 +41,7 @@ export default function BallotInputs({
                 required={!allowMultipleChoices}
                 className="w-4 h-4"
               />
-              <span className="text-gray-800">{option.label}</span>
+              <span className="text-gray-800 dark:text-gray-200">{option.label}</span>
             </label>
           ))}
         </>
@@ -53,7 +53,7 @@ export default function BallotInputs({
           {options.map(option => (
             <fieldset key={option.id} className="py-2 flex flex-wrap items-center justify-between gap-2">
               <legend className="sr-only">{option.label}</legend>
-              <span className="text-gray-800" aria-hidden>{option.label}</span>
+              <span className="text-gray-800 dark:text-gray-200" aria-hidden>{option.label}</span>
               <span className="flex gap-3 text-sm">
                 {ANSWERS.map(({ answer, label }) => (
                   <label key={answer} className="flex items-center gap-1 cursor-pointer">
@@ -74,13 +74,13 @@ export default function BallotInputs({
     case 'RANKING':
       return (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500">Gib deinen Favoriten Platz 1, dann Platz 2 usw. Optionen ohne Platz bekommen keine Punkte.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Gib deinen Favoriten Platz 1, dann Platz 2 usw. Optionen ohne Platz bekommen keine Punkte.</p>
           {options.map(option => (
             <div key={option.id} className="flex items-center justify-between gap-3">
-              <label htmlFor={`rank-${option.id}`} className="text-gray-800">{option.label}</label>
+              <label htmlFor={`rank-${option.id}`} className="text-gray-800 dark:text-gray-200">{option.label}</label>
               <select
                 id={`rank-${option.id}`} name={`rank_${option.id}`} defaultValue={myVotes[option.id] ?? ''}
-                className="border border-gray-300 p-1.5 rounded bg-white text-sm"
+                className="border border-gray-300 dark:border-gray-600 p-1.5 rounded bg-white dark:bg-gray-800 text-sm"
               >
                 <option value="">–</option>
                 {options.map((_, i) => <option key={i} value={i + 1}>Platz {i + 1}</option>)}
@@ -94,14 +94,14 @@ export default function BallotInputs({
       const budget = pointsBudget ?? DEFAULT_POINTS_BUDGET
       return (
         <div className="space-y-2">
-          <p className="text-xs text-gray-500">Verteile bis zu {budget} Punkte auf die Optionen.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400">Verteile bis zu {budget} Punkte auf die Optionen.</p>
           {options.map(option => (
             <div key={option.id} className="flex items-center justify-between gap-3">
-              <label htmlFor={`points-${option.id}`} className="text-gray-800">{option.label}</label>
+              <label htmlFor={`points-${option.id}`} className="text-gray-800 dark:text-gray-200">{option.label}</label>
               <input
                 id={`points-${option.id}`} type="number" name={`points_${option.id}`} min={0} max={budget}
                 defaultValue={myVotes[option.id] ?? ''} placeholder="0"
-                className="w-20 border border-gray-300 p-1.5 rounded text-sm"
+                className="w-20 border border-gray-300 dark:border-gray-600 p-1.5 rounded text-sm"
               />
             </div>
           ))}

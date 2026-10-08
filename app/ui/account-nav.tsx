@@ -12,18 +12,18 @@ export default async function AccountNav() {
   const user = await getCurrentUser()
 
   return (
-    <nav className="max-w-4xl mx-auto flex items-center justify-end gap-4 px-4 py-3 text-sm text-gray-600">
+    <nav className="max-w-4xl mx-auto flex items-center justify-end gap-4 px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
       {user ? (
         <>
-          <Link href="/meine-abstimmungen" className="hover:text-gray-900">Meine Abstimmungen</Link>
-          {user.role !== 'MODERATOR' && <Link href="/nutzer" className="hover:text-gray-900">Konten</Link>}
-          <Link href="/konto" className="hover:text-gray-900">{user.name || user.email}</Link>
+          <Link href="/meine-abstimmungen" className="hover:text-gray-900 dark:hover:text-gray-100">Meine Abstimmungen</Link>
+          {user.role !== 'MODERATOR' && <Link href="/nutzer" className="hover:text-gray-900 dark:hover:text-gray-100">Konten</Link>}
+          <Link href="/konto" className="hover:text-gray-900 dark:hover:text-gray-100">{user.name || user.email}</Link>
           <form action={logoutUser}>
-            <button type="submit" className="text-gray-500 hover:text-gray-900">Abmelden</button>
+            <button type="submit" className="text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100">Abmelden</button>
           </form>
         </>
       ) : (
-        <Link href="/anmelden" className="hover:text-gray-900">Anmelden</Link>
+        <Link href="/anmelden" className="hover:text-gray-900 dark:hover:text-gray-100">Anmelden</Link>
       )}
     </nav>
   )

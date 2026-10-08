@@ -29,14 +29,14 @@ export default async function BestaetigenPage({
   const pending = await findPendingConfirmation(poll.id, t)
 
   return (
-    <main className="bg-gray-50 flex items-center justify-center px-4 py-12">
-      <div className="max-w-sm w-full bg-white p-8 rounded-lg shadow space-y-4 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 py-12">
+      <div className="max-w-sm w-full bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-4 text-gray-900 dark:text-gray-100">
         <h1 className="text-xl font-bold">Adresse bestätigen</h1>
         {pending ? (
           <form action={confirmVoteEmail} className="space-y-4">
             <input type="hidden" name="pollId" value={poll.id} />
             <input type="hidden" name="token" value={t} />
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Mit <strong>{pending.email}</strong> abstimmen? Danach kannst du in diesem Browser abstimmen und deine Auswahl
               später ändern.
             </p>
@@ -45,7 +45,7 @@ export default async function BestaetigenPage({
         ) : (
           <>
             <Notice tone="error">Dieser Link ist ungültig, abgelaufen oder wurde schon benutzt.</Notice>
-            <Link href={`/${poll.id}`} className="text-sm text-blue-700 hover:underline">Zur Abstimmung - dort kannst du einen neuen Link anfordern</Link>
+            <Link href={`/${poll.id}`} className="text-sm text-blue-700 dark:text-blue-300 hover:underline">Zur Abstimmung - dort kannst du einen neuen Link anfordern</Link>
           </>
         )}
       </div>

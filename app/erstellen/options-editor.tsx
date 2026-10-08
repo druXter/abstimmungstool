@@ -31,7 +31,7 @@ export default function OptionsEditor() {
         ))}
       </div>
       {kind !== 'TEXT' && (
-        <p className="text-xs text-gray-500">Terminabstimmung: Die Optionen werden nach Datum sortiert. Die Art lässt sich später nicht mehr ändern.</p>
+        <p className="text-xs text-gray-500 dark:text-gray-400">Terminabstimmung: Die Optionen werden nach Datum sortiert. Die Art lässt sich später nicht mehr ändern.</p>
       )}
       <OptionsFieldList key={kind} inputType={current.type} />
     </fieldset>

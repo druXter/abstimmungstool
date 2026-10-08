@@ -16,13 +16,13 @@ export default async function NewLivePage({ searchParams }: { searchParams: Prom
   const { fehler } = await searchParams
 
   return (
-    <main className="bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow space-y-6 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-6 text-gray-900 dark:text-gray-100">
         <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-2xl font-bold">Neue Live-Runde</h1>
-          <Link href="/meine-abstimmungen" className="text-gray-500 hover:text-gray-800 transition">Abbrechen</Link>
+          <Link href="/meine-abstimmungen" className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Abbrechen</Link>
         </div>
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-gray-600 dark:text-gray-400">
           Wie bei Kahoot: Du zeigst die Fragen nacheinander auf einer Leinwand, alle antworten gleichzeitig auf dem Handy -
           ohne Konto, nur mit PIN und Spitzname. Mit markierter richtiger Antwort wird daraus ein Quiz mit Punkten und Rangliste.
         </p>
@@ -33,7 +33,7 @@ export default async function NewLivePage({ searchParams }: { searchParams: Prom
             <label htmlFor="live-title" className="block text-sm font-medium mb-1">Titel</label>
             <input
               id="live-title" name="title" required maxLength={200} placeholder="z.B. Vereinsquiz Sommerfest"
-              className="w-full border border-gray-300 p-2 rounded"
+              className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
             />
           </div>
           <QuestionsEditor />

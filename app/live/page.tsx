@@ -21,8 +21,8 @@ export default async function LiveJoinPage({ searchParams }: { searchParams: Pro
   const error = fehler && Object.hasOwn(ERRORS, fehler) ? ERRORS[fehler] : null
 
   return (
-    <main className="bg-gray-50 flex items-center justify-center px-4 py-12">
-      <form action={joinLive} className="max-w-sm w-full bg-white p-8 rounded-lg shadow space-y-4 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 py-12">
+      <form action={joinLive} className="max-w-sm w-full bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-4 text-gray-900 dark:text-gray-100">
         <h1 className="text-2xl font-bold">Live-Runde beitreten</h1>
         {error && <Notice tone="error">{error}</Notice>}
         <div>
@@ -30,16 +30,16 @@ export default async function LiveJoinPage({ searchParams }: { searchParams: Pro
           <input
             id="live-pin" name="pin" required inputMode="numeric" autoComplete="off" pattern="[0-9 ]{6,7}" maxLength={7}
             defaultValue={pin?.replace(/\D/g, '').slice(0, 6)} placeholder="123 456"
-            className="w-full border border-gray-300 p-3 rounded text-2xl tracking-widest text-center"
+            className="w-full border border-gray-300 dark:border-gray-600 p-3 rounded text-2xl tracking-widest text-center"
           />
         </div>
         <div>
           <label htmlFor="live-name" className="block text-sm font-medium mb-1">Spitzname</label>
           <input
             id="live-name" name="nickname" required maxLength={24} autoComplete="nickname" defaultValue={name}
-            className="w-full border border-gray-300 p-2 rounded"
+            className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
           />
-          <p className="text-xs text-gray-500 mt-1">Erscheint auf der Leinwand und in der Rangliste. Kein Konto nötig.</p>
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Erscheint auf der Leinwand und in der Rangliste. Kein Konto nötig.</p>
         </div>
         <SubmitButton>Los geht&apos;s</SubmitButton>
       </form>

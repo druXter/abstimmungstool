@@ -25,7 +25,7 @@ export default function QrCode({ value, label, size = 176 }: { value: string; la
       role="img"
       aria-label={label}
       style={{ width: size, height: size }}
-      className="bg-white"
+      className="bg-white dark:bg-gray-800"
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

@@ -28,11 +28,11 @@ export default async function EditLivePage({ params, searchParams }: { params: P
   if (await prisma.liveResponse.count({ where: { question: { sessionId: id } } })) redirect(`/live/${id}/verwalten?fehler=gespielt`)
 
   return (
-    <main className="bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow space-y-6 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-6 text-gray-900 dark:text-gray-100">
         <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-2xl font-bold">Live-Runde bearbeiten</h1>
-          <Link href={`/live/${id}/verwalten`} className="text-gray-500 hover:text-gray-800 transition">Abbrechen</Link>
+          <Link href={`/live/${id}/verwalten`} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Abbrechen</Link>
         </div>
         {fehler === 'leer' && <Notice tone="error">Bitte gib einen Titel und mindestens eine Frage mit zwei Antworten ein.</Notice>}
 
@@ -40,7 +40,7 @@ export default async function EditLivePage({ params, searchParams }: { params: P
           <input type="hidden" name="sessionId" value={id} />
           <div>
             <label htmlFor="live-title" className="block text-sm font-medium mb-1">Titel</label>
-            <input id="live-title" name="title" required maxLength={200} defaultValue={session.title} className="w-full border border-gray-300 p-2 rounded" />
+            <input id="live-title" name="title" required maxLength={200} defaultValue={session.title} className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded" />
           </div>
           <QuestionsEditor
             initial={session.questions.map(q => ({

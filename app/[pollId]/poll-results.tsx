@@ -38,16 +38,16 @@ export default function PollResults({
     <div className="space-y-3">
       {quorum !== null && (
         closed && quorumMissing > 0 ? (
-          <p className="text-sm font-medium text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+          <p className="text-sm font-medium text-red-800 dark:text-red-200 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 rounded px-3 py-2">
             Nicht beschlussfähig: {voters} von mindestens {quorum} Teilnehmenden.
           </p>
         ) : (
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-gray-500 dark:text-gray-400">
             Mindestbeteiligung: {quorum} Teilnehmende{quorumMissing > 0 ? ` - es fehlen noch ${quorumMissing}.` : ' - erreicht.'}
           </p>
         )
       )}
-      {pollType === 'RANKING' && <p className="text-xs text-gray-500">Borda-Punkte: Platz 1 bringt am meisten, nicht eingeordnet nichts.</p>}
+      {pollType === 'RANKING' && <p className="text-xs text-gray-500 dark:text-gray-400">Borda-Punkte: Platz 1 bringt am meisten, nicht eingeordnet nichts.</p>}
 
       {result.options.map(option => {
         const mine = myVotes[option.id]
@@ -75,18 +75,18 @@ export default function PollResults({
         return (
           <div key={option.id}>
             <div className="flex justify-between gap-3 text-sm mb-1">
-              <span className={`font-medium ${isMine ? 'text-blue-700' : 'text-gray-800'}`}>
+              <span className={`font-medium ${isMine ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-gray-200'}`}>
                 {option.label}
                 {mine !== undefined && (pollType === 'CHOICE' ? ' ✓' : ` (du: ${formatVoteValue(pollType, mine)})`)}
               </span>
-              <span className="text-gray-500 text-right">{summary}</span>
+              <span className="text-gray-500 dark:text-gray-400 text-right">{summary}</span>
             </div>
-            <div className="w-full bg-gray-100 rounded h-2 overflow-hidden flex">
+            <div className="w-full bg-gray-100 dark:bg-gray-700 rounded h-2 overflow-hidden flex">
               <div className="bg-blue-500 h-2" style={{ width: `${full}%` }}></div>
-              {partial > 0 && <div className="bg-blue-200 h-2" style={{ width: `${partial}%` }}></div>}
+              {partial > 0 && <div className="bg-blue-200 dark:bg-blue-800 h-2" style={{ width: `${partial}%` }}></div>}
             </div>
             {optionNames.length > 0 && (
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                 {optionNames.map(n => (pollType === 'CHOICE' ? n.name : `${n.name} (${formatVoteValue(pollType, n.value)})`)).join(', ')}
               </p>
             )}

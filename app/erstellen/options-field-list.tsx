@@ -38,7 +38,7 @@ export default function OptionsFieldList({
           name={name}
           maxLength={200}
           aria-label={`Option ${i + 1}`}
-          className="w-full border border-gray-300 p-2 rounded"
+          className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
           placeholder={inputType === 'text' ? `Option ${i + 1}` : undefined}
         />
       ))}
@@ -46,12 +46,12 @@ export default function OptionsFieldList({
         <button
           type="button"
           onClick={() => setCount(c => Math.min(c + 1, max))}
-          className="text-sm text-blue-600 hover:underline"
+          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
         >
           {inputType === 'text' ? '+ Weitere Option hinzufügen' : '+ Weiteren Termin hinzufügen'}
         </button>
       )}
-      <p className="text-xs text-gray-500">Maximal {max} Optionen insgesamt.</p>
+      <p className="text-xs text-gray-500 dark:text-gray-400">Maximal {max} Optionen insgesamt.</p>
     </div>
   )
 }

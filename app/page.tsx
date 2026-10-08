@@ -4,12 +4,12 @@ import InstallHint from './ui/install-hint'
 
 export default function Home() {
   return (
-    <main className="min-h-[70vh] bg-gray-50 flex items-center justify-center px-4">
+    <main className="min-h-[70vh] bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4">
       <div className="max-w-xl text-center space-y-6">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 tracking-tight">
+        <h1 className="text-4xl md:text-5xl font-extrabold text-gray-900 dark:text-gray-100 tracking-tight">
           Abstimmungstool
         </h1>
-        <p className="text-lg text-gray-600">
+        <p className="text-lg text-gray-600 dark:text-gray-400">
           Einfache, anonyme Abstimmungen für die Gruppe - z.B. um gemeinsam ein Restaurant
           für den nächsten Termin auszuwählen. Zum Abstimmen brauchst du kein Konto, nur zum
           Anlegen und Verwalten eigener Abstimmungen.
@@ -22,14 +22,14 @@ export default function Home() {
             Neue Abstimmung erstellen
           </Link>
         </div>
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-gray-400 dark:text-gray-500">
           Zu einer Abstimmung eingeladen? Nutze einfach den Link, den du bekommen hast.
         </p>
         <form action="/live" className="flex justify-center gap-2">
           <label htmlFor="home-pin" className="sr-only">PIN der Live-Runde</label>
           <input
             id="home-pin" name="pin" inputMode="numeric" maxLength={7} placeholder="PIN der Live-Runde"
-            className="w-48 border border-gray-300 p-2 rounded text-center"
+            className="w-48 border border-gray-300 dark:border-gray-600 p-2 rounded text-center"
           />
           <button type="submit" className="bg-purple-600 text-white font-bold py-2 px-4 rounded hover:bg-purple-700 transition">
             Beitreten

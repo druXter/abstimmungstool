@@ -108,15 +108,15 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
       {questions.map((q, i) => {
         const hasAnswers = q.kind === 'CHOICE' || q.kind === 'MULTI'
         return (
-          <fieldset key={q.key} className="rounded-md border border-gray-200 p-4 space-y-3">
+          <fieldset key={q.key} className="rounded-md border border-gray-200 dark:border-gray-700 p-4 space-y-3">
             <legend className="text-sm font-medium px-1">Frage {i + 1}</legend>
             <div className="flex flex-wrap gap-2 justify-end text-xs">
-              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-blue-700 hover:underline disabled:opacity-40">nach oben</button>
-              <button type="button" onClick={() => move(i, 1)} disabled={i === questions.length - 1} className="text-blue-700 hover:underline disabled:opacity-40">nach unten</button>
+              <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40">nach oben</button>
+              <button type="button" onClick={() => move(i, 1)} disabled={i === questions.length - 1} className="text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40">nach unten</button>
               <button
                 type="button" disabled={questions.length === 1}
                 onClick={() => setQuestions(qs => qs.filter((_, other) => other !== i))}
-                className="text-red-700 hover:underline disabled:opacity-40"
+                className="text-red-700 dark:text-red-300 hover:underline disabled:opacity-40"
               >
                 Frage entfernen
               </button>
@@ -127,7 +127,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 id={`q${i}_text`} name={`q${i}_text`} required maxLength={200} value={q.text}
                 onChange={e => update(i, () => ({ text: e.target.value }))}
                 placeholder="z.B. Wie viele Beine hat eine Spinne?"
-                className="w-full border border-gray-300 p-2 rounded"
+                className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
               />
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
@@ -136,7 +136,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 <select
                   id={`q${i}_kind`} name={`q${i}_kind`} value={q.kind}
                   onChange={e => update(i, () => ({ kind: e.target.value as LiveQuestionKind }))}
-                  className="border border-gray-300 p-1.5 rounded"
+                  className="border border-gray-300 dark:border-gray-600 p-1.5 rounded"
                 >
                   {KINDS.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
                 </select>
@@ -146,14 +146,14 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 <select
                   id={`q${i}_time`} name={`q${i}_time`} value={q.timeLimit}
                   onChange={e => update(i, () => ({ timeLimit: Number(e.target.value) }))}
-                  className="border border-gray-300 p-1.5 rounded"
+                  className="border border-gray-300 dark:border-gray-600 p-1.5 rounded"
                 >
                   {TIME_LIMITS.map(t => <option key={t} value={t}>{t} Sekunden</option>)}
                   <option value={0}>ohne (du löst auf)</option>
                 </select>
               </span>
             </div>
-            <p className="text-xs text-gray-500">{KINDS.find(k => k.kind === q.kind)!.hint}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">{KINDS.find(k => k.kind === q.kind)!.hint}</p>
 
             {hasAnswers && (
               <>
@@ -165,9 +165,9 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         name={`q${i}_a${j}`} maxLength={100} value={a.label} required={j < MIN_ANSWERS} aria-label={`Frage ${i + 1}, Antwort ${j + 1}`}
                         onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) }))}
                         placeholder={`Antwort ${j + 1}${j < MIN_ANSWERS ? '' : ' (optional)'}`}
-                        className="grow min-w-0 border border-gray-300 p-2 rounded"
+                        className="grow min-w-0 border border-gray-300 dark:border-gray-600 p-2 rounded"
                       />
-                      <label className="flex items-center gap-1 text-xs text-gray-600 whitespace-nowrap cursor-pointer">
+                      <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer">
                         <input
                           type="checkbox" name={`q${i}_c${j}`} checked={a.correct}
                           onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, correct: e.target.checked } : x)) }))}
@@ -179,7 +179,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         <button
                           type="button" aria-label={`Antwort ${j + 1} entfernen`}
                           onClick={() => update(i, prev => ({ answers: prev.answers.filter((_, k) => k !== j) }))}
-                          className="text-gray-400 hover:text-red-700 px-1"
+                          className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
                         </button>
@@ -190,12 +190,12 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 {q.answers.length < MAX_ANSWERS && (
                   <button
                     type="button" onClick={() => update(i, prev => ({ answers: [...prev.answers, { label: '', correct: false }] }))}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     + Antwort hinzufügen
                   </button>
                 )}
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   {!q.answers.some(a => a.correct)
                     ? 'Ohne richtige Antwort ist es eine reine Umfragefrage (keine Punkte).'
                     : q.kind === 'CHOICE' && q.answers.filter(a => a.correct).length > 1
@@ -216,13 +216,13 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         name={`q${i}_a${j}`} maxLength={100} value={a.label} aria-label={`Frage ${i + 1}, richtige Antwort ${j + 1}`}
                         onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) }))}
                         placeholder={j === 0 ? 'Richtige Antwort (optional), z.B. Eiffelturm' : 'Weitere Schreibweise (optional)'}
-                        className="grow min-w-0 border border-gray-300 p-2 rounded"
+                        className="grow min-w-0 border border-gray-300 dark:border-gray-600 p-2 rounded"
                       />
                       {q.answers.length > 1 && (
                         <button
                           type="button" aria-label={`Richtige Antwort ${j + 1} entfernen`}
                           onClick={() => update(i, prev => ({ answers: prev.answers.filter((_, k) => k !== j) }))}
-                          className="text-gray-400 hover:text-red-700 px-1"
+                          className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
                         </button>
@@ -233,12 +233,12 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 {q.answers.length < MAX_ANSWERS && (
                   <button
                     type="button" onClick={() => update(i, prev => ({ answers: [...prev.answers, { label: '', correct: false }] }))}
-                    className="text-sm text-blue-600 hover:underline"
+                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
                   >
                     + Weitere Schreibweise
                   </button>
                 )}
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   {q.answers.some(a => a.label.trim())
                     ? 'Quizfrage: Jede eingetragene Antwort zählt als richtig, je schneller, desto mehr Punkte. Abkürzungen oder Spitznamen (z.B. "Arnie") als eigene Schreibweise eintragen.'
                     : 'Ohne richtige Antwort eine offene Frage: Die Leinwand zeigt nach der Auflösung alle Antworten (keine Punkte).'}
@@ -252,24 +252,24 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   <span className="block">Richtiger Wert (optional)</span>
                   <input
                     name={`q${i}_target`} inputMode="decimal" value={q.target} onChange={e => update(i, () => ({ target: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, richtiger Wert`} placeholder="z.B. 8848" className="w-full border border-gray-300 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, richtiger Wert`} placeholder="z.B. 8848" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="block">Toleranz (±)</span>
                   <input
                     name={`q${i}_tolerance`} inputMode="decimal" value={q.tolerance} onChange={e => update(i, () => ({ tolerance: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, Toleranz`} placeholder="Standard: 10 %" className="w-full border border-gray-300 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, Toleranz`} placeholder="Standard: 10 %" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="block">Einheit (optional)</span>
                   <input
                     name={`q${i}_unit`} maxLength={20} value={q.unit} onChange={e => update(i, () => ({ unit: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, Einheit`} placeholder="z.B. m" className="w-full border border-gray-300 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, Einheit`} placeholder="z.B. m" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                   />
                 </label>
-                <p className="sm:col-span-3 text-xs text-gray-500">
+                <p className="sm:col-span-3 text-xs text-gray-500 dark:text-gray-400">
                   {q.target.trim()
                     ? 'Quizfrage: genau getroffen 1000 Punkte, am Rand der Toleranz 500, außerhalb keine.'
                     : 'Ohne richtigen Wert eine reine Umfrage: Die Leinwand zeigt Median, Durchschnitt und die Verteilung.'}
@@ -293,7 +293,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   {/* eslint-disable-next-line @next/next/no-img-element -- Vorschau aus dem eigenen Speicher bzw. lokaler Datei */}
                   <img src={q.preview ?? `/api/live/bild/${q.imageId}`} alt={`Bild zu Frage ${i + 1}`} className="max-h-32 rounded border" />
                   <div className="space-y-2">
-                    <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                    <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
                       <input
                         type="checkbox" name={`q${i}_reveal`} checked={q.imageReveal}
                         onChange={e => update(i, () => ({ imageReveal: e.target.checked }))}
@@ -302,7 +302,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                       Nach und nach aufdecken
                     </label>
                     {q.imageId && !q.preview && (
-                      <label className="flex items-center gap-1 text-xs text-gray-600 cursor-pointer">
+                      <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 cursor-pointer">
                         <input type="checkbox" name={`q${i}_noimage`} className="w-4 h-4" />
                         Bild entfernen
                       </label>
@@ -311,7 +311,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 </div>
               )}
               {q.imageReveal && (q.preview || q.imageId) && (
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                   Zum Erraten (z.B. Promi oder Sehenswürdigkeit): Die Leinwand legt 25 Kacheln über das Bild,{' '}
                   {q.timeLimit
                     ? 'die bis zum Ende des Zeitlimits nach und nach aufgehen; mit "Stück aufdecken" geht es schneller.'
@@ -331,7 +331,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
             setQuestions(qs => [...qs, { ...emptyQuestion(), key: nextKey, preview: null }])
             setNextKey(k => k + 1)
           }}
-          className="text-sm text-blue-600 hover:underline"
+          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
         >
           + Weitere Frage
         </button>

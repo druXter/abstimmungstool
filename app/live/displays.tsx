@@ -6,7 +6,7 @@ import type { EstimateStats, WordCount } from '../lib/live'
  */
 
 const WORD_COLORS = ['text-red-400', 'text-blue-400', 'text-amber-300', 'text-green-400', 'text-purple-400', 'text-teal-300']
-const WORD_COLORS_LIGHT = ['text-red-700', 'text-blue-700', 'text-amber-700', 'text-green-700', 'text-purple-700', 'text-teal-700']
+const WORD_COLORS_LIGHT = ['text-red-700 dark:text-red-300', 'text-blue-700 dark:text-blue-300', 'text-amber-700 dark:text-amber-300', 'text-green-700 dark:text-green-300', 'text-purple-700 dark:text-purple-300', 'text-teal-700 dark:text-teal-300']
 
 export function formatDe(value: number): string {
   return value.toLocaleString('de-DE', { maximumFractionDigits: 2 })
@@ -29,7 +29,7 @@ export function WordCloud({
   tone?: 'dark' | 'light'
   onPick?: (word: WordCount) => void
 }) {
-  if (words.length === 0) return <p className={tone === 'dark' ? 'text-gray-400' : 'text-gray-500'}>Noch keine Beiträge.</p>
+  if (words.length === 0) return <p className={tone === 'dark' ? 'text-gray-400' : 'text-gray-500 dark:text-gray-400'}>Noch keine Beiträge.</p>
   const top = Math.max(...words.map(w => w.count))
   const colors = tone === 'dark' ? WORD_COLORS : WORD_COLORS_LIGHT
   return (
@@ -114,7 +114,7 @@ export function TextAnswerList({
   return (
     <div className="space-y-3">
       {accepted.length > 0 && (
-        <p className={dark ? 'text-3xl md:text-4xl font-bold text-center text-green-300' : 'text-sm font-semibold text-green-800'}>
+        <p className={dark ? 'text-3xl md:text-4xl font-bold text-center text-green-300' : 'text-sm font-semibold text-green-800 dark:text-green-200'}>
           Richtig: {accepted.join(' / ')}
         </p>
       )}
@@ -122,8 +122,8 @@ export function TextAnswerList({
         <ul className={`flex flex-wrap gap-2 ${dark ? 'justify-center' : ''}`} aria-label="Gegebene Antworten">
           {answers.map(a => {
             const style = a.correct
-              ? (dark ? 'bg-green-600 text-white' : 'bg-green-100 text-green-900')
-              : (dark ? 'bg-white/15 text-white' : 'bg-gray-100 text-gray-800')
+              ? (dark ? 'bg-green-600 text-white' : 'bg-green-100 dark:bg-green-900 text-green-900 dark:text-green-200')
+              : (dark ? 'bg-white/15 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200')
             const mark = a.judged ? (a.correct ? 'richtig (gewertet)' : 'falsch (gewertet)') : a.correct ? 'richtig' : null
             const content = (
               <>

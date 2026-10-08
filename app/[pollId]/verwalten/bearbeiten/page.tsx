@@ -53,11 +53,11 @@ export default async function BearbeitenPage({
   const backHref = `/${poll.id}/verwalten${legacyToken ? `?token=${encodeURIComponent(legacyToken)}` : ''}`
 
   return (
-    <main className="bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto bg-white p-8 rounded-lg shadow space-y-6 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-6 text-gray-900 dark:text-gray-100">
         <div className="flex justify-between items-center border-b pb-4">
           <h1 className="text-2xl font-bold">Abstimmung bearbeiten</h1>
-          <Link href={backHref} className="text-gray-500 hover:text-gray-800 transition">
+          <Link href={backHref} className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">
             Abbrechen
           </Link>
         </div>
@@ -75,7 +75,7 @@ export default async function BearbeitenPage({
               defaultValue={poll.title}
               required
               maxLength={200}
-              className="w-full border border-gray-300 p-2 rounded"
+              className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
             />
           </div>
 
@@ -87,7 +87,7 @@ export default async function BearbeitenPage({
               defaultValue={poll.description || ''}
               rows={2}
               maxLength={200}
-              className="w-full border border-gray-300 p-2 rounded"
+              className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
             ></textarea>
           </div>
 
@@ -108,14 +108,14 @@ export default async function BearbeitenPage({
                       maxLength={200}
                       required
                       aria-label={`Option ${option.label}`}
-                      className="flex-1 border border-gray-300 p-2 rounded"
+                      className="flex-1 border border-gray-300 dark:border-gray-600 p-2 rounded"
                     />
                     {hasVotes ? (
-                      <span className="text-xs text-gray-400 whitespace-nowrap" title="Optionen mit bereits abgegebenen Stimmen können nicht gelöscht werden">
+                      <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap" title="Optionen mit bereits abgegebenen Stimmen können nicht gelöscht werden">
                         {option._count.votes} Stimme{option._count.votes === 1 ? '' : 'n'} · gesperrt
                       </span>
                     ) : (
-                      <label className="flex items-center gap-1 text-xs text-red-700 whitespace-nowrap cursor-pointer">
+                      <label className="flex items-center gap-1 text-xs text-red-700 dark:text-red-300 whitespace-nowrap cursor-pointer">
                         <input type="checkbox" name="deleteOptionId" value={option.id} className="w-4 h-4" />
                         entfernen
                       </label>
@@ -124,7 +124,7 @@ export default async function BearbeitenPage({
                 )
               })}
             </div>
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
               Optionen mit bereits abgegebenen Stimmen können umbenannt, aber nicht gelöscht werden.
             </p>
           </div>

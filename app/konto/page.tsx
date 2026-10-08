@@ -46,9 +46,9 @@ export default async function KontoPage({
   const pushKey = vapidPublicKey()
 
   return (
-    <main className="bg-gray-50 py-8 px-4">
-      <div className="max-w-xl mx-auto space-y-6 text-gray-900">
-        <div className="bg-white p-6 rounded-lg shadow space-y-3">
+    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-xl mx-auto space-y-6 text-gray-900 dark:text-gray-100">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
           <h1 className="text-2xl font-bold">Mein Konto</h1>
           {passwordChanged === '1' && <Notice tone="success">Passwort geändert. Andere Geräte wurden abgemeldet.</Notice>}
           {linked === '1' && <Notice tone="success">Konto verknüpft.</Notice>}
@@ -56,37 +56,37 @@ export default async function KontoPage({
           {error && <Notice tone="error">{Object.hasOwn(ERRORS, error) ? ERRORS[error] : FALLBACK_ERROR}</Notice>}
 
           <dl className="text-sm grid grid-cols-[8rem_1fr] gap-y-1">
-            <dt className="text-gray-500">E-Mail</dt>
+            <dt className="text-gray-500 dark:text-gray-400">E-Mail</dt>
             <dd>{user.email}</dd>
-            {user.name && (<><dt className="text-gray-500">Name</dt><dd>{user.name}</dd></>)}
-            <dt className="text-gray-500">Rolle</dt>
+            {user.name && (<><dt className="text-gray-500 dark:text-gray-400">Name</dt><dd>{user.name}</dd></>)}
+            <dt className="text-gray-500 dark:text-gray-400">Rolle</dt>
             <dd>{ROLE_LABELS[user.role]}</dd>
           </dl>
         </div>
 
         {user.hasPassword && (
-          <div className="bg-white p-6 rounded-lg shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
             <h2 className="font-bold">Passwort ändern</h2>
             <form action={changePassword} className="space-y-3">
               <div>
                 <label htmlFor="currentPassword" className="block text-sm font-medium mb-1">Aktuelles Passwort</label>
                 <input
                   id="currentPassword" type="password" name="currentPassword" required autoComplete="current-password"
-                  className="w-full border border-gray-300 p-2 rounded"
+                  className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                 />
               </div>
               <div>
                 <label htmlFor="newPassword" className="block text-sm font-medium mb-1">Neues Passwort</label>
                 <input
                   id="newPassword" type="password" name="newPassword" required minLength={MIN_PASSWORD_LENGTH}
-                  autoComplete="new-password" className="w-full border border-gray-300 p-2 rounded"
+                  autoComplete="new-password" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                 />
               </div>
               <div>
                 <label htmlFor="newPasswordConfirm" className="block text-sm font-medium mb-1">Neues Passwort wiederholen</label>
                 <input
                   id="newPasswordConfirm" type="password" name="newPasswordConfirm" required minLength={MIN_PASSWORD_LENGTH}
-                  autoComplete="new-password" className="w-full border border-gray-300 p-2 rounded"
+                  autoComplete="new-password" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
                 />
               </div>
               <SubmitButton>Passwort ändern</SubmitButton>
@@ -95,9 +95,9 @@ export default async function KontoPage({
         )}
 
         {(identities.length > 0 || linkable.length > 0) && (
-          <div className="bg-white p-6 rounded-lg shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
             <h2 className="font-bold">Verknüpfte Konten anderer Tools</h2>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
               Damit meldest du dich hier ohne separates Passwort an. Dein Passwort dort erfährt dieses Tool nie.
             </p>
 
@@ -106,7 +106,7 @@ export default async function KontoPage({
                 <span>{new URL(identity.issuer).host}</span>
                 <ConfirmForm action={unlinkIdentity} message="Verknüpfung wirklich entfernen?">
                   <input type="hidden" name="identityId" value={identity.id} />
-                  <button type="submit" className="text-red-700 hover:underline">Entfernen</button>
+                  <button type="submit" className="text-red-700 dark:text-red-300 hover:underline">Entfernen</button>
                 </ConfirmForm>
               </div>
             ))}
@@ -115,7 +115,7 @@ export default async function KontoPage({
               <a
                 key={idp.issuer}
                 href={`/api/suite/login?mode=link&idp=${encodeURIComponent(idp.issuer)}&next=${encodeURIComponent('/konto')}`}
-                className="block text-center border border-gray-300 rounded py-2 text-sm font-medium hover:bg-gray-50"
+                className="block text-center border border-gray-300 dark:border-gray-600 rounded py-2 text-sm font-medium hover:bg-gray-50 dark:hover:bg-gray-900"
               >
                 Mit {idpLabel(idp)} verknüpfen
               </a>
@@ -124,9 +124,9 @@ export default async function KontoPage({
         )}
 
         {pushKey && (
-          <div className="bg-white p-6 rounded-lg shadow space-y-3">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
             <h2 className="font-bold">Mitteilungen</h2>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
               Push-Mitteilung auf diesem Gerät, wenn eine deiner Abstimmungen endet (bei &quot;Ergebnis beim Schließen
               mitteilen&quot;). Gilt nur, solange du hier angemeldet bist.
             </p>

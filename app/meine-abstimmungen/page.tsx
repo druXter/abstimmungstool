@@ -21,7 +21,7 @@ function PollList({ title, polls, showOwner }: { title: string; polls: Row[]; sh
   const now = new Date()
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
       <h2 className="font-bold mb-3">{title}</h2>
       <ul className="divide-y">
         {polls.map(poll => {
@@ -29,15 +29,15 @@ function PollList({ title, polls, showOwner }: { title: string; polls: Row[]; sh
           return (
             <li key={poll.id} className="py-3 flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <Link href={`/${poll.id}/verwalten`} className="font-medium text-blue-700 hover:underline truncate block">
+                <Link href={`/${poll.id}/verwalten`} className="font-medium text-blue-700 dark:text-blue-300 hover:underline truncate block">
                   {poll.title}
                 </Link>
-                <div className="text-xs text-gray-500">
+                <div className="text-xs text-gray-500 dark:text-gray-400">
                   {poll.createdAt.toLocaleDateString('de-DE')}
                   {showOwner && ` · ${poll.owner ? `von ${poll.owner.email}` : 'Alt-Abstimmung ohne Konto'}`}
                 </div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${closed ? 'bg-gray-100 text-gray-600' : 'bg-green-100 text-green-800'}`}>
+              <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${closed ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'}`}>
                 {closed ? 'geschlossen' : 'offen'}
               </span>
             </li>
@@ -74,8 +74,8 @@ export default async function MeineAbstimmungenPage() {
   const others = polls.filter(p => p.ownerId !== user.id)
 
   return (
-    <main className="bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6 text-gray-900">
+    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
+      <div className="max-w-2xl mx-auto space-y-6 text-gray-900 dark:text-gray-100">
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold">Meine Abstimmungen</h1>
           {canCreatePolls(user) && (
@@ -91,7 +91,7 @@ export default async function MeineAbstimmungenPage() {
         </div>
 
         {polls.length === 0 && liveSessions.length === 0 && (
-          <div className="bg-white p-6 rounded-lg shadow text-sm text-gray-600">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow text-sm text-gray-600 dark:text-gray-400">
             {canCreatePolls(user)
               ? 'Du hast noch keine Abstimmung angelegt.'
               : 'Dir wurde noch keine Abstimmung zum Moderieren freigegeben.'}
@@ -102,21 +102,21 @@ export default async function MeineAbstimmungenPage() {
         <PollList title={isAdmin ? 'Alle anderen (Administrator-Ansicht)' : 'Mit mir geteilt'} polls={others} showOwner />
 
         {liveSessions.length > 0 && (
-          <div className="bg-white p-6 rounded-lg shadow">
+          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
             <h2 className="font-bold mb-3">Live-Runden</h2>
             <ul className="divide-y">
               {liveSessions.map(live => (
                 <li key={live.id} className="py-3 flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <Link href={`/live/${live.id}/verwalten`} className="font-medium text-blue-700 hover:underline truncate block">
+                    <Link href={`/live/${live.id}/verwalten`} className="font-medium text-blue-700 dark:text-blue-300 hover:underline truncate block">
                       {live.title}
                     </Link>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
                       {live.createdAt.toLocaleDateString('de-DE')}
                       {live.ownerId !== user.id && ` · von ${live.owner.email}`}
                     </div>
                   </div>
-                  <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${live.phase === 'FINISHED' ? 'bg-gray-100 text-gray-600' : 'bg-purple-100 text-purple-800'}`}>
+                  <span className={`text-xs px-2 py-0.5 rounded whitespace-nowrap ${live.phase === 'FINISHED' ? 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400' : 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200'}`}>
                     {live.phase === 'FINISHED' ? 'beendet' : live.phase === 'LOBBY' ? 'Lobby' : 'läuft'}
                   </span>
                 </li>
