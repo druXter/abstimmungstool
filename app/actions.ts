@@ -18,6 +18,7 @@ import { choiceLimits, loadResult } from './lib/results'
 import { needsDecision, notifyVoters, voterContacts } from './lib/final-date'
 import { emailHash, parseTransfer, transferFinalDate } from './lib/rsvp-date'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
+import { POLL_PRESETS, presetOf } from './lib/poll-presets'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
@@ -34,8 +35,6 @@ const RESULTS_VISIBILITIES: readonly ResultsVisibility[] = ['ALWAYS', 'AFTER_VOT
  * Beschreibung, Optionen und Stimmmodus). Ungültiges fällt still auf "aus" zurück.
  */
 function parsePollSettings(formData: FormData) {
-  const closesAtInput = formString(formData, 'closesAt', 30)
-  const closesAt = closesAtInput ? new Date(closesAtInput) : null
   const maxVoters = Number.parseInt(formString(formData, 'maxVoters', 10), 10)
   const quorum = Number.parseInt(formString(formData, 'quorum', 10), 10)
   const allowMultipleChoices = formData.get('allowMultipleChoices') === 'on'
@@ -46,7 +45,7 @@ function parsePollSettings(formData: FormData) {
   const max = allowMultipleChoices && Number.isInteger(maxChoices) && maxChoices >= 1 ? Math.min(maxChoices, MAX_OPTIONS) : null
   const visibility = RESULTS_VISIBILITIES.find(v => v === formData.get('resultsVisibility')) ?? 'ALWAYS'
   return {
-    closesAt: closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null,
+    closesAt: parseClosesAt(formData),
     showVoterNames: formData.get('showVoterNames') === 'on',
     allowMultipleChoices,
     minChoices: min !== null && max !== null && min > max ? null : min,
@@ -63,6 +62,13 @@ function parsePollSettings(formData: FormData) {
     // Ohne Mail und Push fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
     notifyOwnerOnClose: isMailConfigured() || isPushConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined
   }
+}
+
+/** Das optionale Schließdatum (datetime-local in der Zeitzone des Servers); Ungültiges = keins. */
+function parseClosesAt(formData: FormData): Date | null {
+  const input = formString(formData, 'closesAt', 30)
+  const closesAt = input ? new Date(input) : null
+  return closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null
 }
 
 type OptionInput = { label: string; startsAt: Date | null }
@@ -101,11 +107,10 @@ export async function createPoll(formData: FormData) {
 
   const title = (formData.get('title') as string || '').trim().slice(0, MAX_TEXT_LENGTH)
   const description = (formData.get('description') as string || '').trim().slice(0, MAX_TEXT_LENGTH) || null
-  const voterIdentity = parseVoterIdentity(formData.get('voterIdentity'))
-  const secretBallot = voterIdentity === 'LINK' && formData.get('secretBallot') === 'on'
-  const settings = parsePollSettings(formData)
+  // Angelegt wird kurz: Grunddaten, Optionen und eine Vorlage (app/lib/poll-presets.ts) - alle
+  // weiteren Einstellungen gibt es danach unter "Einstellungen".
+  const preset = POLL_PRESETS[presetOf(formData.get('preset'))]
   const optionKind = parseOptionKind(formData.get('optionKind'))
-  const pollType = parsePollType(formData.get('pollType'))
 
   const options = formData.getAll('option')
     .map(raw => readOption(raw, optionKind))
@@ -120,14 +125,11 @@ export async function createPoll(formData: FormData) {
 
   const poll = await prisma.poll.create({
     data: {
+      ...preset.settings,
       title,
       description,
-      voterIdentity,
-      secretBallot,
       optionKind,
-      pollType,
-      pointsBudget: pollType === 'POINTS' ? parsePointsBudget(formData) : null,
-      ...settings,
+      closesAt: parseClosesAt(formData),
       ownerId: user.id,
       options: {
         create: uniqueOptions.map((option, position) => ({ ...option, position }))
@@ -135,7 +137,7 @@ export async function createPoll(formData: FormData) {
     }
   })
 
-  redirect(manageUrl(poll.id, '', 'created'))
+  redirect(manageUrl(poll.id, '', 'created', preset.next === 'links' ? 'stimmlinks' : ''))
 }
 
 /**
@@ -218,7 +220,7 @@ export async function updatePoll(formData: FormData) {
   })
 
   revalidatePath(`/${pollId}`)
-  redirect(manageUrl(pollId, token, 'saved'))
+  redirect(manageUrl(pollId, token, 'saved', 'bearbeiten'))
 }
 
 /**
@@ -602,8 +604,8 @@ export async function sharePoll(formData: FormData) {
 
   const email = normalizeEmail(formString(formData, 'email', 254))
   const target = email ? await prisma.user.findUnique({ where: { email }, select: { id: true } }) : null
-  if (!target) redirect(`${manageUrl(poll.id, '')}?shareError=notfound`)
-  if (target.id === poll.ownerId) redirect(`${manageUrl(poll.id, '')}?shareError=owner`)
+  if (!target) redirect(`${manageUrl(poll.id, '', undefined, 'bearbeiten')}?shareError=notfound`)
+  if (target.id === poll.ownerId) redirect(`${manageUrl(poll.id, '', undefined, 'bearbeiten')}?shareError=owner`)
 
   await prisma.pollAccess.upsert({
     where: { pollId_userId: { pollId: poll.id, userId: target.id } },
@@ -611,8 +613,8 @@ export async function sharePoll(formData: FormData) {
     create: { pollId: poll.id, userId: target.id }
   })
 
-  revalidatePath(`/${poll.id}/verwalten`)
-  redirect(manageUrl(poll.id, '', 'shared'))
+  revalidatePath(`/${poll.id}/verwalten/bearbeiten`)
+  redirect(manageUrl(poll.id, '', 'shared', 'bearbeiten'))
 }
 
 /** Nimmt eine Freigabe wieder zurück. Nur Owner und Admin der betroffenen Abstimmung. */
@@ -627,7 +629,7 @@ export async function unsharePoll(formData: FormData) {
   if (!isAtLeast(level, 'owner')) return
 
   await prisma.pollAccess.delete({ where: { id: access.id } })
-  revalidatePath(`/${access.pollId}/verwalten`)
+  revalidatePath(`/${access.pollId}/verwalten/bearbeiten`)
 }
 
 /**

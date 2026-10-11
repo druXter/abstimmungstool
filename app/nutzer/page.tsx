@@ -6,6 +6,7 @@ import { INVITE_LINK_COOKIE, requireUser } from '../lib/auth'
 import { createUser, deleteUser, resendInvite, updateUserRole } from '../auth-actions'
 import { isMailConfigured } from '../lib/mail'
 import SubmitButton from '../ui/submit-button'
+import { Main, PageHeader } from '../ui/kit'
 import Notice from '../ui/notice'
 import ConfirmForm from '../ui/confirm-form'
 import CopyableField from '../ui/copyable-field'
@@ -43,10 +44,11 @@ export default async function NutzerPage({
     : []
 
   return (
-    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
-      <div className="max-w-3xl mx-auto space-y-6 text-gray-900 dark:text-gray-100">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-4">
-          <h1 className="text-2xl font-bold">{isAdmin ? 'Verwaltungskonten' : 'Moderator anlegen'}</h1>
+    <Main width="narrow">
+      <PageHeader title={isAdmin ? 'Konten' : 'Moderator anlegen'} subtitle={isAdmin ? 'Verwaltungskonten dieses Tools' : undefined} />
+      <div className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+          <h2 className="font-semibold">{isAdmin ? 'Konto anlegen und einladen' : 'Moderator-Konto einladen'}</h2>
 
           {created === 'mailed' && <Notice tone="success">Konto angelegt. Die Einladung wurde per E-Mail verschickt.</Notice>}
           {created === 'link' && (
@@ -61,16 +63,16 @@ export default async function NutzerPage({
           <form action={createUser} className="grid gap-3 sm:grid-cols-2">
             <div>
               <label htmlFor="email" className="block text-sm font-medium mb-1">E-Mail</label>
-              <input id="email" type="email" name="email" required maxLength={254} className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded" />
+              <input id="email" type="email" name="email" required maxLength={254} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
             </div>
             <div>
               <label htmlFor="name" className="block text-sm font-medium mb-1">Name (optional)</label>
-              <input id="name" type="text" name="name" maxLength={100} className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded" />
+              <input id="name" type="text" name="name" maxLength={100} className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900" />
             </div>
             {isAdmin && (
               <div>
                 <label htmlFor="role" className="block text-sm font-medium mb-1">Rolle</label>
-                <select id="role" name="role" defaultValue="CREATOR" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded bg-white dark:bg-gray-800">
+                <select id="role" name="role" defaultValue="CREATOR" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 p-2 bg-white dark:bg-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900">
                   <option value="CREATOR">Creator (legt eigene Abstimmungen an)</option>
                   <option value="MODERATOR">Moderator (nur geteilte Abstimmungen)</option>
                   <option value="ADMIN">Administrator</option>
@@ -78,7 +80,7 @@ export default async function NutzerPage({
               </div>
             )}
             <div className="sm:col-span-2">
-              <SubmitButton>Konto anlegen und einladen</SubmitButton>
+              <SubmitButton inline>Konto anlegen und einladen</SubmitButton>
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                 Die Person legt ihr Passwort selbst über den Einladungslink fest
                 {isMailConfigured() ? ' - er geht direkt per E-Mail raus.' : ' - ohne Mailversand bekommst du den Link zum Weitergeben angezeigt.'}
@@ -88,9 +90,9 @@ export default async function NutzerPage({
         </div>
 
         {isAdmin && (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="font-bold mb-3">Alle Konten ({users.length})</h2>
-            <ul className="divide-y text-sm">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <h2 className="font-semibold mb-3">Alle Konten ({users.length})</h2>
+            <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm">
               {users.map(u => {
                 const pending = !u.passwordHash && u._count.identities === 0
                 const protectedAccount = u.role === 'ADMIN'
@@ -146,6 +148,6 @@ export default async function NutzerPage({
           </div>
         )}
       </div>
-    </main>
+    </Main>
   )
 }

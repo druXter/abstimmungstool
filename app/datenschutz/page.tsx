@@ -23,11 +23,11 @@ export default function DatenschutzPage() {
 
   return (
     <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
-      <div className="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow text-gray-800 dark:text-gray-200 space-y-6">
-        <h1 className="text-3xl font-bold border-b pb-4">Datenschutzerklärung</h1>
+      <div className="max-w-3xl mx-auto bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm text-gray-800 dark:text-gray-200 space-y-6">
+        <h1 className="text-3xl font-semibold border-b pb-4">Datenschutzerklärung</h1>
 
         <div>
-          <h2 className="font-bold text-lg">1. Verantwortlicher</h2>
+          <h2 className="font-semibold text-lg">1. Verantwortlicher</h2>
           <p className="mt-2">
             Verantwortlicher im Sinne der Datenschutz-Grundverordnung (DSGVO) für die Datenverarbeitung auf dieser
             Website ist:
@@ -45,7 +45,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">2. Worum es geht</h2>
+          <h2 className="font-semibold text-lg">2. Worum es geht</h2>
           <p className="mt-2">
             Mit dieser Anwendung lassen sich Abstimmungen in einer Gruppe durchführen (z.B. &quot;Wohin gehen wir am
             Mittwoch?&quot;) und Live-Runden im Raum (Quiz oder Umfrage Frage für Frage). <strong>Zum Abstimmen und
@@ -59,7 +59,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">3. Abstimmen und Live-Runden (ohne Konto)</h2>
+          <h2 className="font-semibold text-lg">3. Abstimmen und Live-Runden (ohne Konto)</h2>
           <p className="mt-2">
             Beim Abstimmen speichern wir deine Auswahl und einen Zeitstempel. Damit du deine Auswahl später ändern
             kannst und nicht mehrfach im selben Browser abstimmst, legen wir in deinem Browser eine zufällige Kennung
@@ -93,7 +93,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">4. Abstimmungen mit bestätigter Identität (optional)</h2>
+          <h2 className="font-semibold text-lg">4. Abstimmungen mit bestätigter Identität (optional)</h2>
           <p className="mt-2">
             Ersteller:innen können eine Abstimmung so einstellen, dass nur Personen abstimmen können, die über die
             Anwendung <em>rsvp-app</em> als zugesagt bestätigt sind (&quot;eine Stimme pro Person&quot;). Dann
@@ -155,7 +155,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">5. Verwaltungskonto (Anlegen und Verwalten von Abstimmungen und Live-Runden)</h2>
+          <h2 className="font-semibold text-lg">5. Verwaltungskonto (Anlegen und Verwalten von Abstimmungen und Live-Runden)</h2>
           <p className="mt-2">Für ein Konto speichern wir:</p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
             <li>E-Mail-Adresse, optional einen Namen, deine Rolle und den Zeitpunkt der Anlage,</li>
@@ -181,7 +181,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">6. Anmeldung mit dem Konto eines anderen Tools (optional)</h2>
+          <h2 className="font-semibold text-lg">6. Anmeldung mit dem Konto eines anderen Tools (optional)</h2>
           <p className="mt-2">
             Dieser Punkt betrifft Verwaltungskonten; zum Abstimmen mit einem Teilnehmendenkonto aus rsvp-app siehe
             Punkt 4. Ist dies vom Betreiber eingerichtet, kannst du dich hier mit einem Konto eines verbundenen Tools anmelden
@@ -199,7 +199,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">7. Schutz vor Missbrauch (Drosselung)</h2>
+          <h2 className="font-semibold text-lg">7. Schutz vor Missbrauch (Drosselung)</h2>
           <p className="mt-2">
             Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
@@ -214,7 +214,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">8. E-Mails</h2>
+          <h2 className="font-semibold text-lg">8. E-Mails</h2>
           <p className="mt-2">
             Wir verschicken E-Mails nur für Kontofunktionen (die Einladung zu einem neuen Konto, den auf Wunsch
             angeforderten Passwort-Reset und - falls eingeschaltet - das Ergebnis einer eigenen Abstimmung beim
@@ -226,7 +226,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">9. Cookies</h2>
+          <h2 className="font-semibold text-lg">9. Cookies</h2>
           <p className="mt-2">
             Wir setzen ausschließlich technisch notwendige Cookies ein (Art. 6 Abs. 1 lit. b/f DSGVO, § 25 Abs. 2 Nr. 2
             TDDDG) - eine Einwilligung ist dafür nicht erforderlich. Es gibt keine Tracking-, Analyse- oder
@@ -261,7 +261,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">10. Empfänger und Auftragsverarbeiter</h2>
+          <h2 className="font-semibold text-lg">10. Empfänger und Auftragsverarbeiter</h2>
           <p className="mt-2">
             <strong>E-Mail-Versand:</strong> Einladungs-, Passwort-Reset-, Bestätigungs-, Stimmlink-, Ergebnis- und Termin-Mails versenden wir über den
             E-Mail-Server <code>{smtpHost}</code>. Mit dem Betreiber dieses Servers besteht, soweit es sich um einen
@@ -284,7 +284,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">11. Speicherdauer</h2>
+          <h2 className="font-semibold text-lg">11. Speicherdauer</h2>
           <p className="mt-2">
             Abstimmungen samt Optionen, Stimmen, Stimmlinks, bestätigten Adressen und Freigaben werden spätestens{' '}
             <strong>18 Monate, nachdem sie zu Ende gegangen sind</strong>, automatisch vollständig gelöscht
@@ -313,7 +313,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">12. Deine Rechte</h2>
+          <h2 className="font-semibold text-lg">12. Deine Rechte</h2>
           <p className="mt-2">
             Du hast das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16 DSGVO), Löschung (Art. 17 DSGVO),
             Einschränkung der Verarbeitung (Art. 18 DSGVO), Datenübertragbarkeit (Art. 20 DSGVO) und Widerspruch (Art.
@@ -327,7 +327,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-bold text-lg">13. Datensicherheit</h2>
+          <h2 className="font-semibold text-lg">13. Datensicherheit</h2>
           <p className="mt-2">
             Die Übertragung erfolgt verschlüsselt (TLS/HTTPS). Anmelde-Cookies sind <code>httpOnly</code> gesetzt und
             damit per JavaScript nicht auslesbar. Passwörter, Sitzungs-Tokens und Einmal-Links werden nur als Hash
@@ -336,7 +336,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div className="pt-6 border-t">
-          <Link href="/" className="text-blue-600 dark:text-blue-400 hover:underline">
+          <Link href="/" className="font-medium text-blue-700 dark:text-blue-300 hover:underline">
             &larr; Zurück zur Startseite
           </Link>
         </div>

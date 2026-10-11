@@ -59,6 +59,18 @@ export async function login(page: Page, email: string, password = PASSWORD, ip =
   await page.waitForURL(url => url.pathname !== '/anmelden' || url.searchParams.has('error'))
 }
 
+/** Klappt einen Abschnitt der Einstellungen auf (SettingsSection, zugeklappte Felder sind nicht bedienbar). */
+export async function openSection(page: Page, id: string) {
+  const section = page.getByTestId(`section-${id}`)
+  if (!(await section.evaluate(el => (el as HTMLDetailsElement).open))) await section.locator('summary').click()
+}
+
+/** Meldet über das Konto-Menü in der Kopfzeile ab. */
+export async function logout(page: Page) {
+  await page.getByLabel('Konto-Menü').click()
+  await page.getByRole('button', { name: 'Abmelden' }).click()
+}
+
 /** Hinweisbox der Seite (ohne den unsichtbaren Route-Announcer von Next.js, der ebenfalls role="alert" hat). */
 export function pageAlert(page: Page) {
   return page.getByRole('main').getByRole('alert')

@@ -39,8 +39,8 @@ export default function VoterLinksPanel({
   )
 
   return (
-    <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-4">
-      <h2 className="font-bold text-gray-900 dark:text-gray-100">Persönliche Stimmlinks</h2>
+    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4">
+      <h2 className="font-semibold text-gray-900 dark:text-gray-100">Persönliche Stimmlinks</h2>
       <p className="text-sm text-gray-600 dark:text-gray-400">
         Jede Person bekommt ihren eigenen Link und kann damit genau einmal abstimmen (und ihre Auswahl ändern).
         {secretBallot
@@ -51,7 +51,7 @@ export default function VoterLinksPanel({
       {state.message && <Notice tone={state.error ? 'error' : 'success'}>{state.message}</Notice>}
 
       {state.issued.length > 0 && (
-        <div className="rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/50 p-4 space-y-3">
+        <div className="rounded-lg border border-blue-200 dark:border-blue-900 bg-blue-50 dark:bg-blue-950 p-4 space-y-3">
           <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
             Diese Links werden nur jetzt angezeigt - bitte gleich verteilen. Später geht nur noch &quot;neu ausstellen&quot;.
           </p>
@@ -61,7 +61,7 @@ export default function VoterLinksPanel({
               <textarea
                 id="all-links" readOnly rows={Math.min(state.issued.length, 8)}
                 value={state.issued.map(l => `${l.label}: ${l.url}`).join('\n')}
-                className="w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-2 text-xs text-gray-700 dark:text-gray-300"
+                className="w-full rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 p-2 text-xs text-gray-700 dark:text-gray-300"
                 onClick={e => e.currentTarget.select()}
               />
             </div>
@@ -88,13 +88,13 @@ export default function VoterLinksPanel({
           <textarea
             id="link-names" name="names" rows={4}
             placeholder={'Anna\nBen <ben@example.org>\nCem; cem@example.org'}
-            className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded text-sm"
+            className="w-full rounded-lg border border-gray-300 bg-white p-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-blue-900"
           />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional mit E-Mail-Adresse. Statt Namen geht auch nur eine Anzahl:</p>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="link-count" className="text-sm">Anzahl ohne Namen</label>
-          <input id="link-count" name="count" type="number" min={1} max={200} className="w-24 border border-gray-300 dark:border-gray-600 p-2 rounded text-sm" />
+          <input id="link-count" name="count" type="number" min={1} max={200} className="w-24 rounded-lg border border-gray-300 bg-white p-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-blue-900" />
         </div>
         {mailConfigured && (
           <label className="flex items-center gap-2 text-sm cursor-pointer">
@@ -102,19 +102,19 @@ export default function VoterLinksPanel({
             Links an eingetragene E-Mail-Adressen direkt verschicken
           </label>
         )}
-        <button type="submit" disabled={pending} className="bg-blue-600 text-white text-sm font-bold px-4 py-2 rounded hover:bg-blue-700 transition disabled:opacity-50">
+        <button type="submit" disabled={pending} className="rounded-lg border border-blue-600 bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700 disabled:opacity-50">
           {pending ? 'Wird ausgestellt …' : 'Links ausstellen'}
         </button>
       </form>
 
       {links.length > 0 && (
         <div className="border-t border-gray-100 dark:border-gray-700 pt-4 space-y-2">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+          <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
             Beteiligung: {voted.length} von {links.length} {links.length === 1 ? 'hat' : 'haben'} abgestimmt
           </h3>
-          <ul className="divide-y text-sm border rounded">
+          <ul className="divide-y divide-gray-100 dark:divide-gray-700 text-sm border border-gray-200 dark:border-gray-700 rounded-lg">
             {links.map(link => (
-              <li key={link.id} className="flex flex-wrap items-center justify-between gap-2 p-2">
+              <li key={link.id} className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
                 <span className="min-w-0 truncate">
                   <span className={`inline-block w-2 h-2 rounded-full mr-2 ${link.hasVoted ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} aria-hidden />
                   {link.label}
@@ -122,7 +122,7 @@ export default function VoterLinksPanel({
                   <span className="sr-only">{link.hasVoted ? ' (hat abgestimmt)' : ' (fehlt noch)'}</span>
                 </span>
                 <span className="flex items-center gap-3 text-xs">
-                  <span className={link.hasVoted ? 'text-green-700 dark:text-green-300' : 'text-gray-500 dark:text-gray-400'}>{link.hasVoted ? 'abgestimmt' : 'fehlt noch'}</span>
+                  <span className={`rounded-full px-2 py-0.5 font-medium ${link.hasVoted ? 'bg-green-100 text-green-800 dark:bg-green-900/60 dark:text-green-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-200'}`}>{link.hasVoted ? 'abgestimmt' : 'fehlt noch'}</span>
                   <form action={action}>
                     {hidden}
                     <input type="hidden" name="intent" value="reissue" />

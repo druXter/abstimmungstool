@@ -17,6 +17,10 @@ import { POLL_TYPE_LABELS } from '../lib/poll-types'
 import { participantIdps } from '../lib/participant'
 import { idpLabel } from '../lib/suite'
 import { logoutParticipant } from '../auth-actions'
+import { getCurrentUser } from '../lib/auth'
+import { getPollLevel } from '../lib/permissions'
+import { pollStatus } from '../lib/poll-status'
+import { Badge, ButtonLink } from '../ui/kit'
 
 export const dynamic = 'force-dynamic'
 
@@ -81,8 +85,8 @@ export default async function PollPage({
   if (!(await hasPollAccess(poll))) {
     return (
       <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10 px-4">
-        <form action={unlockPoll} className="max-w-sm mx-auto bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-4 text-gray-900 dark:text-gray-100">
-          <h1 className="text-xl font-bold">Zugangscode erforderlich</h1>
+        <form action={unlockPoll} className="max-w-sm mx-auto bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4 text-gray-900 dark:text-gray-100">
+          <h1 className="text-xl font-semibold">Zugangscode erforderlich</h1>
           <p className="text-sm text-gray-600 dark:text-gray-400">Diese Abstimmung ist mit einem Zugangscode geschützt. Du bekommst ihn von der Person, die dich eingeladen hat.</p>
           {notice && <Notice tone="error">{notice.text}</Notice>}
           <input type="hidden" name="pollId" value={poll.id} />
@@ -92,7 +96,7 @@ export default async function PollPage({
             <input
               id="access-code" name="accessCode" required maxLength={MAX_ACCESS_CODE_LENGTH} autoComplete="off"
               defaultValue={code?.slice(0, MAX_ACCESS_CODE_LENGTH)}
-              className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+              className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
             />
           </div>
           <SubmitButton>Weiter</SubmitButton>
@@ -126,22 +130,33 @@ export default async function PollPage({
   const limits = choiceLimits(poll)
   const secretLinks = poll.voterIdentity === 'LINK' && poll.secretBallot
   const namesVisible = (poll.voterIdentity !== 'COOKIE' && !secretLinks) || asksForName
+  const status = pollStatus(poll)
+  // Nur ein Komfort-Link für Verwaltende - die Verwaltungsseite prüft selbst (app/lib/permissions.ts).
+  const user = await getCurrentUser()
+  const manageable = !!user && !!(await getPollLevel(poll, { user }))
 
   return (
-    <main className="min-h-screen bg-gray-50 dark:bg-gray-900 py-10 px-4">
+    <main className="py-8 px-4">
       <div className="max-w-2xl mx-auto space-y-6">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">{poll.title}</h1>
+        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h1 className="min-w-0 break-words text-2xl font-semibold text-gray-900 dark:text-gray-100">{poll.title}</h1>
+            {manageable && <ButtonLink href={`/${poll.id}/verwalten`} size="sm">Verwalten</ButtonLink>}
+          </div>
           {poll.description && (
             <p className="text-gray-600 dark:text-gray-400 mt-2 whitespace-pre-wrap">{poll.description}</p>
           )}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+            <Badge tone={status.tone}>{status.badge}</Badge>
+            <span>{POLL_TYPE_LABELS[poll.pollType].title} · {status.text}</span>
+          </div>
           {isClosed && (
-            <p className="mt-3 text-sm font-medium text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-950/50 inline-block px-3 py-1 rounded">
+            <p className="mt-3 text-sm font-medium text-gray-700 dark:text-gray-300">
               Diese Abstimmung ist beendet.
             </p>
           )}
           {poll.finalStartsAt && (
-            <p className="mt-3 text-sm font-medium text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 px-3 py-2 rounded">
+            <p className="mt-3 text-sm font-medium text-green-800 dark:text-green-200 bg-green-50 dark:bg-green-950/50 border border-green-200 dark:border-green-800 px-3 py-2 rounded-lg">
               📅 Termin steht fest: {finalDateLabel(poll.finalStartsAt)}
               {finalEventUrl && <> · <a href={finalEventUrl} className="underline">zur Veranstaltung (Zu-/Absage)</a></>}
             </p>
@@ -187,9 +202,9 @@ export default async function PollPage({
         )}
 
         {!isClosed && block === 'email-missing' && (
-          <form action={requestVoteEmail} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
+          <form action={requestVoteEmail} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
             <input type="hidden" name="pollId" value={poll.id} />
-            <h2 className="font-bold text-gray-900 dark:text-gray-100">Mit E-Mail-Adresse abstimmen</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">Mit E-Mail-Adresse abstimmen</h2>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               Damit jede Person nur einmal abstimmt, bestätigst du zuerst deine Adresse: Wir schicken dir einen Link,
               danach kannst du in diesem Browser abstimmen.
@@ -198,7 +213,7 @@ export default async function PollPage({
               <label htmlFor="vote-email" className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">E-Mail-Adresse</label>
               <input
                 id="vote-email" type="email" name="email" required maxLength={254} autoComplete="email"
-                className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded text-gray-900 dark:text-gray-100"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-gray-900 dark:text-gray-100"
               />
             </div>
             <SubmitButton>Bestätigungslink schicken</SubmitButton>
@@ -235,10 +250,10 @@ export default async function PollPage({
         )}
 
         {canVote && (
-          <form action={castVote} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
+          <form action={castVote} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
             <input type="hidden" name="pollId" value={poll.id} />
             {identityInputs}
-            <h2 className="font-bold text-gray-900 dark:text-gray-100 mb-2">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">
               {hasVoted ? 'Deine Auswahl ändern' : 'Jetzt abstimmen'}
             </h2>
             {voter?.kind === 'RSVP' && (
@@ -287,7 +302,7 @@ export default async function PollPage({
                 <input
                   id="voter-name" name="voterName" required maxLength={60} autoComplete="name"
                   defaultValue={myVoteRows[0]?.voterName ?? ''}
-                  className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded text-gray-900 dark:text-gray-100"
+                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-gray-900 dark:text-gray-100"
                 />
               </div>
             )}
@@ -309,10 +324,10 @@ export default async function PollPage({
         )}
 
         {poll.allowVoterOptions && !isClosed && !block && (
-          <form action={suggestOption} className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow space-y-3">
+          <form action={suggestOption} className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
             <input type="hidden" name="pollId" value={poll.id} />
             {identityInputs}
-            <h2 className="font-bold text-gray-900 dark:text-gray-100">Option vorschlagen</h2>
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100">Option vorschlagen</h2>
             {poll.voterOptionsNeedApproval && (
               <p className="text-xs text-gray-500 dark:text-gray-400">Vorschläge erscheinen erst, wenn die Verwaltung sie freigegeben hat.</p>
             )}
@@ -321,9 +336,9 @@ export default async function PollPage({
               <input
                 id="suggestion" name="suggestion" type={inputTypeFor(poll.optionKind)} required maxLength={200}
                 placeholder={poll.optionKind === 'TEXT' ? 'Neue Option' : undefined}
-                className="flex-1 border border-gray-300 dark:border-gray-600 p-2 rounded text-gray-900 dark:text-gray-100"
+                className="min-w-0 flex-1 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-gray-900 dark:text-gray-100"
               />
-              <button type="submit" className="bg-blue-600 text-white text-sm font-bold px-4 rounded hover:bg-blue-700 transition">
+              <button type="submit" className="bg-blue-600 text-white text-sm font-medium px-4 rounded-lg hover:bg-blue-700 transition">
                 Vorschlagen
               </button>
             </div>
@@ -345,8 +360,8 @@ export default async function PollPage({
         )}
 
         {showResults ? (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
-            <h2 className="font-bold text-gray-900 dark:text-gray-100 mb-4">
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-4">
               Live-Ergebnis ({distinctVoters} Person{distinctVoters === 1 ? '' : 'en'})
             </h2>
             <PollResults
@@ -358,8 +373,8 @@ export default async function PollPage({
             />
           </div>
         ) : (
-          <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow text-sm text-gray-600 dark:text-gray-400">
-            <h2 className="font-bold text-gray-900 dark:text-gray-100 mb-2">Ergebnis</h2>
+          <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm text-sm text-gray-600 dark:text-gray-400">
+            <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ergebnis</h2>
             <p>
               {poll.resultsVisibility === 'AFTER_VOTE' && 'Das Ergebnis siehst du, sobald du abgestimmt hast.'}
               {poll.resultsVisibility === 'AFTER_CLOSE' && 'Das Ergebnis wird nach dem Ende der Abstimmung angezeigt.'}

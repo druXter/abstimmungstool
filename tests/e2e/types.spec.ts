@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { createAccount, createPoll, login, prisma } from './helpers'
+import { createAccount, createPoll, login, prisma, openSection } from './helpers'
 
 // Abstimmungsarten (Poll.pollType, TODO.md B): Eingabe app/lib/poll-types.ts,
 // Auswertung app/lib/results.ts.
@@ -112,6 +112,7 @@ test('Art und Punktebudget sind gesperrt, sobald abgestimmt wurde', async ({ pag
   await prisma.vote.create({ data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'COOKIE', voterKey: 'cookie:typ', value: 5 } })
   await login(page, owner.email)
   await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+  await openSection(page, 'art')
   await expect(page.getByText('die Art lässt sich nicht mehr ändern')).toBeVisible()
   await expect(page.getByRole('radio', { name: /^Auswahl/ })).toBeDisabled()
   await page.getByRole('button', { name: 'Änderungen speichern' }).click()
@@ -119,17 +120,24 @@ test('Art und Punktebudget sind gesperrt, sobald abgestimmt wurde', async ({ pag
   expect(await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).toMatchObject({ pollType: 'POINTS', pointsBudget: 5 })
 })
 
-test('Anlegen über das Formular: Punkte verteilen mit eigenem Budget', async ({ page }) => {
+test('Anlegen mit Vorlage "Ideen sammeln", eigenes Budget unter Einstellungen', async ({ page }) => {
   const owner = await createAccount()
   await login(page, owner.email)
   await page.goto('/erstellen')
   await page.getByLabel('Frage / Titel').fill('Budget')
   await page.locator('input[name="option"]').nth(0).fill('X')
   await page.locator('input[name="option"]').nth(1).fill('Y')
-  await page.getByRole('radio', { name: /^Punkte verteilen/ }).check()
-  await page.getByLabel('Punkte pro Person (nur bei "Punkte verteilen")').fill('20')
+  await page.getByRole('radio', { name: /^Ideen sammeln/ }).check()
   await page.getByRole('button', { name: 'Abstimmung erstellen' }).click()
   await page.waitForURL(/created=1/)
   const pollId = new URL(page.url()).pathname.split('/')[1]
+  expect(await prisma.poll.findUniqueOrThrow({ where: { id: pollId } })).toMatchObject({ pollType: 'POINTS', pointsBudget: 10, allowVoterOptions: true, voterOptionsNeedApproval: true })
+
+  await page.goto(`/${pollId}/verwalten/bearbeiten`)
+  await expect(page.getByTestId('section-art')).toContainText('Punkte verteilen (10 Punkte)')
+  await openSection(page, 'art')
+  await page.getByLabel('Punkte pro Person (nur bei "Punkte verteilen")').fill('20')
+  await page.getByRole('button', { name: 'Änderungen speichern' }).click()
+  await page.waitForURL(/saved=1/)
   expect(await prisma.poll.findUniqueOrThrow({ where: { id: pollId } })).toMatchObject({ pollType: 'POINTS', pointsBudget: 20 })
 })

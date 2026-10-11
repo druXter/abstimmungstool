@@ -27,17 +27,20 @@ export function identityFromForm(formData: FormData): IdentityParams {
   return { verifyToken: formString(formData, 'verifyToken', 4000), linkToken: formString(formData, 'linkToken', 100) }
 }
 
+/** Reiter der Verwaltungsseite: Übersicht (''), Stimmlinks, Einstellungen (Pfad "bearbeiten"). */
+export type ManageTab = '' | 'stimmlinks' | 'bearbeiten'
+
 /**
- * Adresse der Verwaltungsseite. Bei Alt-Abstimmungen ohne Besitzer-Konto hängt daran
- * weiterhin der creatorToken (das ist dort die Berechtigung), bei Abstimmungen mit Konto
- * bewusst nicht - die Berechtigung kommt dort aus der Sitzung, nie aus der URL.
+ * Adresse der Verwaltungsseite bzw. eines ihrer Reiter. Bei Alt-Abstimmungen ohne Besitzer-Konto
+ * hängt daran weiterhin der creatorToken (das ist dort die Berechtigung), bei Abstimmungen mit
+ * Konto bewusst nicht - die Berechtigung kommt dort aus der Sitzung, nie aus der URL.
  */
-export function manageUrl(pollId: string, token: string, flag?: string): string {
+export function manageUrl(pollId: string, token: string, flag?: string, tab: ManageTab = ''): string {
   const params = new URLSearchParams()
   if (token) params.set('token', token)
   if (flag) params.set(flag, '1')
   const query = params.toString()
-  return `/${pollId}/verwalten${query ? `?${query}` : ''}`
+  return `/${pollId}/verwalten${tab ? `/${tab}` : ''}${query ? `?${query}` : ''}`
 }
 
 /**

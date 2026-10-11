@@ -12,8 +12,13 @@ anlegt und verwaltet (siehe "Konten" unten).
   dunkel. Neue Oberflächen bekommen zu jeder hellen Farbklasse ihr `dark:`-Gegenstück: `bg-white` → `dark:bg-gray-800`,
   `bg-gray-50` → `dark:bg-gray-900`, `text-gray-900` → `dark:text-gray-100`, `text-gray-600` → `dark:text-gray-400`,
   `border-gray-300` → `dark:border-gray-600`, `bg-X-50` → `dark:bg-X-950/50`, `text-X-700` → `dark:text-X-300`.
-* **Abstimmung anlegen (mit Konto):** Titel, optionale Beschreibung, 2-25 Optionen,
-  optionales automatisches Schließungsdatum. Das Abstimmen selbst bleibt für jeden mit
+* **Übersichtliche Verwaltung** (wie in rsvp-app, `docs/KONZEPT-OBERFLAECHE.md`): Kopfzeile mit Konto-Menü,
+  Übersicht "Abstimmungen" mit dem, was zu tun ist, zuerst; pro Abstimmung eine Seite mit Reitern Übersicht
+  (Kennzahlen, Ergebnis, Link zum Teilen), Stimmlinks und Einstellungen (einklappbare Abschnitte, Speichern-Leiste).
+  Gleiche Bausteine wie rsvp-app in `app/ui/kit.tsx`.
+* **Abstimmung anlegen (mit Konto):** kurz - Titel, optionale Beschreibung, optionales automatisches
+  Schließungsdatum, 2-25 Optionen und eine Vorlage (Schnelle Umfrage, Terminfindung, Geheime Wahl, Ideen sammeln,
+  `app/lib/poll-presets.ts`); alles Weitere danach unter "Einstellungen". Das Abstimmen selbst bleibt für jeden mit
   einem Link offen.
 * **Abstimmungsarten** (`Poll.pollType`) - siehe "Abstimmungsarten" unten: Auswahl
   (Standard), Ja/Vielleicht/Nein (Doodle-Stil), Rangfolge (Borda) und Punkte verteilen.
@@ -65,15 +70,15 @@ anlegt und verwaltet (siehe "Konten" unten).
   Prozentwert bezieht sich auf die Anzahl abstimmender PERSONEN, nicht auf die
   Summe aller Options-Stimmen - bei Mehrfachauswahl kann die Summe der Prozentwerte
   daher über 100% liegen, das ist beabsichtigt (siehe `app/[pollId]/poll-results.tsx`).
-* **Verwalten mit Konto:** Unter "Meine Abstimmungen" (`/meine-abstimmungen`) stehen
-  eigene und mit einem geteilte Abstimmungen. Bearbeiten (Titel/Beschreibung/Optionen/
-  Einstellungen), vorzeitig Schließen, Löschen und Teilen - siehe "Konten".
+* **Verwalten mit Konto:** Unter "Abstimmungen" (`/meine-abstimmungen`) stehen
+  eigene und mit einem geteilte Abstimmungen und Live-Runden. Einstellungen (Titel/Beschreibung/Optionen/
+  alles Weitere), vorzeitig Schließen, Löschen und Teilen - siehe "Konten".
 * **Gemeinsam moderieren:** Eine Abstimmung lässt sich mit anderen Konten teilen; diese
   können sie bearbeiten und schließen.
 * **Live-Runden wie bei Kahoot** - siehe "Live-Runden" unten: mehrere Fragen, die die Verwaltung
   Frage für Frage auf einer Leinwand vorführt; alle antworten gleichzeitig auf dem Handy (PIN +
   Spitzname, kein Konto), optional als Quiz mit Punkten, Rangliste und Siegertreppchen.
-* **Komfort auf der Verwaltungsseite:** CSV-Export, QR-Code zum Abstimmungslink,
+* **Komfort in der Verwaltung:** CSV-Export, QR-Code zum Abstimmungslink,
   Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
   optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
 
@@ -125,7 +130,7 @@ wird. Die Auflösung passiert an genau einer Stelle (`resolveVoter` in
   `(pollId, voterKey, optionId)`.
 * **Fail-closed:** Fehlt die geforderte Identität, kann nicht abgestimmt werden - es
   gibt nie einen Rückfall auf das Cookie.
-* **Der Modus ist gesperrt, sobald jemand abgestimmt hat** (Bearbeiten-Seite und
+* **Der Modus ist gesperrt, sobald jemand abgestimmt hat** (Einstellungen und
   `updatePoll`) - sonst stünden Stimmen verschiedener Arten nebeneinander, und die
   bisherigen könnte niemand mehr ändern.
 
@@ -159,7 +164,7 @@ Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Se
 
 ## Persönliche Stimmlinks (Modus `LINK`)
 
-* **Ausstellen** auf der Verwaltungsseite (Owner, Admin, Moderator:innen mit Freigabe): eine
+* **Ausstellen** im Reiter "Stimmlinks" der Verwaltung (Owner, Admin, Moderator:innen mit Freigabe): eine
   Namensliste - eine Person pro Zeile, optional mit E-Mail (`Anna`, `Ben <ben@…>`,
   `Cem; cem@…`) - oder nur eine Anzahl (`Link 1`, `Link 2`, …). Höchstens 200 auf einmal,
   500 pro Abstimmung. Jeder Link ist `/[pollId]?k=<token>`.
@@ -475,8 +480,9 @@ weist in allen Modi mit Namen darauf hin, wer sie sieht.
   in einem deutschen Excel direkt). Enthält Zählstand, Teilnehmende, Ergebnis und - nur wenn
   die Stimmen Namen tragen - wer was gewählt hat. Werte, die mit `= + - @` beginnen, bekommen
   ein `'` vorangestellt (Schutz vor CSV-/Formel-Injection über frei eingegebene Namen).
-* **QR-Code** zum Abstimmungslink, im Browser erzeugt (`app/ui/qr-code.tsx`, Paket `qrcode`).
-* **Duplizieren** (`duplicatePoll`): neue Abstimmung des eingeloggten Kontos mit Titel
+* **QR-Code** zum Abstimmungslink, im Browser erzeugt (`app/ui/qr-code.tsx`, Paket `qrcode`). Links und Codes
+  lassen sich per Knopf kopieren (`app/ui/copyable-field.tsx`).
+* **Duplizieren** (`duplicatePoll`, unter "Einstellungen"): neue Abstimmung des eingeloggten Kontos mit Titel
   "(Kopie)", Optionen und Einstellungen - ohne Stimmen, Stimmlinks, bestätigte Adressen,
   Freigaben und ohne Schließdatum.
 * **Ergebnis-Mail beim Schließen** (`Poll.notifyOwnerOnClose`, bei neuen Abstimmungen
@@ -560,7 +566,8 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
   Läuft das Tool je in mehreren Prozessen, funktioniert es weiter, nur mit bis zu 5 s Verzögerung.
 * **Vor der Auflösung** enthält keine Ansicht (auch nicht die der Leinwand) die richtige Antwort oder die
   Verteilung, die Ansicht der Handys auch kein Bild, das aufgedeckt wird.
-* **Verwaltungsseite** (`/live/<id>/verwalten`): Beitrittslink mit QR-Code, Ergebnisse je Frage,
+* **Verwaltungsseite** (`/live/<id>/verwalten`, Reiter Übersicht und - solange niemand geantwortet hat - Fragen):
+  Kennzahlen, Beitrittslink mit QR-Code, Ergebnisse je Frage,
   Rangliste, **CSV-Export** (`/live/<id>/verwalten/export`: Verteilung je Frage, Rangliste und jede Antwort
   mit Spitzname, richtig, Punkten und Antwortzeit; Schutz vor CSV-Injection wie beim Abstimmungs-Export,
   `app/lib/csv.ts`), "Neu starten" (Teilnehmende und Antworten löschen, neue PIN - für die nächste Gruppe
@@ -755,7 +762,8 @@ Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Üb
 (`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642) und die Live-Runden
 (`live.spec.ts`: Leinwand und mehrere Handys als eigene Browser-Kontexte im Gleichtakt, Punkte,
 Zeitablauf, Entfernen, Berechtigungen; `live-extras.spec.ts`: Mehrfachauswahl, Schätzfrage, Wortwolke,
-Teilen, CSV-Export, Bilder). Mails fängt ein kleiner
+Teilen, CSV-Export, Bilder) und die Oberfläche der Verwaltung (`admin-ui.spec.ts`: Vorlagen beim Anlegen, Übersicht,
+Reiter samt Token bei Alt-Abstimmungen, Einstellungen, Freigaben, Konto-Menü). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
 (`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den

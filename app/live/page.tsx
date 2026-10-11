@@ -22,22 +22,22 @@ export default async function LiveJoinPage({ searchParams }: { searchParams: Pro
 
   return (
     <main className="bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 py-12">
-      <form action={joinLive} className="max-w-sm w-full bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-4 text-gray-900 dark:text-gray-100">
-        <h1 className="text-2xl font-bold">Live-Runde beitreten</h1>
+      <form action={joinLive} className="max-w-sm w-full bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-4 text-gray-900 dark:text-gray-100">
+        <h1 className="text-2xl font-semibold">Live-Runde beitreten</h1>
         {error && <Notice tone="error">{error}</Notice>}
         <div>
           <label htmlFor="live-pin" className="block text-sm font-medium mb-1">PIN</label>
           <input
             id="live-pin" name="pin" required inputMode="numeric" autoComplete="off" pattern="[0-9 ]{6,7}" maxLength={7}
             defaultValue={pin?.replace(/\D/g, '').slice(0, 6)} placeholder="123 456"
-            className="w-full border border-gray-300 dark:border-gray-600 p-3 rounded text-2xl tracking-widest text-center"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-3 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-2xl tracking-widest text-center"
           />
         </div>
         <div>
           <label htmlFor="live-name" className="block text-sm font-medium mb-1">Spitzname</label>
           <input
             id="live-name" name="nickname" required maxLength={24} autoComplete="nickname" defaultValue={name}
-            className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+            className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
           />
           <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Erscheint auf der Leinwand und in der Rangliste. Kein Konto nötig.</p>
         </div>

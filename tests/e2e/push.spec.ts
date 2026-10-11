@@ -1,7 +1,7 @@
 import { createECDH, createPublicKey, randomBytes, verify } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import ece from 'http_ece'
-import { createAccount, createPoll, login, prisma, unique } from './helpers'
+import { createAccount, createPoll, login, prisma, unique, logout } from './helpers'
 import { PUSH_ORIGIN, pushesTo } from './push-server'
 import { TEST_VAPID_PUBLIC_KEY } from '../../playwright.config'
 
@@ -37,7 +37,7 @@ test('Abstimmung beendet: verschlüsselte Mitteilung mit gültiger VAPID-Signatu
   await prisma.vote.create({ data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'COOKIE', voterKey: `cookie:p-${poll.id}` } })
 
   await page.goto(`/${poll.id}/verwalten`)
-  await page.getByRole('button', { name: /Abstimmung jetzt schließen/ }).click()
+  await page.getByRole('button', { name: 'Jetzt schließen' }).click()
   const push = await waitForPush(path)
 
   expect(push.headers['content-encoding']).toBe('aes128gcm')
@@ -76,12 +76,12 @@ test('erloschenes Abo wird gelöscht, Abmelden beendet die Mitteilungen dieses G
   const poll = await createPoll(owner.id, { notifyOwnerOnClose: true })
 
   await page.goto(`/${poll.id}/verwalten`)
-  await page.getByRole('button', { name: /Abstimmung jetzt schließen/ }).click()
+  await page.getByRole('button', { name: 'Jetzt schließen' }).click()
   await waitForPush(active)
   await expect.poll(() => prisma.pushSubscription.count({ where: { userId: owner.id } })).toBe(1)
 
   // Abmelden löscht die Sitzung - und mit ihr das Abo dieses Geräts.
-  await page.getByRole('button', { name: 'Abmelden' }).click()
+  await logout(page)
   await expect.poll(() => prisma.pushSubscription.count({ where: { userId: owner.id } })).toBe(0)
 })
 

@@ -52,7 +52,7 @@ test('Duplizieren: Optionen und Einstellungen ja, Stimmen und Schließdatum nein
   await prisma.vote.create({ data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'LINK', voterKey: 'link:x' } })
 
   await login(page, owner.email)
-  await page.goto(`/${poll.id}/verwalten`)
+  await page.goto(`/${poll.id}/verwalten/bearbeiten`)
   await page.getByRole('button', { name: /Duplizieren/ }).click()
   await page.waitForURL(/duplicated=1/)
   await expect(page.getByText('Kopie angelegt')).toBeVisible()
@@ -75,8 +75,8 @@ test('Ergebnis-Mail beim manuellen Schließen - genau einmal', async ({ page }) 
 
   await login(page, owner.email)
   await page.goto(`/${poll.id}/verwalten`)
-  await page.getByRole('button', { name: /Abstimmung jetzt schließen/ }).click()
-  await expect(page.getByText('Abstimmung ist geschlossen.')).toBeVisible()
+  await page.getByRole('button', { name: 'Jetzt schließen' }).click()
+  await expect(page.getByTestId('stat-status')).toContainText('geschlossen')
 
   const mail = await waitForMail(owner.email)
   expect(mail).toContain(`Abstimmung beendet: ${poll.title}`)

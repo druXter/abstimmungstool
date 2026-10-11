@@ -6,7 +6,7 @@ import { hashToken } from '../../app/lib/auth'
 
 /** Stellt über die Verwaltungsseite Links für eine Namensliste aus und liefert sie (Name -> URL). */
 async function issueLinks(page: Page, pollId: string, names: string[]): Promise<Map<string, string>> {
-  await page.goto(`/${pollId}/verwalten`)
+  await page.goto(`/${pollId}/verwalten/stimmlinks`)
   await page.getByLabel('Namensliste (eine Person pro Zeile)').fill(names.join('\n'))
   await page.getByRole('button', { name: 'Links ausstellen' }).click()
   await expect(page.getByText('Diese Links werden nur jetzt angezeigt')).toBeVisible()
@@ -54,7 +54,8 @@ test('ausstellen, abstimmen, Beteiligung - Links liegen nur als Hash in der Date
   await page.reload()
   await expect(page.getByText('Beteiligung: 1 von 3 haben abgestimmt')).toBeVisible()
   await expect(page.getByText('Diese Links werden nur jetzt angezeigt')).toHaveCount(0)
-  // Wer verwaltet, sieht den Namen am Ergebnis.
+  // Wer verwaltet, sieht den Namen am Ergebnis (Übersicht).
+  await page.goto(`/${poll.id}/verwalten`)
   await expect(page.getByText('Anna', { exact: true }).and(page.locator('p'))).toBeVisible()
   await voter.context().close()
 })
@@ -92,7 +93,7 @@ test('nur Anzahl: Links werden durchnummeriert', async ({ page }) => {
   const owner = await createAccount()
   const poll = await createPoll(owner.id, { voterIdentity: 'LINK' })
   await login(page, owner.email)
-  await page.goto(`/${poll.id}/verwalten`)
+  await page.goto(`/${poll.id}/verwalten/stimmlinks`)
   await page.getByLabel('Anzahl ohne Namen').fill('2')
   await page.getByRole('button', { name: 'Links ausstellen' }).click()
   await expect(page.getByText('2 Links ausgestellt.')).toBeVisible()

@@ -53,7 +53,7 @@ test('Live-Runde anlegen: Fragen mit Antworten, richtige markieren, Verwaltungss
 
   await page.waitForURL(/\/live\/[^/]+\/verwalten\?angelegt=1/)
   await expect(page.getByText('Live-Runde angelegt')).toBeVisible()
-  await expect(page.getByText('2 Fragen (Quiz mit Punkten)')).toBeVisible()
+  await expect(page.getByText('Quiz mit Punkten')).toBeVisible()
 
   const id = new URL(page.url()).pathname.split('/')[2]
   const session = await prisma.liveSession.findUniqueOrThrow({

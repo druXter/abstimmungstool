@@ -111,7 +111,7 @@ test('Stimmlinks (Modus LINK) gehen an die eingetragenen Adressen', async ({ pag
   const poll = await createPoll(owner.id, { voterIdentity: 'LINK' })
   await login(page, owner.email)
   const email = uniqueEmail('ben')
-  await page.goto(`/${poll.id}/verwalten`)
+  await page.goto(`/${poll.id}/verwalten/stimmlinks`)
   await page.getByLabel('Namensliste (eine Person pro Zeile)').fill(`Ben <${email}>\nCem`)
   await expect(page.getByLabel('Links an eingetragene E-Mail-Adressen direkt verschicken')).toBeChecked()
   await page.getByRole('button', { name: 'Links ausstellen' }).click()

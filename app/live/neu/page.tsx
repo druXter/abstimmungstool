@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { redirect } from 'next/navigation'
 import { requireUser } from '../../lib/auth'
 import { canCreatePolls } from '../../lib/permissions'
@@ -6,6 +5,7 @@ import { createLive } from '../../live-actions'
 import SubmitButton from '../../ui/submit-button'
 import Notice from '../../ui/notice'
 import QuestionsEditor from '../questions-editor'
+import { Card, inputClass, labelClass, Main, PageHeader } from '../../ui/kit'
 
 export const dynamic = 'force-dynamic'
 
@@ -16,30 +16,27 @@ export default async function NewLivePage({ searchParams }: { searchParams: Prom
   const { fehler } = await searchParams
 
   return (
-    <main className="bg-gray-50 dark:bg-gray-900 py-8 px-4">
-      <div className="max-w-2xl mx-auto bg-white dark:bg-gray-800 p-8 rounded-lg shadow space-y-6 text-gray-900 dark:text-gray-100">
-        <div className="flex justify-between items-center border-b pb-4">
-          <h1 className="text-2xl font-bold">Neue Live-Runde</h1>
-          <Link href="/meine-abstimmungen" className="text-gray-500 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition">Abbrechen</Link>
-        </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          Wie bei Kahoot: Du zeigst die Fragen nacheinander auf einer Leinwand, alle antworten gleichzeitig auf dem Handy -
-          ohne Konto, nur mit PIN und Spitzname. Mit markierter richtiger Antwort wird daraus ein Quiz mit Punkten und Rangliste.
-        </p>
+    <Main width="narrow">
+      <PageHeader
+        title="Neue Live-Runde"
+        back={{ href: '/meine-abstimmungen', label: 'Alle Abstimmungen' }}
+        subtitle={<>Wie bei Kahoot: Du zeigst die Fragen nacheinander auf einer Leinwand, alle antworten gleichzeitig auf dem Handy -
+          ohne Konto, nur mit PIN und Spitzname. Mit markierter richtiger Antwort wird daraus ein Quiz mit Punkten und Rangliste.</>}
+      />
+      <div className="space-y-6">
         {fehler === 'leer' && <Notice tone="error">Bitte gib einen Titel und mindestens eine Frage mit zwei Antworten ein.</Notice>}
 
         <form action={createLive} className="space-y-4">
-          <div>
-            <label htmlFor="live-title" className="block text-sm font-medium mb-1">Titel</label>
-            <input
-              id="live-title" name="title" required maxLength={200} placeholder="z.B. Vereinsquiz Sommerfest"
-              className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
-            />
-          </div>
+          <Card>
+            <label htmlFor="live-title" className={labelClass}>Titel</label>
+            <input id="live-title" name="title" required maxLength={200} placeholder="z.B. Vereinsquiz Sommerfest" className={inputClass} />
+          </Card>
           <QuestionsEditor />
-          <SubmitButton>Live-Runde anlegen</SubmitButton>
+          <div className="flex justify-end">
+            <SubmitButton inline>Live-Runde anlegen</SubmitButton>
+          </div>
         </form>
       </div>
-    </main>
+    </Main>
   )
 }

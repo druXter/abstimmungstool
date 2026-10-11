@@ -19,7 +19,7 @@ export default async function WeiterPage({
 
   return (
     <main className="bg-gray-50 dark:bg-gray-900 flex items-center justify-center px-4 py-12">
-      <div className="max-w-sm w-full bg-white dark:bg-gray-800 p-8 rounded-lg shadow text-gray-900 dark:text-gray-100">
+      <div className="max-w-sm w-full bg-white dark:bg-gray-800 p-6 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm text-gray-900 dark:text-gray-100">
         <HardRedirect to={target} />
       </div>
     </main>

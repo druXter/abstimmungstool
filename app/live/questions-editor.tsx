@@ -108,7 +108,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
       {questions.map((q, i) => {
         const hasAnswers = q.kind === 'CHOICE' || q.kind === 'MULTI'
         return (
-          <fieldset key={q.key} className="rounded-md border border-gray-200 dark:border-gray-700 p-4 space-y-3">
+          <fieldset key={q.key} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 space-y-3">
             <legend className="text-sm font-medium px-1">Frage {i + 1}</legend>
             <div className="flex flex-wrap gap-2 justify-end text-xs">
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40">nach oben</button>
@@ -127,7 +127,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 id={`q${i}_text`} name={`q${i}_text`} required maxLength={200} value={q.text}
                 onChange={e => update(i, () => ({ text: e.target.value }))}
                 placeholder="z.B. Wie viele Beine hat eine Spinne?"
-                className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
               />
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
@@ -136,7 +136,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 <select
                   id={`q${i}_kind`} name={`q${i}_kind`} value={q.kind}
                   onChange={e => update(i, () => ({ kind: e.target.value as LiveQuestionKind }))}
-                  className="border border-gray-300 dark:border-gray-600 p-1.5 rounded"
+                  className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-1.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                 >
                   {KINDS.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
                 </select>
@@ -146,7 +146,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 <select
                   id={`q${i}_time`} name={`q${i}_time`} value={q.timeLimit}
                   onChange={e => update(i, () => ({ timeLimit: Number(e.target.value) }))}
-                  className="border border-gray-300 dark:border-gray-600 p-1.5 rounded"
+                  className="rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-1.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                 >
                   {TIME_LIMITS.map(t => <option key={t} value={t}>{t} Sekunden</option>)}
                   <option value={0}>ohne (du löst auf)</option>
@@ -165,7 +165,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         name={`q${i}_a${j}`} maxLength={100} value={a.label} required={j < MIN_ANSWERS} aria-label={`Frage ${i + 1}, Antwort ${j + 1}`}
                         onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) }))}
                         placeholder={`Antwort ${j + 1}${j < MIN_ANSWERS ? '' : ' (optional)'}`}
-                        className="grow min-w-0 border border-gray-300 dark:border-gray-600 p-2 rounded"
+                        className="grow min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                       />
                       <label className="flex items-center gap-1 text-xs text-gray-600 dark:text-gray-400 whitespace-nowrap cursor-pointer">
                         <input
@@ -190,7 +190,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 {q.answers.length < MAX_ANSWERS && (
                   <button
                     type="button" onClick={() => update(i, prev => ({ answers: [...prev.answers, { label: '', correct: false }] }))}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                    className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline"
                   >
                     + Antwort hinzufügen
                   </button>
@@ -216,7 +216,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         name={`q${i}_a${j}`} maxLength={100} value={a.label} aria-label={`Frage ${i + 1}, richtige Antwort ${j + 1}`}
                         onChange={e => update(i, prev => ({ answers: prev.answers.map((x, k) => (k === j ? { ...x, label: e.target.value } : x)) }))}
                         placeholder={j === 0 ? 'Richtige Antwort (optional), z.B. Eiffelturm' : 'Weitere Schreibweise (optional)'}
-                        className="grow min-w-0 border border-gray-300 dark:border-gray-600 p-2 rounded"
+                        className="grow min-w-0 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                       />
                       {q.answers.length > 1 && (
                         <button
@@ -233,7 +233,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 {q.answers.length < MAX_ANSWERS && (
                   <button
                     type="button" onClick={() => update(i, prev => ({ answers: [...prev.answers, { label: '', correct: false }] }))}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                    className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline"
                   >
                     + Weitere Schreibweise
                   </button>
@@ -252,21 +252,21 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   <span className="block">Richtiger Wert (optional)</span>
                   <input
                     name={`q${i}_target`} inputMode="decimal" value={q.target} onChange={e => update(i, () => ({ target: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, richtiger Wert`} placeholder="z.B. 8848" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, richtiger Wert`} placeholder="z.B. 8848" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="block">Toleranz (±)</span>
                   <input
                     name={`q${i}_tolerance`} inputMode="decimal" value={q.tolerance} onChange={e => update(i, () => ({ tolerance: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, Toleranz`} placeholder="Standard: 10 %" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, Toleranz`} placeholder="Standard: 10 %" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                   />
                 </label>
                 <label className="space-y-1">
                   <span className="block">Einheit (optional)</span>
                   <input
                     name={`q${i}_unit`} maxLength={20} value={q.unit} onChange={e => update(i, () => ({ unit: e.target.value }))}
-                    aria-label={`Frage ${i + 1}, Einheit`} placeholder="z.B. m" className="w-full border border-gray-300 dark:border-gray-600 p-2 rounded"
+                    aria-label={`Frage ${i + 1}, Einheit`} placeholder="z.B. m" className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
                   />
                 </label>
                 <p className="sm:col-span-3 text-xs text-gray-500 dark:text-gray-400">
@@ -331,7 +331,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
             setQuestions(qs => [...qs, { ...emptyQuestion(), key: nextKey, preview: null }])
             setNextKey(k => k + 1)
           }}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+          className="text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline"
         >
           + Weitere Frage
         </button>

@@ -80,7 +80,7 @@ export default function BallotInputs({
               <label htmlFor={`rank-${option.id}`} className="text-gray-800 dark:text-gray-200">{option.label}</label>
               <select
                 id={`rank-${option.id}`} name={`rank_${option.id}`} defaultValue={myVotes[option.id] ?? ''}
-                className="border border-gray-300 dark:border-gray-600 p-1.5 rounded bg-white dark:bg-gray-800 text-sm"
+                className="rounded-lg border border-gray-300 dark:border-gray-600 p-1.5 bg-white dark:bg-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-sm"
               >
                 <option value="">–</option>
                 {options.map((_, i) => <option key={i} value={i + 1}>Platz {i + 1}</option>)}
@@ -101,7 +101,7 @@ export default function BallotInputs({
               <input
                 id={`points-${option.id}`} type="number" name={`points_${option.id}`} min={0} max={budget}
                 defaultValue={myVotes[option.id] ?? ''} placeholder="0"
-                className="w-20 border border-gray-300 dark:border-gray-600 p-1.5 rounded text-sm"
+                className="w-20 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-1.5 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-sm"
               />
             </div>
           ))}

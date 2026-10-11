@@ -1,6 +1,6 @@
 import { createHmac } from 'node:crypto'
 import { expect, test } from '@playwright/test'
-import { createAccount, createPoll, login, PASSWORD, prisma, uniqueEmail } from './helpers'
+import { createAccount, createPoll, login, PASSWORD, prisma, uniqueEmail, openSection } from './helpers'
 import { TEST_RSVP_SECRET } from '../../playwright.config'
 
 // Stimmabgabe und Identitätsmodell (Poll.voterIdentity, siehe app/lib/voter-identity.ts).
@@ -21,8 +21,8 @@ test.describe('Modus COOKIE (Standard)', () => {
     const optionInputs = page.locator('input[name="option"]')
     await optionInputs.nth(0).fill('Pizza')
     await optionInputs.nth(1).fill('Sushi')
-    // Der Standard ist vorausgewählt.
-    await expect(page.getByRole('radio', { name: /Offen für alle/ })).toBeChecked()
+    // Die Vorlage "Schnelle Umfrage" (offen für alle) ist vorausgewählt.
+    await expect(page.getByRole('radio', { name: /Schnelle Umfrage/ })).toBeChecked()
     await page.getByRole('button', { name: 'Abstimmung erstellen' }).click()
     await page.waitForURL(/\/verwalten\?created=1/)
     const pollId = new URL(page.url()).pathname.split('/')[1]
@@ -193,6 +193,7 @@ test.describe('Bearbeiten', () => {
     await login(page, owner.email)
 
     await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+    await openSection(page, 'wer')
     await page.getByRole('radio', { name: /Nur über rsvp-app/ }).check()
     await page.getByRole('button', { name: 'Änderungen speichern' }).click()
     await page.waitForURL(/saved=1/)
@@ -202,6 +203,8 @@ test.describe('Bearbeiten', () => {
       data: { pollId: poll.id, optionId: poll.options[0].id, identityKind: 'RSVP', voterKey: 'rsvp:x@example.test', voterName: 'x@example.test' }
     })
     await page.goto(`/${poll.id}/verwalten/bearbeiten`)
+    await expect(page.getByTestId('section-wer')).toContainText('gesperrt')
+    await openSection(page, 'wer')
     await expect(page.getByText('die Art der Stimmabgabe lässt sich deshalb nicht mehr ändern')).toBeVisible()
     await expect(page.getByRole('radio', { name: /Offen für alle/ })).toBeDisabled()
     await page.getByRole('button', { name: 'Änderungen speichern' }).click()
@@ -209,6 +212,7 @@ test.describe('Bearbeiten', () => {
     expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).voterIdentity).toBe('RSVP')
 
     // Wer verwaltet, sieht die Namen auch ohne showVoterNames.
+    await page.goto(`/${poll.id}/verwalten`)
     await expect(page.getByText('x@example.test', { exact: true })).toBeVisible()
     await expect(page.getByText('Die Namen oben siehst nur du')).toBeVisible()
   })
@@ -372,6 +376,7 @@ test.describe('Optionen von Teilnehmenden', () => {
     await page.waitForURL(/saved=1/)
     expect(await prisma.pollOption.count({ where: { id: pending.id } })).toBe(1)
 
+    await page.goto(`/${poll.id}/verwalten`)
     await expect(page.getByText('Vorschläge von Teilnehmenden (1)')).toBeVisible()
     await page.getByRole('button', { name: 'Döner freigeben' }).click()
     await expect(page.getByText('Vorschläge von Teilnehmenden')).toHaveCount(0)

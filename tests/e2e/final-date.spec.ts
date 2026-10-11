@@ -34,8 +34,8 @@ async function vote(pollId: string, optionId: string, kind: 'RSVP' | 'EMAIL' | '
 
 async function closeViaUi(page: Page, pollId: string) {
   await page.goto(`/${pollId}/verwalten`)
-  await page.getByRole('button', { name: /Abstimmung jetzt schließen/ }).click()
-  await expect(page.getByText('Abstimmung ist geschlossen.')).toBeVisible()
+  await page.getByRole('button', { name: 'Jetzt schließen' }).click()
+  await expect(page.getByTestId('stat-status')).toContainText('geschlossen')
 }
 
 test('eindeutig: Verwaltung bestätigt, rsvp-app übernimmt, RSVP-Abstimmende benachrichtigt rsvp-app', async ({ page }) => {
