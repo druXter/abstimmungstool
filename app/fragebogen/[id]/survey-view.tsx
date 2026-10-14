@@ -82,7 +82,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
     )
   }
 
-  const numbers = questionNumbers(survey.questions)
+  const numbers = questionNumbers(survey.questions, survey.numbered).shown
   const form = (
     <form action={submitSurvey} className="space-y-4">
       <input type="hidden" name="surveyId" value={survey.id} />
@@ -100,7 +100,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
         if (q.kind === 'INFO') {
           return (
             <div key={q.id} className={block} data-testid="survey-info">
-              {q.text && <h2 className="font-medium">{q.text}</h2>}
+              {q.text && <h2 className="font-medium">{number && `${number}. `}{q.text}</h2>}
               {q.hint && <p className={`whitespace-pre-line text-sm text-gray-600 dark:text-gray-400 ${q.text ? 'mt-1' : ''}`}>{q.hint}</p>}
             </div>
           )

@@ -612,8 +612,12 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   | `INFO` Überschrift / Text | keine Frage: Überschrift (`text`, wie ein Fragentitel) und/oder Text (`hint`, bis 2000 Zeichen) | nur als Zwischenüberschrift, nicht im CSV |
 
   **Titel ausblenden** (`hideTitle`, jede Frage): Der Titel ist nur für Screenreader da, in Auswertung und CSV steht er
-  weiter. Die Frage bekommt keine Nummer (Nummern zählen nur sichtbare Titel, `questionNumbers`) und schließt ohne
-  Trennlinie an den Block davor an. Bei Pflicht zeigen Raster das Sternchen an jeder Zeile.
+  weiter. Die Frage schließt ohne Trennlinie an den Block davor an. Bei Pflicht zeigen Raster das Sternchen an jeder
+  Zeile. Der Editor warnt, wenn eine solche Frage dadurch an eine andere Frage statt an eine Überschrift anschließt.
+  **Nummern** (`app/lib/survey-numbers.ts`, auch im Editor genutzt): Fragen mit sichtbarem Titel zählen; eine
+  Überschrift, auf die direkt Fragen mit ausgeblendetem Titel folgen, ist deren Titel und bekommt die Nummer (die Gruppe
+  zählt als eine Frage, Auswertung und CSV zeigen bei allen Fragen der Gruppe diese Nummer). Andere Text-Blöcke bleiben
+  ohne Nummer. `Survey.numbered` (Einstellungen, "Fragen nummerieren") schaltet alle Nummern ab.
   **"+ UEQ-S einfügen"** im Editor legt eine Anleitung (`INFO`) und die acht Gegensatzpaare des UEQ-S als zwei
   Skalen-Raster 1-7 mit ausgeblendetem Titel an (pragmatische und hedonische Qualität) - für Teilnehmende ein Block,
   in der Auswertung stehen beide Skalenwerte zentriert wie in der offiziellen UEQ-Auswertung.

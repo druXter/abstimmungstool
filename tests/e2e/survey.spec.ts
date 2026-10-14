@@ -599,12 +599,13 @@ test('Blöcke am Handy: Überschrift, Nummern ohne Lücken, Gegensatzpaare als B
   const page = await context.newPage()
   await page.goto(`/fragebogen/${survey.id}`)
 
-  await expect(page.getByRole('heading', { name: 'Teil 1: Dein Eindruck' })).toBeVisible()
+  // Die Überschrift über den Fragen mit ausgeblendetem Titel ist deren Titel und trägt die Nummer; der reine
+  // Text-Block danach bleibt ohne Nummer, die Zählung läuft ohne Lücke weiter.
+  await expect(page.getByRole('heading', { name: '1. Teil 1: Dein Eindruck' })).toBeVisible()
   await expect(page.getByText('Jetzt noch ein paar Aussagen.')).toBeVisible()
-  // Ausgeblendete Titel: nur für Screenreader da, ohne Nummer - die erste sichtbare Frage ist Nummer 1.
   expect((await page.getByText('UEQ-S: Pragmatische Qualität').boundingBox())?.width).toBeLessThanOrEqual(1)
-  await expect(page.getByText('1. Wie sehr stimmst du zu?')).toBeVisible()
-  await expect(page.getByText('2. Sonst noch was?')).toBeVisible()
+  await expect(page.getByText('2. Wie sehr stimmst du zu?')).toBeVisible()
+  await expect(page.getByText('3. Sonst noch was?')).toBeVisible()
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
 
   // Am Handy stehen beide Begriffe über den Knöpfen.
@@ -666,9 +667,9 @@ test('Blöcke am Desktop: Gegensatzpaar links | Knöpfe | rechts, serverseitige 
 
   await login(page, owner.email)
   await page.goto(`/fragebogen/${survey.id}/verwalten`)
-  await expect(page.getByTestId('survey-result-info').first()).toContainText('Teil 1: Dein Eindruck')
+  await expect(page.getByTestId('survey-result-info').first()).toContainText('1. Teil 1: Dein Eindruck')
   const pragmatic = page.getByTestId('survey-result').first()
-  await expect(pragmatic).toContainText('UEQ-S: Pragmatische Qualität')
+  await expect(pragmatic).toContainText('1. UEQ-S: Pragmatische Qualität')
   // (7 + 4 + 5 + 6) / 4 = 5,5, Mitte 4 -> +1,5.
   await expect(pragmatic).toContainText('Gesamt: Durchschnitt 5,5 · zentriert +1,5')
   await expect(pragmatic.getByRole('row', { name: /behindernd ↔ unterstützend/ })).toContainText('6')
@@ -676,8 +677,55 @@ test('Blöcke am Desktop: Gegensatzpaar links | Knöpfe | rechts, serverseitige 
   await expect(page.getByTestId('survey-result').nth(1)).toContainText('zentriert −3')
 
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend";"UEQ-S: Pragmatische Qualität: kompliziert ↔ einfach";"UEQ-S: Hedonische Qualität: langweilig ↔ spannend";"1. Wie sehr stimmst du zu?: Die App war hilfreich."')
+  // Beide UEQ-S-Skalen tragen die Nummer ihrer Überschrift.
+  expect(csv).toContain('"1. UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend";"1. UEQ-S: Pragmatische Qualität: kompliziert ↔ einfach";"1. UEQ-S: Hedonische Qualität: langweilig ↔ spannend";"2. Wie sehr stimmst du zu?: Die App war hilfreich."')
   expect(csv).toContain('"7";"4";"1";"";"";""')
   expect(csv).toContain('"Gesamt: Durchschnitt 5,5 (zentriert 1,5)";"4"')
   expect(csv).not.toContain('Teil 1: Dein Eindruck')
+})
+
+test('Nummern ausschalten: keine Nummern beim Ausfüllen, in der Auswertung und im CSV', async ({ page, browser }) => {
+  const owner = await createAccount()
+  const survey = await createBlockSurvey(owner.id)
+  await login(page, owner.email)
+  await page.goto(`/fragebogen/${survey.id}/bearbeiten`)
+  await expect(page.getByLabel('Fragen nummerieren')).toBeChecked()
+  await page.getByLabel('Fragen nummerieren').uncheck()
+  await page.getByRole('button', { name: 'Speichern' }).click()
+  await expect(page.getByText('Gespeichert.', { exact: true })).toBeVisible()
+  expect((await prisma.survey.findUniqueOrThrow({ where: { id: survey.id } })).numbered).toBe(false)
+
+  const guest = await visitor(browser)
+  await guest.goto(`/fragebogen/${survey.id}`)
+  await expect(guest.getByRole('heading', { name: 'Teil 1: Dein Eindruck', exact: true })).toBeVisible()
+  await expect(guest.getByText('Wie sehr stimmst du zu?', { exact: true })).toBeVisible()
+  await expect(guest.getByText(/^\d+\. /)).toHaveCount(0)
+
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  await expect(page.getByTestId('survey-result').first().getByRole('heading')).toHaveText(/^UEQ-S: Pragmatische Qualität/)
+  const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
+  expect(csv).toContain('"UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend"')
+})
+
+test('Editor warnt, wenn eine Frage ohne Titel an eine andere Frage anschließt', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/fragebogen/neu')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Erste Frage')
+  await page.getByRole('button', { name: '+ Weitere Frage' }).click()
+  await page.getByLabel('Frage 2', { exact: true }).fill('Zweite Frage')
+  await page.getByLabel('Titel ausblenden').nth(1).check()
+  await expect(page.getByTestId('hidden-title-warning')).toContainText('Wird an Frage 1 angehängt')
+
+  // Mit einem Hinweis steht die Frage für sich - keine Warnung.
+  await page.getByLabel('Frage 2, Hinweis').fill('Bitte jede Zeile bewerten')
+  await expect(page.getByTestId('hidden-title-warning')).toHaveCount(0)
+  await page.getByLabel('Frage 2, Hinweis').fill('')
+
+  // Unter einer Überschrift ist es gewollt: die Überschrift bekommt die Nummer.
+  await page.getByRole('button', { name: '+ Überschrift / Text' }).click()
+  await page.getByLabel('Überschrift 3', { exact: true }).fill('Dein Eindruck')
+  await page.getByRole('button', { name: 'nach oben' }).nth(2).click()
+  await expect(page.getByTestId('hidden-title-warning')).toHaveCount(0)
+  await expect(page.getByText('gehört zur Überschrift in Block 2')).toBeVisible()
 })

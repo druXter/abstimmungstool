@@ -51,15 +51,8 @@ export function isQuestion(kind: SurveyQuestionKind): boolean {
   return kind !== 'INFO'
 }
 
-/**
- * Nummern der Fragen, wie Teilnehmende sie sehen: nur Fragen mit sichtbarem Titel zählen (Überschriften und Fragen
- * mit ausgeblendetem Titel bekommen keine), damit keine Lücken entstehen. Die Auswertung nutzt dieselben Nummern.
- */
-export function questionNumbers(questions: { id: string; kind: SurveyQuestionKind; hideTitle: boolean }[]): Map<string, number> {
-  const numbers = new Map<string, number>()
-  for (const q of questions) if (isQuestion(q.kind) && !q.hideTitle) numbers.set(q.id, numbers.size + 1)
-  return numbers
-}
+// Nummern (auch Überschriften als Titel einer Gruppe) - eigene Datei, weil auch der Editor im Browser sie braucht.
+export { questionNumbers } from './survey-numbers'
 
 /** Mitte einer Skala - zentrierte Werte (Mittelwert minus Mitte, bei 1-7 also -3 bis +3) wie in der UEQ-Auswertung. */
 export function scaleCenter(range: { min: number; max: number }): number {

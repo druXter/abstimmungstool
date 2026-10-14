@@ -75,7 +75,9 @@ export default async function ManageSurveyPage({
   const link = `${origin}/fragebogen/${id}`
   const last = responses.reduce<Date | null>((latest, r) => (!latest || r.updatedAt > latest ? r.updatedAt : latest), null)
   const hidden = <input type="hidden" name="surveyId" value={id} />
-  const numbers = questionNumbers(questions)
+  // Fragen mit ausgeblendetem Titel zeigen hier die Nummer ihrer Gruppe (z.B. beide UEQ-S-Skalen unter "4.").
+  const { shown, group } = questionNumbers(questions, survey.numbered)
+  const numberOf = (id: string) => shown.get(id) ?? group.get(id)
 
   return (
     <SurveyFrame survey={survey} isOwner={isOwner}>
@@ -136,13 +138,13 @@ export default async function ManageSurveyPage({
           {questions.map(q => !isQuestion(q.kind) ? (
             // Überschrift/Text-Block: nur zur Orientierung, keine Auswertung.
             <div key={q.id} className="border-t border-gray-100 pt-4 dark:border-gray-700" data-testid="survey-result-info">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{q.text || 'Text'}</p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{numberOf(q.id) && `${numberOf(q.id)}. `}{q.text || 'Text'}</p>
               {!q.text && q.hint && <p className="line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{q.hint}</p>}
             </div>
           ) : (
             <section key={q.id} className="space-y-2" data-testid="survey-result">
               <h3 className="font-medium">
-                {numbers.has(q.id) && `${numbers.get(q.id)}. `}{q.text}
+                {numberOf(q.id) && `${numberOf(q.id)}. `}{q.text}
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
                   {KIND_LABELS[q.kind]}{q.required ? ' · Pflicht' : ''}{q.hideTitle ? ' · Titel ausgeblendet' : ''}{responses.length > 0 ? ` · ${q.answered} Antwort${q.answered === 1 ? '' : 'en'}` : ''}
                 </span>

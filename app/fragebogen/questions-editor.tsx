@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { SurveyQuestionKind } from '@prisma/client'
+import { attachment } from '../lib/survey-numbers'
 
 export type EditorQuestion = {
   text: string
@@ -175,12 +176,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
               )}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">{KINDS.find(k => k.kind === q.kind)!.hint}</p>
-            {!info && q.hideTitle && (
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Titel ausgeblendet: Teilnehmende sehen ihn nicht (Screenreader schon), in der Auswertung und im CSV steht er weiter. Die Frage
-                bekommt keine Nummer und schließt ohne Trennlinie an den vorigen Block an - z.B. unter einer Überschrift.
-              </p>
-            )}
+            {!info && q.hideTitle && <HiddenTitleNote questions={questions} index={i} />}
 
             {choice && (
               <>
@@ -399,5 +395,32 @@ function PairList({ question, name, left, right, onChange }: {
         Mit rechtem Begriff ein Gegensatzpaar (links = kleinster, rechts = größter Wert), ohne eine Aussage, die auf der Skala bewertet wird.
       </p>
     </div>
+  )
+}
+
+/**
+ * Was ein ausgeblendeter Titel bewirkt - und eine Warnung, wenn die Frage dadurch optisch an eine andere Frage
+ * anschließt (sähe für Teilnehmende aus wie ein Teil davon) oder ganz oben ohne Titel steht. Gleiche Regel wie die
+ * Ausfüllseite (attachment und questionNumbers in app/lib/survey-numbers.ts).
+ */
+function HiddenTitleNote({ questions, index }: { questions: EditorQuestion[]; index: number }) {
+  const q = questions[index]
+  const base = 'Titel ausgeblendet: Teilnehmende sehen ihn nicht (Screenreader schon), in Auswertung und CSV steht er weiter.'
+  if (q.hint.trim()) {
+    return <p className="text-xs text-gray-500 dark:text-gray-400">{base} Statt des Titels steht der Hinweis über der Frage.</p>
+  }
+  const { to, index: target } = attachment(questions, index)
+  if (to === 'heading') {
+    return <p className="text-xs text-gray-500 dark:text-gray-400">{base} Die Frage gehört zur Überschrift in Block {target + 1} - die Überschrift bekommt die Nummer.</p>
+  }
+  if (to === 'text') {
+    return <p className="text-xs text-gray-500 dark:text-gray-400">{base} Die Frage schließt an den Text in Block {target + 1} an und bekommt keine Nummer.</p>
+  }
+  return (
+    <p role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200" data-testid="hidden-title-warning">
+      {to === 'question'
+        ? `Wird an Frage ${target + 1} angehängt: Ohne eigenen Titel sieht diese Frage für Teilnehmende wie ein Teil davon aus. Für eine eigene Frage den Titel einblenden oder eine Überschrift davor setzen.`
+        : 'Ganz oben ohne Titel: Teilnehmende sehen nicht, worum es geht. Titel einblenden oder eine Überschrift davor setzen.'}
+    </p>
   )
 }

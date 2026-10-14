@@ -14,16 +14,17 @@ import {
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const survey = await prisma.survey.findUnique({ where: { id }, select: { id: true, ownerId: true, title: true } })
+  const survey = await prisma.survey.findUnique({ where: { id }, select: { id: true, ownerId: true, title: true, numbered: true } })
   if (!survey || !(await getSurveyLevel(await getCurrentUser(), survey))) return new Response('Not found', { status: 404 })
 
   const { questions, responses } = await loadSurveyResults(id)
   const rows: string[][] = [['Fragebogen', survey.title], ['Antworten', String(responses.length)], []]
 
   rows.push(['Nr', 'Frage', 'Art', 'Antwort / Wert', 'Anzahl', 'Anteil'])
-  const numbers = questionNumbers(questions)
+  const { shown, group } = questionNumbers(questions, survey.numbered)
+  const numberOf = (id: string) => shown.get(id) ?? group.get(id)
   for (const q of questions.filter(q => isQuestion(q.kind))) {
-    const nr = String(numbers.get(q.id) ?? '')
+    const nr = String(numberOf(q.id) ?? '')
     const share = (count: number) => (q.answered > 0 ? `${Math.round((count / q.answered) * 100)} %` : '')
     if (isGrid(q.kind)) {
       // Je Feld "Zeile: Spalte", Anteil an den Antwortenden dieser Zeile.
@@ -54,7 +55,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   }
 
   // Eine Spalte je Frage, beim Skalen-Raster eine je Zeile (Auswertung je Item, z.B. UEQ-S in der offiziellen Tabelle).
-  const columns = questions.flatMap(q => csvColumns(q).map(c => ({ ...c, header: `${numbers.has(q.id) ? `${numbers.get(q.id)}. ` : ''}${c.header}` })))
+  const columns = questions.flatMap(q => csvColumns(q).map(c => ({ ...c, header: `${numberOf(q.id) ? `${numberOf(q.id)}. ` : ''}${c.header}` })))
   rows.push([], ['Abgegeben', 'Zuletzt geändert', ...columns.map(c => c.header)])
   const at = (d: Date) => d.toLocaleString('de-DE')
   for (const r of responses) {

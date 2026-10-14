@@ -636,6 +636,8 @@ model Survey {
   description String?
   // Text nach dem Absenden, null = Standardtext.
   thanksText  String?
+  // Fragen nummerieren (questionNumbers in app/lib/survey.ts). Aus = gar keine Nummern, auch nicht in der Auswertung.
+  numbered    Boolean          @default(true)
   ownerId     String
   owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // Gesperrt, sobald jemand geantwortet hat (wie Poll.voterIdentity).

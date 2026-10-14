@@ -66,6 +66,16 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
             <input id="survey-closes-at" type="datetime-local" name="closesAt" defaultValue={survey.closesAt ? toInputValue(survey.closesAt, 'DATETIME') : ''} className={inputClass.replace('w-full', 'w-full sm:w-64')} />
             <p className={hintClass}>Danach sind keine Antworten mehr möglich. Von Hand schließen geht jederzeit oben rechts.</p>
           </div>
+          <div>
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-800 dark:text-gray-200 cursor-pointer">
+              <input type="checkbox" name="numbered" defaultChecked={survey.numbered} className="h-4 w-4" />
+              Fragen nummerieren
+            </label>
+            <p className={hintClass}>
+              Nummern zählen nur Fragen mit sichtbarem Titel. Eine Überschrift, auf die Fragen mit ausgeblendetem Titel folgen, gilt als
+              deren Titel und bekommt die Nummer. Aus: keine Nummern, auch nicht in Auswertung und CSV.
+            </p>
+          </div>
           <IdentityFields value={survey.identity} locked={answered} />
           {/* Gesperrte Radiobuttons werden nicht mitgeschickt - updateSurvey lässt die Einstellung dann unverändert. */}
         </Card>

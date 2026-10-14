@@ -186,6 +186,7 @@ export async function updateSurvey(formData: FormData) {
         title,
         description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null,
         thanksText: formString(formData, 'thanksText', MAX_THANKS_LENGTH) || null,
+        numbered: formData.get('numbered') === 'on',
         closesAt: parseClosesAt(formData),
         ...(answered ? {} : { identity: parseIdentity(formData) })
       }
