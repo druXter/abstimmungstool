@@ -19,6 +19,8 @@ export const MAX_DESCRIPTION_LENGTH = 2000
 export const MAX_THANKS_LENGTH = 1000
 export const MAX_QUESTION_LENGTH = 300
 export const MAX_HINT_LENGTH = 300
+/** Text eines Überschrift/Text-Blocks (INFO) - darf länger sein als ein Hinweis unter einer Frage. */
+export const MAX_INFO_TEXT_LENGTH = 2000
 export const MAX_OPTION_LENGTH = 150
 export const MAX_SCALE_LABEL_LENGTH = 40
 /** Freitext: einzeilig bzw. mehrzeilig. */
@@ -30,7 +32,7 @@ export const SCALE_MAX_MIN = 2
 export const SCALE_MAX_MAX = 10
 export const DEFAULT_SCALE = { min: 1, max: 5 }
 
-export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI']
+export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI', 'SCALE_GRID', 'INFO']
 export const SURVEY_IDENTITIES: readonly SurveyIdentity[] = ['ANONYMOUS', 'COOKIE']
 
 export const KIND_LABELS: Record<SurveyQuestionKind, string> = {
@@ -39,7 +41,29 @@ export const KIND_LABELS: Record<SurveyQuestionKind, string> = {
   TEXT: 'Freitext',
   SCALE: 'Lineare Skala',
   GRID_SINGLE: 'Raster, eine Antwort pro Zeile',
-  GRID_MULTI: 'Raster, mehrere Antworten pro Zeile'
+  GRID_MULTI: 'Raster, mehrere Antworten pro Zeile',
+  SCALE_GRID: 'Skalen-Raster',
+  INFO: 'Überschrift / Text'
+}
+
+/** Überschrift/Text-Blöcke sind keine Fragen: keine Antwort, keine Nummer, nicht in der Auswertung. */
+export function isQuestion(kind: SurveyQuestionKind): boolean {
+  return kind !== 'INFO'
+}
+
+/**
+ * Nummern der Fragen, wie Teilnehmende sie sehen: nur Fragen mit sichtbarem Titel zählen (Überschriften und Fragen
+ * mit ausgeblendetem Titel bekommen keine), damit keine Lücken entstehen. Die Auswertung nutzt dieselben Nummern.
+ */
+export function questionNumbers(questions: { id: string; kind: SurveyQuestionKind; hideTitle: boolean }[]): Map<string, number> {
+  const numbers = new Map<string, number>()
+  for (const q of questions) if (isQuestion(q.kind) && !q.hideTitle) numbers.set(q.id, numbers.size + 1)
+  return numbers
+}
+
+/** Mitte einer Skala - zentrierte Werte (Mittelwert minus Mitte, bei 1-7 also -3 bis +3) wie in der UEQ-Auswertung. */
+export function scaleCenter(range: { min: number; max: number }): number {
+  return (range.min + range.max) / 2
 }
 
 export function isGrid(kind: SurveyQuestionKind): kind is 'GRID_SINGLE' | 'GRID_MULTI' {
@@ -127,7 +151,22 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
   for (const q of questions) {
     const name = answerField(q.id)
     const given: AnswerRow[] = []
-    if (isGrid(q.kind)) {
+    if (q.kind === 'INFO') continue
+    // Eine Skalenangabe aus dem Formular: leer = keine Antwort, sonst eine ganze Zahl im Bereich.
+    const scaleValue = (raw: string): number | null | 'invalid' => {
+      if (raw === '') return null
+      const value = Number.parseInt(raw, 10)
+      const { min, max } = scaleRange(q)
+      return /^\d+$/.test(raw) && value >= min && value <= max ? value : 'invalid'
+    }
+    if (q.kind === 'SCALE_GRID') {
+      for (const row of splitOptions(q.options).rows) {
+        const value = scaleValue(formString(formData, answerField(q.id, row.id), 5))
+        if (value === 'invalid') return { ok: false, error: 'auswahl' }
+        if (value === null && q.required) return { ok: false, error: 'pflicht' }
+        if (value !== null) given.push({ questionId: q.id, optionId: null, rowId: row.id, text: null, number: value })
+      }
+    } else if (isGrid(q.kind)) {
       const { columns, rows: gridRows } = splitOptions(q.options)
       const ids = new Set(columns.map(o => o.id))
       for (const row of gridRows) {
@@ -146,13 +185,9 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
       const text = formString(formData, name, q.multiline ? MAX_LONG_TEXT : MAX_SHORT_TEXT)
       if (text) given.push({ questionId: q.id, optionId: null, text, number: null })
     } else {
-      const raw = formString(formData, name, 5)
-      const value = Number.parseInt(raw, 10)
-      const { min, max } = scaleRange(q)
-      if (raw !== '') {
-        if (!/^\d+$/.test(raw) || value < min || value > max) return { ok: false, error: 'auswahl' }
-        given.push({ questionId: q.id, optionId: null, text: null, number: value })
-      }
+      const value = scaleValue(formString(formData, name, 5))
+      if (value === 'invalid') return { ok: false, error: 'auswahl' }
+      if (value !== null) given.push({ questionId: q.id, optionId: null, text: null, number: value })
     }
     if (q.required && given.length === 0) return { ok: false, error: 'pflicht' }
     rows.push(...given)
@@ -210,13 +245,20 @@ export async function loadSurveyResults(surveyId: string) {
       }
     }
     const { min, max } = scaleRange(q)
+    const numbers = (list: typeof answers) => list.flatMap(a => (a.number !== null ? [a.number] : []))
+    // Skalen-Raster: Statistik je Zeile, scale über alle Zeilen (z.B. der Skalenwert "pragmatische Qualität" im UEQ-S).
+    const rowScale = new Map<string, ScaleStats | null>()
+    if (q.kind === 'SCALE_GRID') {
+      for (const row of q.options.filter(o => o.isRow)) rowScale.set(row.id, scaleStats(numbers(answers.filter(a => a.rowId === row.id)), min, max))
+    }
     return {
       ...q,
       ...splitOptions(q.options),
       answered,
       counts,
       rowAnswered,
-      scale: q.kind === 'SCALE' ? scaleStats(answers.flatMap(a => (a.number !== null ? [a.number] : [])), min, max) : null,
+      rowScale,
+      scale: q.kind === 'SCALE' || q.kind === 'SCALE_GRID' ? scaleStats(numbers(answers), min, max) : null,
       // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
       texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ text: a.text, at: a.at }] : [])).reverse() : []
     }
@@ -229,6 +271,26 @@ export type SurveyResults = Awaited<ReturnType<typeof loadSurveyResults>>
 /** Schlüssel eines Rasterfelds in SurveyResults counts. */
 export function gridKey(rowId: string, columnId: string): string {
   return `${rowId}:${columnId}`
+}
+
+/** Bezeichnung einer Zeile eines Skalen-Rasters: "links ↔ rechts" bei einem Gegensatzpaar, sonst die Aussage. */
+export function scaleRowLabel(row: { label: string; labelRight: string | null }): string {
+  return row.labelRight ? `${row.label} ↔ ${row.labelRight}` : row.label
+}
+
+/** Spalten einer Frage im CSV: eine je Frage, beim Skalen-Raster eine je Zeile (für die Auswertung je Item). */
+export function csvColumns(q: SurveyResults['questions'][number]): { header: string; value: (answers: AnswerRow[]) => string }[] {
+  if (q.kind === 'INFO') return []
+  if (q.kind === 'SCALE_GRID') {
+    return q.rows.map(row => ({
+      header: `${q.text}: ${scaleRowLabel(row)}`,
+      value: answers => {
+        const value = answers.find(a => a.questionId === q.id && a.rowId === row.id)?.number
+        return value === undefined || value === null ? '' : String(value)
+      }
+    }))
+  }
+  return [{ header: q.text, value: answers => describeAnswer(q, answers) }]
 }
 
 /** Antwort einer Abgabe auf eine Frage als Text (CSV, eine Zelle je Frage). */

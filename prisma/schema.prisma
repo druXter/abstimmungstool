@@ -617,7 +617,8 @@ enum SurveyIdentity {
 }
 
 // GRID_SINGLE/GRID_MULTI: Raster - Zeilen (Aussagen) mal Spalten (Antwortmöglichkeiten), je Zeile eine bzw.
-// beliebig viele Spalten.
+// beliebig viele Spalten. SCALE_GRID: Skalen-Raster - mehrere Zeilen (Aussagen oder Gegensatzpaare wie im UEQ-S)
+// mit derselben linearen Skala, je Zeile ein Wert. INFO: keine Frage, sondern Überschrift (text) und/oder Text (hint).
 enum SurveyQuestionKind {
   SINGLE
   MULTI
@@ -625,6 +626,8 @@ enum SurveyQuestionKind {
   SCALE
   GRID_SINGLE
   GRID_MULTI
+  SCALE_GRID
+  INFO
 }
 
 model Survey {
@@ -671,11 +674,14 @@ model SurveyQuestion {
   hint       String?
   kind       SurveyQuestionKind
   required   Boolean            @default(false)
+  // Titel nur für Screenreader und Auswertung, nicht sichtbar - die Frage schließt dann ohne Nummer und Trennlinie
+  // an die vorige an (z.B. zwei Skalen-Raster, die wie eines aussehen sollen).
+  hideTitle  Boolean            @default(false)
   // Nur MULTI: höchstens so viele Optionen, null = beliebig viele. Pflicht heißt beim Raster: jede Zeile beantworten.
   maxChoices Int?
   // Nur TEXT: mehrzeiliges Feld (längere Antworten).
   multiline  Boolean            @default(false)
-  // Nur SCALE: Werte von scaleMin (0 oder 1) bis scaleMax (2-10), Beschriftung der Enden optional.
+  // Nur SCALE und SCALE_GRID: Werte von scaleMin (0 oder 1) bis scaleMax (2-10), Beschriftung der Enden optional.
   scaleMin   Int?
   scaleMax   Int?
   minLabel   String?
@@ -694,6 +700,8 @@ model SurveyOption {
   position   Int
   label      String
   isRow      Boolean        @default(false)
+  // Nur Zeilen eines SCALE_GRID: rechter Begriff eines Gegensatzpaars (label ist dann der linke), null = Aussage.
+  labelRight String?
   answers    SurveyAnswer[] @relation("SurveyAnswerOption")
   rowAnswers SurveyAnswer[] @relation("SurveyAnswerRow")
 }
@@ -713,7 +721,7 @@ model SurveyResponse {
 }
 
 // Antwort auf eine Frage: SINGLE/MULTI eine Zeile je gewählter Option, TEXT mit text, SCALE mit number, Raster eine
-// Zeile je gewähltem Feld (rowId = Zeile, optionId = Spalte).
+// Zeile je gewähltem Feld (rowId = Zeile, optionId = Spalte), Skalen-Raster eine Zeile je Rasterzeile (rowId, number).
 model SurveyAnswer {
   id         String         @id @default(cuid())
   responseId String

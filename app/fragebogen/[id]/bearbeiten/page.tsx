@@ -79,7 +79,7 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
             </Notice>
             <ol className="list-decimal space-y-1 pl-5 text-sm">
               {survey.questions.map(q => (
-                <li key={q.id}>{q.text} <span className="text-xs text-gray-500 dark:text-gray-400">({KIND_LABELS[q.kind]}{q.required ? ', Pflicht' : ''})</span></li>
+                <li key={q.id}>{q.text || q.hint?.slice(0, 80)} <span className="text-xs text-gray-500 dark:text-gray-400">({KIND_LABELS[q.kind]}{q.required ? ', Pflicht' : ''}{q.hideTitle ? ', Titel ausgeblendet' : ''})</span></li>
               ))}
             </ol>
           </Card>
@@ -90,8 +90,10 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
               hint: q.hint ?? '',
               kind: q.kind,
               required: q.required,
+              hideTitle: q.hideTitle,
               options: q.options.filter(o => !o.isRow).length >= 2 ? q.options.filter(o => !o.isRow).map(o => o.label) : ['', ''],
               rows: q.options.some(o => o.isRow) ? q.options.filter(o => o.isRow).map(o => o.label) : ['', ''],
+              rowsRight: q.options.some(o => o.isRow) ? q.options.filter(o => o.isRow).map(o => o.labelRight ?? '') : ['', ''],
               maxChoices: q.maxChoices ?? 0,
               multiline: q.multiline,
               scaleMin: q.scaleMin ?? DEFAULT_SCALE.min,

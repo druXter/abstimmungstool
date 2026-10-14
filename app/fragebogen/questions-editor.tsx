@@ -8,10 +8,14 @@ export type EditorQuestion = {
   hint: string
   kind: SurveyQuestionKind
   required: boolean
+  /** Titel nur für Screenreader und Auswertung - die Frage schließt ohne Nummer und Trennlinie an die vorige an. */
+  hideTitle: boolean
   /** Auswahl: Antwortmöglichkeiten, Raster: Spalten. */
   options: string[]
-  /** Nur Raster: Zeilen (Aussagen). */
+  /** Nur Raster und Skalen-Raster: Zeilen (Aussagen bzw. linker Begriff eines Gegensatzpaars). */
   rows: string[]
+  /** Nur Skalen-Raster: rechter Begriff je Zeile, leer = Aussage statt Gegensatzpaar. */
+  rowsRight: string[]
   /** Mehrfachauswahl: höchstens so viele, 0 = beliebig viele. */
   maxChoices: number
   multiline: boolean
@@ -34,13 +38,37 @@ const KINDS: { kind: SurveyQuestionKind; label: string; hint: string }[] = [
   { kind: 'TEXT', label: 'Freitext', hint: 'Antwort frei eintippen - einzeilig (bis 300 Zeichen) oder mehrzeilig (bis 2000).' },
   { kind: 'SCALE', label: 'Lineare Skala', hint: 'Einen Wert auf einer Skala wählen, z.B. 1 bis 5 von "gar nicht" bis "sehr".' },
   { kind: 'GRID_SINGLE', label: 'Raster (eine pro Zeile)', hint: 'Mehrere Aussagen (Zeilen) mit denselben Antwortmöglichkeiten (Spalten), je Zeile genau eine - z.B. jedes Angebot mit "gut / okay / schlecht" bewerten. Als Pflichtfrage muss jede Zeile beantwortet werden.' },
-  { kind: 'GRID_MULTI', label: 'Raster (mehrere pro Zeile)', hint: 'Wie das Raster, aber je Zeile beliebig viele Spalten - z.B. "An welchen Tagen hast du welches Angebot genutzt?". Als Pflichtfrage braucht jede Zeile mindestens ein Kreuz.' }
+  { kind: 'GRID_MULTI', label: 'Raster (mehrere pro Zeile)', hint: 'Wie das Raster, aber je Zeile beliebig viele Spalten - z.B. "An welchen Tagen hast du welches Angebot genutzt?". Als Pflichtfrage braucht jede Zeile mindestens ein Kreuz.' },
+  { kind: 'SCALE_GRID', label: 'Skalen-Raster', hint: 'Mehrere Zeilen mit derselben Skala: Gegensatzpaare (z.B. "kompliziert" ↔ "einfach", wie im UEQ-S) oder Aussagen ohne rechten Begriff (z.B. "Die App war hilfreich" mit 1 = stimme nicht zu bis 5 = stimme zu). Auswertung je Zeile und gesamt mit Mittelwert. Als Pflichtfrage muss jede Zeile beantwortet werden.' },
+  { kind: 'INFO', label: 'Überschrift / Text', hint: 'Keine Frage: eine Überschrift (wie ein Fragentitel) und/oder ein erklärender Text zwischen den Fragen, z.B. eine Anleitung für den nächsten Teil.' }
 ]
+
+/** Die acht Gegensatzpaare des UEQ-S (Schrepp, Hinderks & Thomaschewski 2017) in der Originalreihenfolge. */
+const UEQ_S_PRAGMATIC: [string, string][] = [['behindernd', 'unterstützend'], ['kompliziert', 'einfach'], ['ineffizient', 'effizient'], ['verwirrend', 'übersichtlich']]
+const UEQ_S_HEDONIC: [string, string][] = [['langweilig', 'spannend'], ['uninteressant', 'interessant'], ['konventionell', 'originell'], ['herkömmlich', 'neuartig']]
+
+/**
+ * UEQ-S als drei Blöcke: Anleitung, dann die pragmatische und die hedonische Qualität als je ein Skalen-Raster (1-7)
+ * mit ausgeblendetem Titel - für Teilnehmende ein zusammenhängender Block, in der Auswertung steht der Mittelwert
+ * jeder Skala direkt (zentriert -3 bis +3, wie in der offiziellen Auswertung).
+ */
+function ueqS(): EditorQuestion[] {
+  const pairs = (list: [string, string][]) => ({ rows: list.map(p => p[0]), rowsRight: list.map(p => p[1]) })
+  const scale = { ...emptyQuestion(), kind: 'SCALE_GRID' as const, hideTitle: true, scaleMin: 1, scaleMax: 7 }
+  return [
+    {
+      ...emptyQuestion(), kind: 'INFO', text: 'Wie ist dein Eindruck?',
+      hint: 'Bitte bewerte anhand der folgenden Gegensatzpaare. Je näher du einen Begriff ankreuzt, desto mehr trifft er zu - die Mitte ist neutral. Es gibt keine richtigen oder falschen Antworten, dein spontaner Eindruck zählt.'
+    },
+    { ...scale, text: 'UEQ-S: Pragmatische Qualität', ...pairs(UEQ_S_PRAGMATIC) },
+    { ...scale, text: 'UEQ-S: Hedonische Qualität', ...pairs(UEQ_S_HEDONIC) }
+  ]
+}
 
 const isGridKind = (kind: SurveyQuestionKind) => kind === 'GRID_SINGLE' || kind === 'GRID_MULTI'
 
 function emptyQuestion(): EditorQuestion {
-  return { text: '', hint: '', kind: 'SINGLE', required: false, options: ['', ''], rows: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '' }
+  return { text: '', hint: '', kind: 'SINGLE', required: false, hideTitle: false, options: ['', ''], rows: ['', ''], rowsRight: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '' }
 }
 
 const field = 'rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900'
@@ -60,6 +88,15 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
   const update = (index: number, change: (q: EditorQuestion) => Partial<EditorQuestion>) =>
     setQuestions(qs => qs.map((q, i) => (i === index ? { ...q, ...change(q) } : q)))
 
+  /** Hängt Blöcke an; ist der Fragebogen noch leer (nur eine unberührte erste Frage), ersetzen sie diese. */
+  const add = (blocks: EditorQuestion[]) => {
+    setQuestions(qs => {
+      const untouched = qs.length === 1 && !qs[0].text && !qs[0].hint && qs[0].kind === 'SINGLE' && qs[0].options.every(o => !o)
+      return [...(untouched ? [] : qs), ...blocks.map((b, k) => ({ ...b, key: nextKey + k }))]
+    })
+    setNextKey(k => k + blocks.length)
+  }
+
   const move = (index: number, delta: number) =>
     setQuestions(qs => {
       const target = index + delta
@@ -73,10 +110,11 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
     <div className="space-y-4">
       {questions.map((q, i) => {
         const choice = q.kind === 'SINGLE' || q.kind === 'MULTI'
+        const info = q.kind === 'INFO'
         const filled = q.options.filter(o => o.trim()).length
         return (
           <fieldset key={q.key} className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800 space-y-3" data-testid="survey-question">
-            <legend className="text-sm font-medium px-1">Frage {i + 1}</legend>
+            <legend className="text-sm font-medium px-1">{info ? `Überschrift / Text (Block ${i + 1})` : `Frage ${i + 1}`}</legend>
             <div className="flex flex-wrap gap-2 justify-end text-xs">
               <button type="button" onClick={() => move(i, -1)} disabled={i === 0} className="text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40">nach oben</button>
               <button type="button" onClick={() => move(i, 1)} disabled={i === questions.length - 1} className="text-blue-700 dark:text-blue-300 hover:underline disabled:opacity-40">nach unten</button>
@@ -85,23 +123,32 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                 onClick={() => setQuestions(qs => qs.filter((_, other) => other !== i))}
                 className="text-red-700 dark:text-red-300 hover:underline disabled:opacity-40"
               >
-                Frage entfernen
+                {info ? 'Block entfernen' : 'Frage entfernen'}
               </button>
             </div>
             <div className="space-y-2">
-              <label htmlFor={`s${i}_text`} className="sr-only">Frage {i + 1}</label>
+              <label htmlFor={`s${i}_text`} className="sr-only">{info ? `Überschrift ${i + 1}` : `Frage ${i + 1}`}</label>
               <input
-                id={`s${i}_text`} name={`s${i}_text`} required maxLength={300} value={q.text}
+                id={`s${i}_text`} name={`s${i}_text`} required={!info} maxLength={300} value={q.text}
                 onChange={e => update(i, () => ({ text: e.target.value }))}
-                placeholder="z.B. Wie hat dir die Erstiwoche gefallen?"
-                className={`w-full ${field}`}
+                placeholder={info ? 'Überschrift (optional), z.B. Teil 2: Deine Meinung zur App' : 'z.B. Wie hat dir die Erstiwoche gefallen?'}
+                className={`w-full ${field} ${info ? 'font-medium' : ''}`}
               />
-              <input
-                name={`s${i}_hint`} maxLength={300} value={q.hint} aria-label={`Frage ${i + 1}, Hinweis`}
-                onChange={e => update(i, () => ({ hint: e.target.value }))}
-                placeholder="Hinweis unter der Frage (optional)"
-                className={`w-full ${field} text-xs`}
-              />
+              {info ? (
+                <textarea
+                  name={`s${i}_hint`} maxLength={2000} rows={3} value={q.hint} aria-label={`Block ${i + 1}, Text`}
+                  onChange={e => update(i, () => ({ hint: e.target.value }))}
+                  placeholder="Text (optional), z.B. eine Anleitung für die folgenden Fragen"
+                  className={`w-full ${field}`}
+                />
+              ) : (
+                <input
+                  name={`s${i}_hint`} maxLength={300} value={q.hint} aria-label={`Frage ${i + 1}, Hinweis`}
+                  onChange={e => update(i, () => ({ hint: e.target.value }))}
+                  placeholder="Hinweis unter der Frage (optional)"
+                  className={`w-full ${field} text-xs`}
+                />
+              )}
             </div>
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
               <span className="flex items-center gap-2">
@@ -114,12 +161,26 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   {KINDS.map(k => <option key={k.kind} value={k.kind}>{k.label}</option>)}
                 </select>
               </span>
-              <label className="flex items-center gap-1.5 cursor-pointer">
-                <input type="checkbox" name={`s${i}_required`} checked={q.required} onChange={e => update(i, () => ({ required: e.target.checked }))} className="w-4 h-4" />
-                Pflichtfrage
-              </label>
+              {!info && (
+                <>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" name={`s${i}_required`} checked={q.required} onChange={e => update(i, () => ({ required: e.target.checked }))} className="w-4 h-4" />
+                    Pflichtfrage
+                  </label>
+                  <label className="flex items-center gap-1.5 cursor-pointer">
+                    <input type="checkbox" name={`s${i}_hideTitle`} checked={q.hideTitle} onChange={e => update(i, () => ({ hideTitle: e.target.checked }))} className="w-4 h-4" />
+                    Titel ausblenden
+                  </label>
+                </>
+              )}
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">{KINDS.find(k => k.kind === q.kind)!.hint}</p>
+            {!info && q.hideTitle && (
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Titel ausgeblendet: Teilnehmende sehen ihn nicht (Screenreader schon), in der Auswertung und im CSV steht er weiter. Die Frage
+                bekommt keine Nummer und schließt ohne Trennlinie an den vorigen Block an - z.B. unter einer Überschrift.
+              </p>
+            )}
 
             {choice && (
               <>
@@ -190,7 +251,14 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
               </label>
             )}
 
-            {q.kind === 'SCALE' && (
+            {q.kind === 'SCALE_GRID' && (
+              <PairList
+                question={i + 1} name={`s${i}`} left={q.rows} right={q.rowsRight}
+                onChange={(rows, rowsRight) => update(i, () => ({ rows, rowsRight }))}
+              />
+            )}
+
+            {(q.kind === 'SCALE' || q.kind === 'SCALE_GRID') && (
               <div className="grid gap-2 sm:grid-cols-2 text-sm">
                 <div className="flex items-center gap-2">
                   <label htmlFor={`s${i}_from`}>Von</label>
@@ -219,18 +287,19 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
         )
       })}
 
-      {questions.length < MAX_QUESTIONS && (
-        <button
-          type="button"
-          onClick={() => {
-            setQuestions(qs => [...qs, { ...emptyQuestion(), key: nextKey }])
-            setNextKey(k => k + 1)
-          }}
-          className={linkButton}
-        >
-          + Weitere Frage
-        </button>
-      )}
+      <div className="flex flex-wrap gap-x-5 gap-y-2">
+        {questions.length < MAX_QUESTIONS && (
+          <button type="button" onClick={() => add([emptyQuestion()])} className={linkButton}>+ Weitere Frage</button>
+        )}
+        {questions.length < MAX_QUESTIONS && (
+          <button type="button" onClick={() => add([{ ...emptyQuestion(), kind: 'INFO' }])} className={linkButton}>+ Überschrift / Text</button>
+        )}
+        {questions.length + 3 <= MAX_QUESTIONS && (
+          <button type="button" onClick={() => add(ueqS())} className={linkButton} title="User Experience Questionnaire, Kurzversion: 8 Gegensatzpaare, Skala 1-7">
+            + UEQ-S einfügen
+          </button>
+        )}
+      </div>
     </div>
   )
 }
@@ -274,6 +343,61 @@ function LabelList({ title, name, items, min, max, question, itemLabel, placehol
       {items.length < max && (
         <button type="button" onClick={() => onChange([...items, ''])} className={linkButton}>+ {itemLabel} hinzufügen</button>
       )}
+    </div>
+  )
+}
+
+/**
+ * Zeilen eines Skalen-Rasters: je Zeile ein linker Begriff (bzw. die Aussage) und optional ein rechter Begriff
+ * (Gegensatzpaar). Felder <name>_r<j> und <name>_rr<j>.
+ */
+function PairList({ question, name, left, right, onChange }: {
+  question: number
+  name: string
+  left: string[]
+  right: string[]
+  onChange: (left: string[], right: string[]) => void
+}) {
+  const set = (j: number, side: 'left' | 'right', value: string) =>
+    onChange(
+      left.map((x, k) => (side === 'left' && k === j ? value : x)),
+      left.map((_, k) => (side === 'right' && k === j ? value : right[k] ?? ''))
+    )
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">Zeilen</p>
+      <ul className="space-y-2">
+        {left.map((label, j) => (
+          <li key={j} className="flex items-center gap-2">
+            <input
+              name={`${name}_r${j}`} maxLength={150} value={label} required={j === 0} aria-label={`Frage ${question}, Zeile ${j + 1}, links`}
+              onChange={e => set(j, 'left', e.target.value)} placeholder={j === 0 ? 'z.B. kompliziert' : 'links bzw. Aussage'}
+              className={`min-w-0 flex-1 ${field}`}
+            />
+            <span aria-hidden className="text-gray-400">↔</span>
+            <input
+              name={`${name}_rr${j}`} maxLength={150} value={right[j] ?? ''} aria-label={`Frage ${question}, Zeile ${j + 1}, rechts`}
+              onChange={e => set(j, 'right', e.target.value)} placeholder={j === 0 ? 'z.B. einfach' : 'rechts (optional)'}
+              className={`min-w-0 flex-1 ${field}`}
+            />
+            {left.length > 1 && (
+              <button
+                type="button" aria-label={`Zeile ${j + 1} entfernen`}
+                onClick={() => onChange(left.filter((_, k) => k !== j), left.map((_, k) => right[k] ?? '').filter((_, k) => k !== j))}
+                className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+              >
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {left.length < MAX_GRID_ROWS && (
+        <button type="button" onClick={() => onChange([...left, ''], [...left.map((_, k) => right[k] ?? ''), ''])} className={linkButton}>+ Zeile hinzufügen</button>
+      )}
+      <p className="text-xs text-gray-500 dark:text-gray-400">
+        Mit rechtem Begriff ein Gegensatzpaar (links = kleinster, rechts = größter Wert), ohne eine Aussage, die auf der Skala bewertet wird.
+      </p>
     </div>
   )
 }

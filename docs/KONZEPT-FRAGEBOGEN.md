@@ -28,6 +28,15 @@ und **Raster** (wie in Nextcloud Forms, ergänzt 2026-10-14): Zeilen (Aussagen) 
 Zeile eine oder mehrere Spalten. Zeilen und Spalten sind beide `SurveyOption` (`isRow`), eine Antwort trägt Zeile
 (`rowId`) und Spalte (`optionId`). Pflicht heißt beim Raster: jede Zeile beantworten.
 
+**Ergänzt 2026-10-14 für den UEQ-S:** *Skalen-Raster* (`SCALE_GRID`) - mehrere Zeilen mit derselben linearen Skala,
+als Gegensatzpaar (linker/rechter Begriff, `SurveyOption.labelRight`) oder als Aussage; je Zeile ein Wert (`rowId`,
+`number`). Ersetzt acht einzelne Skalen-Fragen durch einen Block, der wie der Papierbogen aussieht, und liefert in der
+Auswertung Mittelwerte je Item und Skala, zentriert auf die Skalenmitte (bei 1-7: -3…+3 wie in der UEQ-Auswertung), im
+CSV eine Spalte je Item. *Überschrift/Text* (`INFO`) gliedert den Fragebogen ohne Frage zu sein. *Titel ausblenden*
+(`hideTitle`) lässt eine Frage an den Block davor anschließen - so ergeben die beiden UEQ-S-Skalen (pragmatisch,
+hedonisch) unter einer gemeinsamen Anleitung einen Block, werden aber getrennt ausgewertet. Nummern zählen nur sichtbare
+Titel, damit keine Lücken entstehen.
+
 **Raster am Handy:** Eine Tabelle mit fünf Spalten ist auf 360 px nicht bedienbar (winzige Ziele, waagrechtes
 Scrollen, Spaltenköpfe außer Sicht). Deshalb wird unter `sm` jede Zeile ein Block – Aussage als Überschrift, Spalten als
 umbrechende Knöpfe mit ihrem Namen (rund bei einer Antwort, eckig mit ✓ bei mehreren). Ab `sm` eine Tabelle mit

@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
-import { answerField, isGrid, isSurveyOpen, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { answerField, isGrid, isSurveyOpen, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
 import { submitSurvey } from '../../survey-actions'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
@@ -25,7 +25,7 @@ export type SurveySearch = { hinweis?: string; danke?: string }
 export async function loadSurveyForView(id: string) {
   return prisma.survey.findUnique({
     where: { id },
-    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true, isRow: true } } } } }
+    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true, isRow: true, labelRight: true } } } } }
   })
 }
 
@@ -82,29 +82,47 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
     )
   }
 
+  const numbers = questionNumbers(survey.questions)
   const form = (
     <form action={submitSurvey} className="space-y-4">
       <input type="hidden" name="surveyId" value={survey.id} />
       {embed && <input type="hidden" name="embed" value="1" />}
-      {survey.questions.map((q, i) => {
+      {survey.questions.map(q => {
         const name = answerField(q.id)
         const mineHere = given(q.id)
         const { columns, rows } = splitOptions(q.options)
+        const number = numbers.get(q.id)
+        // Ohne sichtbaren Titel (und ohne Hinweis) gehört die Frage optisch zum Block davor: keine Trennlinie, wenig Abstand.
+        const attached = q.hideTitle && !q.hint
+        // Trennlinie am umgebenden div: Ein Rahmen am fieldset würde neben der Frage (legend) verlaufen.
+        const block = `${attached ? '-mt-2' : 'border-t border-gray-100 pt-4 first-of-type:border-0 first-of-type:pt-0 dark:border-gray-700'}`
+
+        if (q.kind === 'INFO') {
+          return (
+            <div key={q.id} className={block} data-testid="survey-info">
+              {q.text && <h2 className="font-medium">{q.text}</h2>}
+              {q.hint && <p className={`whitespace-pre-line text-sm text-gray-600 dark:text-gray-400 ${q.text ? 'mt-1' : ''}`}>{q.hint}</p>}
+            </div>
+          )
+        }
+
         const legend = (
-          <legend className="font-medium">
-            {i + 1}. {q.text}
+          <legend className={q.hideTitle ? 'sr-only' : 'font-medium'}>
+            {number && `${number}. `}{q.text}
             {q.required && <span className="ml-1 text-red-700 dark:text-red-300" title="Pflichtfrage">*</span>}
           </legend>
         )
         const hint = q.hint || (q.kind === 'MULTI'
           ? (q.maxChoices ? `Höchstens ${q.maxChoices} ankreuzen.` : 'Mehrere Antworten möglich.')
           : q.kind === 'GRID_MULTI' ? 'Pro Zeile mehrere Antworten möglich.' : null)
+        // Ausgeblendeter Titel einer Pflichtfrage: Raster markieren jede Zeile, alle anderen bekommen einen kurzen Hinweis.
+        const rowsMarked = q.hideTitle && q.required && (isGrid(q.kind) || q.kind === 'SCALE_GRID')
         return (
-          // Trennlinie am umgebenden div: Ein Rahmen am fieldset würde neben der Frage (legend) verlaufen.
-          <div key={q.id} className="border-t border-gray-100 pt-4 first-of-type:border-0 first-of-type:pt-0 dark:border-gray-700">
+          <div key={q.id} className={block}>
           <fieldset className="space-y-2" data-testid="survey-field">
             {legend}
-            {hint && <p className="-mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>}
+            {hint && <p className={`${q.hideTitle ? '' : '-mt-1'} text-xs text-gray-500 dark:text-gray-400`}>{hint}</p>}
+            {q.hideTitle && q.required && !rowsMarked && <p className="text-xs text-gray-500 dark:text-gray-400">Pflichtfrage <span className="text-red-700 dark:text-red-300">*</span></p>}
 
             {q.kind === 'SINGLE' && (
               <div className="space-y-1.5">
@@ -128,12 +146,19 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
 
             {isGrid(q.kind) && (
               <GridInput
-                questionId={q.id} rows={rows} columns={columns} multiple={q.kind === 'GRID_MULTI'} required={q.required}
+                questionId={q.id} rows={rows} columns={columns} multiple={q.kind === 'GRID_MULTI'} required={q.required} markRows={rowsMarked}
                 initial={mineHere.flatMap(a => (a.rowId && a.optionId ? [`${a.rowId}:${a.optionId}`] : []))}
               />
             )}
 
             {q.kind === 'SCALE' && <ScaleInput name={name} question={q} required={q.required} value={mineHere[0]?.number ?? null} />}
+
+            {q.kind === 'SCALE_GRID' && (
+              <ScaleGridInput
+                questionId={q.id} question={q} rows={rows} required={q.required} markRows={rowsMarked}
+                values={new Map(mineHere.flatMap(a => (a.rowId && a.number !== null ? [[a.rowId, a.number] as const] : [])))}
+              />
+            )}
           </fieldset>
           </div>
         )
@@ -159,6 +184,84 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
   )
 }
 
+/** Ein Wert einer Skala als Knopf (Radiobutton darunter, nur für Screenreader sichtbar und mit Tastatur bedienbar). */
+function ScaleButton({ name, value, required, checked, label }: { name: string; value: number; required: boolean; checked: boolean; label: string }) {
+  return (
+    <label className="cursor-pointer">
+      <input type="radio" name={name} value={value} required={required} defaultChecked={checked} aria-label={label} className="peer sr-only" />
+      <span className="flex h-10 items-center justify-center rounded-lg border border-gray-300 text-sm font-medium tabular-nums transition hover:bg-gray-50 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:hover:bg-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-300 dark:border-gray-600 dark:hover:bg-gray-700 dark:peer-checked:bg-blue-600">
+        {value}
+      </span>
+    </label>
+  )
+}
+
+/**
+ * Skalen-Raster: je Zeile eine Reihe Skalenknöpfe (Feld q_<Frage>_<Zeile>). Gegensatzpaare (labelRight) am Handy mit
+ * beiden Begriffen über den Knöpfen, ab sm als "links | Knöpfe | rechts" - wie der Papierbogen des UEQ-S. Aussagen am
+ * Handy mit der Aussage darüber und den Skalenenden darunter, ab sm als "Aussage | Knöpfe". Alle Reihen gleich breit,
+ * damit die Knöpfe untereinander stehen. Pflicht über die eingebaute Formularprüfung (je Zeile eine Gruppe).
+ */
+function ScaleGridInput({ questionId, question, rows, required, markRows, values }: {
+  questionId: string
+  question: { scaleMin: number | null; scaleMax: number | null; minLabel: string | null; maxLabel: string | null }
+  rows: { id: string; label: string; labelRight: string | null }[]
+  required: boolean
+  markRows: boolean
+  values: Map<string, number>
+}) {
+  const { min, max } = scaleRange(question)
+  const scale = Array.from({ length: max - min + 1 }, (_, i) => min + i)
+  const pairs = rows.some(r => r.labelRight)
+  const ends = question.minLabel || question.maxLabel
+  const mark = markRows && <span className="ml-1 text-red-700 dark:text-red-300" title="Pflicht">*</span>
+  const buttons = (row: { id: string; label: string; labelRight: string | null }) => (
+    <div
+      className="grid gap-1 grid-cols-[repeat(var(--scale-n),minmax(0,1fr))] sm:grid-cols-[repeat(var(--scale-n),2.75rem)]"
+      style={{ '--scale-n': scale.length } as React.CSSProperties}
+    >
+      {scale.map(v => (
+        <ScaleButton
+          key={v} name={answerField(questionId, row.id)} value={v} required={required} checked={values.get(row.id) === v}
+          label={`${v}${v === min && (row.labelRight ? row.label : question.minLabel) ? ` (${row.labelRight ? row.label : question.minLabel})` : ''}${v === max && (row.labelRight || question.maxLabel) ? ` (${row.labelRight || question.maxLabel})` : ''}`}
+        />
+      ))}
+    </div>
+  )
+  return (
+    <div className="space-y-3 sm:space-y-1.5">
+      {ends && (
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          {question.minLabel && `${min} = ${question.minLabel}`}{question.minLabel && question.maxLabel && ' … '}{question.maxLabel && `${max} = ${question.maxLabel}`}
+        </p>
+      )}
+      {rows.map(row => (
+        <div
+          key={row.id} role="radiogroup" aria-label={scaleRowLabel(row)} data-testid="scale-row"
+          className={`rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:grid sm:items-center sm:gap-3 sm:rounded-none sm:border-0 sm:p-0 sm:py-1 ${pairs ? 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'sm:grid-cols-[minmax(0,1fr)_auto] sm:border-b sm:border-gray-100 sm:pb-1.5 sm:last:border-b-0 sm:dark:border-gray-700/60'}`}
+        >
+          {row.labelRight ? (
+            <div className="mb-2 flex items-end justify-between gap-3 text-sm font-medium sm:contents">
+              <span className="sm:text-right sm:font-normal">{row.label}</span>
+              <span className="text-right sm:order-last sm:text-left sm:font-normal">{row.labelRight}{mark}</span>
+            </div>
+          ) : (
+            <span className={`mb-2 block text-sm font-medium sm:mb-0 sm:font-normal ${pairs ? 'sm:text-right' : ''}`}>{row.label}{mark}</span>
+          )}
+          {buttons(row)}
+          {!row.labelRight && pairs && <span className="hidden sm:block" />}
+          {!pairs && ends && (
+            <div className="mt-1 flex justify-between gap-4 text-xs text-gray-500 dark:text-gray-400 sm:hidden">
+              <span>{question.minLabel}</span>
+              <span className="text-right">{question.maxLabel}</span>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 /** Lineare Skala als Reihe von Knöpfen (Radiobuttons darunter, mit Tastatur bedienbar), Beschriftung der Enden darunter. */
 function ScaleInput({ name, question, required, value }: {
   name: string
@@ -174,7 +277,7 @@ function ScaleInput({ name, question, required, value }: {
         {values.map(v => (
           <label key={v} className="cursor-pointer">
             <input type="radio" name={name} value={v} required={required} defaultChecked={value === v} aria-label={`${v}${v === min && question.minLabel ? ` (${question.minLabel})` : ''}${v === max && question.maxLabel ? ` (${question.maxLabel})` : ''}`} className="peer sr-only" />
-            <span className="flex h-10 items-center justify-center rounded-lg border border-gray-300 text-sm font-medium tabular-nums transition hover:bg-gray-50 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-focus-visible:ring-2 peer-focus-visible:ring-blue-300 dark:border-gray-600 dark:hover:bg-gray-700 dark:peer-checked:bg-blue-600">
+            <span className="flex h-10 items-center justify-center rounded-lg border border-gray-300 text-sm font-medium tabular-nums transition hover:bg-gray-50 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:hover:bg-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-300 dark:border-gray-600 dark:hover:bg-gray-700 dark:peer-checked:bg-blue-600">
               {v}
             </span>
           </label>

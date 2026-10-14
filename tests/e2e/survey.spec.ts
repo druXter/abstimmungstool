@@ -58,7 +58,7 @@ test('Fragebogen anlegen: alle Fragearten, Pflicht, Skala, Höchstzahl - Übersi
   await page.goto('/meine-abstimmungen')
   await page.getByRole('link', { name: 'Neuer Fragebogen' }).click()
 
-  await page.getByLabel('Titel').fill('Feedback Erstiwoche')
+  await page.getByLabel('Titel', { exact: true }).fill('Feedback Erstiwoche')
   await page.getByLabel('Beschreibung (optional)').fill('Dauert zwei Minuten.')
   await page.getByLabel('Frage 1', { exact: true }).fill('Wie fandest du die Woche?')
   await page.getByLabel('Art').first().selectOption('SCALE')
@@ -242,7 +242,7 @@ test('Bearbeiten: Fragen bis zur ersten Antwort, danach nur Grunddaten; Antworte
   await expect(page.getByText('die Fragen lassen sich nicht mehr')).toBeVisible()
   await expect(page.getByLabel('Frage 1', { exact: true })).toHaveCount(0)
   await expect(page.getByLabel('Anonym')).toBeDisabled()
-  await page.getByLabel('Titel').fill('Umbenannt')
+  await page.getByLabel('Titel', { exact: true }).fill('Umbenannt')
   await page.getByRole('button', { name: 'Speichern' }).click()
   await expect(page.getByText('Gespeichert.', { exact: true })).toBeVisible()
   const renamed = await prisma.survey.findUniqueOrThrow({ where: { id: survey.id }, include: { questions: true, _count: { select: { responses: true } } } })
@@ -421,7 +421,7 @@ test('Raster anlegen: Zeilen und Spalten im Editor, eine bzw. mehrere pro Zeile'
   const owner = await createAccount()
   await login(page, owner.email)
   await page.goto('/fragebogen/neu')
-  await page.getByLabel('Titel').fill('Raster-Test')
+  await page.getByLabel('Titel', { exact: true }).fill('Raster-Test')
   await page.getByLabel('Frage 1', { exact: true }).fill('Wie fandest du die Angebote?')
   await page.getByLabel('Art').selectOption('GRID_SINGLE')
   await page.getByLabel('Frage 1, Zeile 1', { exact: true }).fill('Rallye')
@@ -527,4 +527,157 @@ test('Raster am Desktop: Tabelle mit Spaltenköpfen, ohne JS-Prüfung serverseit
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
   expect(csv).toContain('"Kneipentour: gut";"1";"100 %"')
   expect(csv).toContain('"Rallye: gut; Kneipentour: gut; Stadtführung: schlecht";"Rallye: Mo; Kneipentour: Mo, Mi"')
+})
+
+/**
+ * Fragebogen mit Überschrift, einer normalen Skala und einem UEQ-S-Ausschnitt: zwei Skalen-Raster mit ausgeblendetem
+ * Titel (Gegensatzpaare), dazu ein Skalen-Raster mit Aussagen.
+ */
+async function createBlockSurvey(ownerId: string, data: Partial<Prisma.SurveyUncheckedCreateInput> = {}) {
+  const pair = (list: [string, string][]) => ({ create: list.map(([label, labelRight], position) => ({ label, labelRight, position, isRow: true })) })
+  return prisma.survey.create({
+    data: {
+      title: `UEQ ${unique()}`, ownerId, ...data,
+      questions: {
+        create: [
+          { position: 0, kind: 'INFO', text: 'Teil 1: Dein Eindruck', hint: 'Bitte bewerte anhand der Gegensatzpaare.' },
+          { position: 1, kind: 'SCALE_GRID', text: 'UEQ-S: Pragmatische Qualität', hideTitle: true, required: true, scaleMin: 1, scaleMax: 7, options: pair([['behindernd', 'unterstützend'], ['kompliziert', 'einfach']]) },
+          { position: 2, kind: 'SCALE_GRID', text: 'UEQ-S: Hedonische Qualität', hideTitle: true, scaleMin: 1, scaleMax: 7, options: pair([['langweilig', 'spannend']]) },
+          { position: 3, kind: 'INFO', text: '', hint: 'Jetzt noch ein paar Aussagen.' },
+          {
+            position: 4, kind: 'SCALE_GRID', text: 'Wie sehr stimmst du zu?', scaleMin: 1, scaleMax: 5, minLabel: 'gar nicht', maxLabel: 'voll',
+            options: { create: ['Die App war hilfreich.', 'Ich nutze sie weiter.'].map((label, position) => ({ label, position, isRow: true })) }
+          },
+          { position: 5, kind: 'TEXT', text: 'Sonst noch was?' }
+        ]
+      }
+    }
+  })
+}
+
+/** Skalenknopf `value` in der Zeile `row` (Gruppe nach "links ↔ rechts" bzw. Aussage benannt) - der sichtbare Knopf. */
+function scaleRowButton(page: Page, row: string, value: string) {
+  return page.getByRole('radiogroup', { name: row, exact: true }).locator('label').filter({ has: page.getByRole('radio', { name: new RegExp(`^${value}( |$)`) }) })
+}
+
+test('Editor: Überschrift/Text, Titel ausblenden und UEQ-S einfügen', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/fragebogen/neu')
+  await page.getByLabel('Titel', { exact: true }).fill('Mit Blöcken')
+  // UEQ-S ersetzt die noch leere erste Frage.
+  await page.getByRole('button', { name: '+ UEQ-S einfügen' }).click()
+  await expect(page.getByTestId('survey-question')).toHaveCount(3)
+  await page.getByRole('button', { name: '+ Überschrift / Text' }).click()
+  await page.getByLabel('Überschrift 4', { exact: true }).fill('Zum Schluss')
+  await page.getByRole('button', { name: '+ Weitere Frage' }).click()
+  await page.getByLabel('Frage 5', { exact: true }).fill('Lieblingsfunktion?')
+  await page.getByLabel('Art').nth(4).selectOption('TEXT')
+  await page.getByLabel('Titel ausblenden').nth(2).check()
+  await page.getByRole('button', { name: 'Fragebogen anlegen' }).click()
+  await page.waitForURL(/\/fragebogen\/[^/]+\/verwalten\?angelegt=1/)
+
+  const id = new URL(page.url()).pathname.split('/')[2]
+  const questions = await prisma.surveyQuestion.findMany({ where: { surveyId: id }, orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' } } } })
+  expect(questions.map(q => [q.kind, q.hideTitle])).toEqual([['INFO', false], ['SCALE_GRID', true], ['SCALE_GRID', true], ['INFO', false], ['TEXT', true]])
+  expect(questions[1]).toMatchObject({ text: 'UEQ-S: Pragmatische Qualität', scaleMin: 1, scaleMax: 7 })
+  expect(questions[1].options.map(o => `${o.label}|${o.labelRight}`)).toEqual(['behindernd|unterstützend', 'kompliziert|einfach', 'ineffizient|effizient', 'verwirrend|übersichtlich'])
+  expect(questions[2].options.map(o => o.labelRight)).toEqual(['spannend', 'interessant', 'originell', 'neuartig'])
+  expect(questions[3]).toMatchObject({ text: 'Zum Schluss', hint: null })
+
+  // Bearbeiten lädt alles wieder in den Editor.
+  await page.getByRole('link', { name: 'Bearbeiten' }).click()
+  await expect(page.getByLabel('Frage 2, Zeile 2, rechts')).toHaveValue('einfach')
+  await expect(page.getByLabel('Titel ausblenden').nth(0)).toBeChecked()
+  await expect(page.getByLabel('Überschrift 4', { exact: true })).toHaveValue('Zum Schluss')
+})
+
+test('Blöcke am Handy: Überschrift, Nummern ohne Lücken, Gegensatzpaare als Block je Zeile, Pflicht je Zeile', async ({ browser }) => {
+  const owner = await createAccount()
+  const survey = await createBlockSurvey(owner.id)
+  const context = await browser.newContext({ locale: 'de-DE', viewport: { width: 375, height: 800 }, extraHTTPHeaders: { 'x-forwarded-for': uniqueIp() } })
+  const page = await context.newPage()
+  await page.goto(`/fragebogen/${survey.id}`)
+
+  await expect(page.getByRole('heading', { name: 'Teil 1: Dein Eindruck' })).toBeVisible()
+  await expect(page.getByText('Jetzt noch ein paar Aussagen.')).toBeVisible()
+  // Ausgeblendete Titel: nur für Screenreader da, ohne Nummer - die erste sichtbare Frage ist Nummer 1.
+  expect((await page.getByText('UEQ-S: Pragmatische Qualität').boundingBox())?.width).toBeLessThanOrEqual(1)
+  await expect(page.getByText('1. Wie sehr stimmst du zu?')).toBeVisible()
+  await expect(page.getByText('2. Sonst noch was?')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  // Am Handy stehen beide Begriffe über den Knöpfen.
+  const row = page.getByRole('radiogroup', { name: 'kompliziert ↔ einfach' })
+  const [left, right, button] = await Promise.all([row.getByText('kompliziert').boundingBox(), row.getByText('einfach').boundingBox(), scaleRowButton(page, 'kompliziert ↔ einfach', '4').boundingBox()])
+  expect(left!.y + left!.height).toBeLessThanOrEqual(button!.y)
+  expect(right!.x).toBeGreaterThan(left!.x)
+
+  await scaleRowButton(page, 'behindernd ↔ unterstützend', '6').click()
+  await scaleRowButton(page, 'Die App war hilfreich.', '5').click()
+  // "kompliziert ↔ einfach" fehlt noch (Pflicht je Zeile): der Browser hält an.
+  await page.getByRole('button', { name: 'Absenden' }).click()
+  await expect(page).toHaveURL(new RegExp(`/fragebogen/${survey.id}$`))
+  await scaleRowButton(page, 'kompliziert ↔ einfach', '2').click()
+  await page.getByRole('button', { name: 'Absenden' }).click()
+  await expect(page.getByText('Danke!')).toBeVisible()
+
+  const answers = await prisma.surveyAnswer.findMany({ where: { response: { surveyId: survey.id } }, include: { row: true } })
+  expect(answers.map(a => `${a.row?.label}=${a.number}`).sort()).toEqual(['Die App war hilfreich.=5', 'behindernd=6', 'kompliziert=2'])
+  await context.close()
+})
+
+test('Blöcke am Desktop: Gegensatzpaar links | Knöpfe | rechts, serverseitige Pflicht, Auswertung zentriert und CSV je Zeile', async ({ page, browser }) => {
+  const owner = await createAccount()
+  const survey = await createBlockSurvey(owner.id)
+  const guest = await visitor(browser)
+  await guest.setViewportSize({ width: 1100, height: 900 })
+  await guest.goto(`/fragebogen/${survey.id}`)
+
+  const row = guest.getByRole('radiogroup', { name: 'kompliziert ↔ einfach' })
+  const [left, right, first, last] = await Promise.all([
+    row.getByText('kompliziert').boundingBox(), row.getByText('einfach').boundingBox(),
+    scaleRowButton(guest, 'kompliziert ↔ einfach', '1').boundingBox(), scaleRowButton(guest, 'kompliziert ↔ einfach', '7').boundingBox()
+  ])
+  expect(left!.x + left!.width).toBeLessThanOrEqual(first!.x)
+  expect(right!.x).toBeGreaterThanOrEqual(last!.x + last!.width)
+  // Die Knöpfe aller Gegensatzpaare stehen genau untereinander.
+  const other = await scaleRowButton(guest, 'langweilig ↔ spannend', '1').boundingBox()
+  expect(Math.abs(other!.x - first!.x)).toBeLessThan(1)
+
+  // Ohne Browser-Prüfung: fehlende Pflichtzeile lehnt der Server ab.
+  await guest.evaluate(() => document.querySelectorAll('form').forEach(f => f.setAttribute('novalidate', '')))
+  await scaleRowButton(guest, 'behindernd ↔ unterstützend', '7').click()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Bitte beantworte alle Pflichtfragen')).toBeVisible()
+
+  await scaleRowButton(guest, 'behindernd ↔ unterstützend', '7').click()
+  await scaleRowButton(guest, 'kompliziert ↔ einfach', '4').click()
+  await scaleRowButton(guest, 'langweilig ↔ spannend', '1').click()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Danke!')).toBeVisible()
+
+  const second = await visitor(browser)
+  await second.goto(`/fragebogen/${survey.id}`)
+  await scaleRowButton(second, 'behindernd ↔ unterstützend', '5').click()
+  await scaleRowButton(second, 'kompliziert ↔ einfach', '6').click()
+  await second.getByRole('button', { name: 'Absenden' }).click()
+  await expect(second.getByText('Danke!')).toBeVisible()
+
+  await login(page, owner.email)
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  await expect(page.getByTestId('survey-result-info').first()).toContainText('Teil 1: Dein Eindruck')
+  const pragmatic = page.getByTestId('survey-result').first()
+  await expect(pragmatic).toContainText('UEQ-S: Pragmatische Qualität')
+  // (7 + 4 + 5 + 6) / 4 = 5,5, Mitte 4 -> +1,5.
+  await expect(pragmatic).toContainText('Gesamt: Durchschnitt 5,5 · zentriert +1,5')
+  await expect(pragmatic.getByRole('row', { name: /behindernd ↔ unterstützend/ })).toContainText('6')
+  await expect(pragmatic.getByRole('row', { name: /behindernd ↔ unterstützend/ })).toContainText('+2')
+  await expect(page.getByTestId('survey-result').nth(1)).toContainText('zentriert −3')
+
+  const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
+  expect(csv).toContain('"UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend";"UEQ-S: Pragmatische Qualität: kompliziert ↔ einfach";"UEQ-S: Hedonische Qualität: langweilig ↔ spannend";"1. Wie sehr stimmst du zu?: Die App war hilfreich."')
+  expect(csv).toContain('"7";"4";"1";"";"";""')
+  expect(csv).toContain('"Gesamt: Durchschnitt 5,5 (zentriert 1,5)";"4"')
+  expect(csv).not.toContain('Teil 1: Dein Eindruck')
 })

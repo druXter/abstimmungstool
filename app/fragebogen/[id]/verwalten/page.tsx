@@ -2,7 +2,10 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
-import { formatDecimal, getSurveyLevel, gridKey, IDENTITY_LABELS, isGrid, isSurveyOpen, KIND_LABELS, loadSurveyResults } from '../../../lib/survey'
+import {
+  formatDecimal, getSurveyLevel, gridKey, IDENTITY_LABELS, isGrid, isQuestion, isSurveyOpen, KIND_LABELS, loadSurveyResults, questionNumbers, scaleCenter,
+  scaleRange, scaleRowLabel, type ScaleStats
+} from '../../../lib/survey'
 import { clearSurveyResponses, deleteSurvey, shareSurvey, unshareSurvey } from '../../../survey-actions'
 import CopyableField from '../../../ui/copyable-field'
 import ConfirmForm from '../../../ui/confirm-form'
@@ -72,6 +75,7 @@ export default async function ManageSurveyPage({
   const link = `${origin}/fragebogen/${id}`
   const last = responses.reduce<Date | null>((latest, r) => (!latest || r.updatedAt > latest ? r.updatedAt : latest), null)
   const hidden = <input type="hidden" name="surveyId" value={id} />
+  const numbers = questionNumbers(questions)
 
   return (
     <SurveyFrame survey={survey} isOwner={isOwner}>
@@ -129,14 +133,22 @@ export default async function ManageSurveyPage({
             <h2 className="font-semibold">{responses.length > 0 ? 'Auswertung' : 'Fragen'}</h2>
             {responses.length > 0 && <a href={`/fragebogen/${id}/verwalten/export`} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">CSV-Export ↓</a>}
           </div>
-          {questions.map((q, i) => (
+          {questions.map(q => !isQuestion(q.kind) ? (
+            // Überschrift/Text-Block: nur zur Orientierung, keine Auswertung.
+            <div key={q.id} className="border-t border-gray-100 pt-4 dark:border-gray-700" data-testid="survey-result-info">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{q.text || 'Text'}</p>
+              {!q.text && q.hint && <p className="line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{q.hint}</p>}
+            </div>
+          ) : (
             <section key={q.id} className="space-y-2" data-testid="survey-result">
               <h3 className="font-medium">
-                {i + 1}. {q.text}
+                {numbers.has(q.id) && `${numbers.get(q.id)}. `}{q.text}
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
-                  {KIND_LABELS[q.kind]}{q.required ? ' · Pflicht' : ''}{responses.length > 0 ? ` · ${q.answered} Antwort${q.answered === 1 ? '' : 'en'}` : ''}
+                  {KIND_LABELS[q.kind]}{q.required ? ' · Pflicht' : ''}{q.hideTitle ? ' · Titel ausgeblendet' : ''}{responses.length > 0 ? ` · ${q.answered} Antwort${q.answered === 1 ? '' : 'en'}` : ''}
                 </span>
               </h3>
+
+              {q.kind === 'SCALE_GRID' && <ScaleGridResult question={q} answered={responses.length > 0} />}
 
               {(q.kind === 'SINGLE' || q.kind === 'MULTI') && (
                 <ul className="space-y-1.5">
@@ -296,5 +308,70 @@ export default async function ManageSurveyPage({
         )}
       </div>
     </SurveyFrame>
+  )
+}
+
+/** Wert einer Skala auf die Mitte bezogen, mit Vorzeichen (bei 1-7: -3 bis +3, wie in der UEQ-Auswertung). */
+function centered(mean: number, range: { min: number; max: number }): string {
+  const value = mean - scaleCenter(range)
+  return `${value > 0 ? '+' : value < 0 ? '−' : '±'}${formatDecimal(Math.abs(value))}`
+}
+
+/** Mittelwert als Punkt auf einer Linie von min bis max - so lassen sich viele Zeilen auf einen Blick vergleichen. */
+function MeanMarker({ stats, range }: { stats: ScaleStats; range: { min: number; max: number } }) {
+  const position = range.max > range.min ? ((stats.mean - range.min) / (range.max - range.min)) * 100 : 50
+  return (
+    <div className="relative h-4 w-full min-w-24" aria-hidden>
+      <div className="absolute inset-x-0 top-1/2 h-0.5 -translate-y-1/2 rounded bg-gray-200 dark:bg-gray-700" />
+      <div className="absolute top-1/2 h-3 w-px -translate-y-1/2 bg-gray-400 dark:bg-gray-500" style={{ left: '50%' }} />
+      <div className="absolute top-1/2 h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500" style={{ left: `${position}%` }} />
+    </div>
+  )
+}
+
+/**
+ * Auswertung eines Skalen-Rasters: je Zeile Anzahl, Mittelwert, zentrierter Wert und die Lage auf der Skala, darüber
+ * der Mittelwert über alle Zeilen (beim UEQ-S der Skalenwert, z.B. "pragmatische Qualität").
+ */
+function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<typeof loadSurveyResults>>['questions'][number]; answered: boolean }) {
+  const range = scaleRange(question)
+  const odd = (range.max - range.min) % 2 === 0
+  return (
+    <div className="space-y-2">
+      {question.scale && (
+        <p className="text-sm text-gray-700 dark:text-gray-300">
+          Gesamt: Durchschnitt <strong>{formatDecimal(question.scale.mean)}</strong>
+          {odd && <> · zentriert <strong>{centered(question.scale.mean, range)}</strong></>}
+          <span className="text-gray-500 dark:text-gray-400"> (Skala {range.min}–{range.max}{odd ? `, Mitte ${scaleCenter(range)}` : ''})</span>
+        </p>
+      )}
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-max border-collapse text-sm">
+          <thead>
+            <tr className="text-xs text-gray-500 dark:text-gray-400">
+              <th className="py-1.5 pr-3 text-left font-medium">Zeile</th>
+              <th className="px-2 py-1.5 text-right font-medium">n</th>
+              <th className="px-2 py-1.5 text-right font-medium">Ø</th>
+              {odd && <th className="px-2 py-1.5 text-right font-medium">zentriert</th>}
+              <th className="px-2 py-1.5 text-left font-medium">Lage ({range.min}–{range.max})</th>
+            </tr>
+          </thead>
+          <tbody>
+            {question.rows.map(row => {
+              const stats = question.rowScale.get(row.id) ?? null
+              return (
+                <tr key={row.id} className="border-t border-gray-100 dark:border-gray-700">
+                  <th scope="row" className="py-1.5 pr-3 text-left font-normal">{scaleRowLabel(row)}</th>
+                  <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{stats?.count ?? 0}</td>
+                  <td className="px-2 py-1.5 text-right tabular-nums">{stats ? formatDecimal(stats.mean) : '–'}</td>
+                  {odd && <td className="px-2 py-1.5 text-right tabular-nums">{stats ? centered(stats.mean, range) : '–'}</td>}
+                  <td className="w-1/3 px-2 py-1.5">{stats ? <MeanMarker stats={stats} range={range} /> : answered ? <span className="text-xs text-gray-400">noch keine Antwort</span> : null}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }

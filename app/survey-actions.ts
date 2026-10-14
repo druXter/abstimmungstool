@@ -10,7 +10,7 @@ import { formString, normalizeEmail } from './lib/form'
 import { clientIp, reserve, surveyRule } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
 import {
-  DEFAULT_SCALE, getSurveyLevel, isGrid, isSurveyOpen, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
+  DEFAULT_SCALE, getSurveyLevel, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
   SCALE_MINS, SURVEY_IDENTITIES, SURVEY_QUESTION_KINDS, surveyVoterKey, type SurveyLevel
 } from './lib/survey'
@@ -20,9 +20,10 @@ type QuestionInput = {
   hint: string | null
   kind: SurveyQuestionKind
   required: boolean
+  hideTitle: boolean
   options: string[]
-  /** Nur Raster: die Zeilen (options sind dann die Spalten). */
-  rows: string[]
+  /** Nur Raster und Skalen-Raster: die Zeilen (options sind beim Raster die Spalten), right = rechter Begriff eines Gegensatzpaars. */
+  rows: { label: string; right: string | null }[]
   maxChoices: number | null
   multiline: boolean
   scaleMin: number | null
@@ -33,18 +34,26 @@ type QuestionInput = {
 
 /**
  * Liest die Fragen aus dem Editor (app/fragebogen/questions-editor.tsx): s<i>_text, s<i>_hint,
- * s<i>_kind, s<i>_required, bei Auswahl s<i>_o<j> und s<i>_max (höchstens n Kreuze), beim Raster s<i>_r<j>
- * (Zeilen) und s<i>_o<j> (Spalten), bei Freitext s<i>_multiline, bei der Skala s<i>_from/s<i>_to/s<i>_fromLabel/
- * s<i>_toLabel. Fragen ohne Text fallen still weg, ebenso Auswahlfragen mit weniger als zwei Optionen und Raster
- * ohne Zeile oder mit weniger als zwei Spalten; doppelte Einträge zählen einmal.
+ * s<i>_kind, s<i>_required, s<i>_hideTitle, bei Auswahl s<i>_o<j> und s<i>_max (höchstens n Kreuze), beim Raster
+ * s<i>_r<j> (Zeilen) und s<i>_o<j> (Spalten), beim Skalen-Raster s<i>_r<j>/s<i>_rr<j> (Zeile, rechter Begriff),
+ * bei Freitext s<i>_multiline, bei Skala und Skalen-Raster s<i>_from/s<i>_to/s<i>_fromLabel/s<i>_toLabel.
+ * Überschrift/Text-Blöcke (INFO) brauchen Überschrift oder Text. Fragen ohne Text fallen still weg, ebenso
+ * Auswahlfragen mit weniger als zwei Optionen und Raster ohne Zeile oder mit weniger als zwei Spalten; doppelte
+ * Einträge zählen einmal.
  */
 function parseQuestions(formData: FormData): QuestionInput[] {
   const questions: QuestionInput[] = []
   for (let i = 0; i < MAX_QUESTIONS; i++) {
-    const text = formString(formData, `s${i}_text`, MAX_QUESTION_LENGTH)
-    if (!text) continue
     const kind = SURVEY_QUESTION_KINDS.find(k => k === formData.get(`s${i}_kind`)) ?? 'SINGLE'
+    const text = formString(formData, `s${i}_text`, MAX_QUESTION_LENGTH)
+    const hint = formString(formData, `s${i}_hint`, kind === 'INFO' ? MAX_INFO_TEXT_LENGTH : MAX_HINT_LENGTH) || null
+    if (kind === 'INFO') {
+      if (text || hint) questions.push({ ...EMPTY_QUESTION, kind, text, hint })
+      continue
+    }
+    if (!text) continue
     const grid = isGrid(kind)
+    const scaled = kind === 'SCALE' || kind === 'SCALE_GRID'
     const labels = (prefix: string, max: number) => {
       const list: string[] = []
       for (let j = 0; j < max; j++) {
@@ -54,41 +63,59 @@ function parseQuestions(formData: FormData): QuestionInput[] {
       return list
     }
     const options = kind === 'SINGLE' || kind === 'MULTI' ? labels('o', MAX_OPTIONS) : grid ? labels('o', MAX_GRID_COLUMNS) : []
-    const rows = grid ? labels('r', MAX_GRID_ROWS) : []
+    const rows: QuestionInput['rows'] = []
+    if (grid) rows.push(...labels('r', MAX_GRID_ROWS).map(label => ({ label, right: null })))
+    if (kind === 'SCALE_GRID') {
+      for (let j = 0; j < MAX_GRID_ROWS; j++) {
+        const label = formString(formData, `s${i}_r${j}`, MAX_OPTION_LENGTH)
+        const right = formString(formData, `s${i}_rr${j}`, MAX_OPTION_LENGTH) || null
+        if (label && !rows.some(r => r.label === label && r.right === right)) rows.push({ label, right })
+      }
+    }
     if ((kind === 'SINGLE' || kind === 'MULTI' || grid) && options.length < MIN_OPTIONS) continue
-    if (grid && rows.length === 0) continue
+    if ((grid || kind === 'SCALE_GRID') && rows.length === 0) continue
     const max = Number.parseInt(formString(formData, `s${i}_max`, 3), 10)
     const from = Number.parseInt(formString(formData, `s${i}_from`, 3), 10)
     const to = Number.parseInt(formString(formData, `s${i}_to`, 3), 10)
     questions.push({
       text,
-      hint: formString(formData, `s${i}_hint`, MAX_HINT_LENGTH) || null,
+      hint,
       kind,
       required: formData.get(`s${i}_required`) === 'on',
+      hideTitle: formData.get(`s${i}_hideTitle`) === 'on',
       options,
       rows,
       // "höchstens alle" ist keine Grenze.
       maxChoices: kind === 'MULTI' && Number.isInteger(max) && max >= 1 && max < options.length ? max : null,
       multiline: kind === 'TEXT' && formData.get(`s${i}_multiline`) === 'on',
-      scaleMin: kind === 'SCALE' ? ((SCALE_MINS as readonly number[]).includes(from) ? from : DEFAULT_SCALE.min) : null,
-      scaleMax: kind === 'SCALE' ? (Number.isInteger(to) && to >= SCALE_MAX_MIN && to <= SCALE_MAX_MAX ? to : DEFAULT_SCALE.max) : null,
-      minLabel: kind === 'SCALE' ? formString(formData, `s${i}_fromLabel`, MAX_SCALE_LABEL_LENGTH) || null : null,
-      maxLabel: kind === 'SCALE' ? formString(formData, `s${i}_toLabel`, MAX_SCALE_LABEL_LENGTH) || null : null
+      scaleMin: scaled ? ((SCALE_MINS as readonly number[]).includes(from) ? from : DEFAULT_SCALE.min) : null,
+      scaleMax: scaled ? (Number.isInteger(to) && to >= SCALE_MAX_MIN && to <= SCALE_MAX_MAX ? to : DEFAULT_SCALE.max) : null,
+      minLabel: scaled ? formString(formData, `s${i}_fromLabel`, MAX_SCALE_LABEL_LENGTH) || null : null,
+      maxLabel: scaled ? formString(formData, `s${i}_toLabel`, MAX_SCALE_LABEL_LENGTH) || null : null
     })
   }
   return questions
+}
+
+const EMPTY_QUESTION: Omit<QuestionInput, 'kind' | 'text' | 'hint'> = {
+  required: false, hideTitle: false, options: [], rows: [], maxChoices: null, multiline: false, scaleMin: null, scaleMax: null, minLabel: null, maxLabel: null
+}
+
+/** Mindestens eine echte Frage - nur Überschriften wären ein leerer Fragebogen. */
+function hasQuestion(questions: QuestionInput[]): boolean {
+  return questions.some(q => isQuestion(q.kind))
 }
 
 async function writeQuestions(tx: Prisma.TransactionClient, surveyId: string, questions: QuestionInput[]) {
   for (const [position, q] of questions.entries()) {
     await tx.surveyQuestion.create({
       data: {
-        surveyId, position, text: q.text, hint: q.hint, kind: q.kind, required: q.required, maxChoices: q.maxChoices, multiline: q.multiline,
-        scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel,
+        surveyId, position, text: q.text, hint: q.hint, kind: q.kind, required: q.required, hideTitle: q.hideTitle, maxChoices: q.maxChoices,
+        multiline: q.multiline, scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel,
         options: {
           create: [
             ...q.options.map((label, index) => ({ position: index, label })),
-            ...q.rows.map((label, index) => ({ position: index, label, isRow: true }))
+            ...q.rows.map((row, index) => ({ position: index, label: row.label, labelRight: row.right, isRow: true }))
           ]
         }
       }
@@ -123,7 +150,7 @@ export async function createSurvey(formData: FormData) {
 
   const title = formString(formData, 'title', MAX_TITLE_LENGTH)
   const questions = parseQuestions(formData)
-  if (!title || questions.length === 0) redirect('/fragebogen/neu?fehler=leer')
+  if (!title || !hasQuestion(questions)) redirect('/fragebogen/neu?fehler=leer')
 
   const survey = await prisma.$transaction(async tx => {
     const created = await tx.survey.create({
@@ -150,7 +177,7 @@ export async function updateSurvey(formData: FormData) {
   const withQuestions = formData.get('withQuestions') === '1'
   if (withQuestions && answered) redirect(manageUrl(survey.id, 'fehler=beantwortet'))
   const questions = withQuestions ? parseQuestions(formData) : []
-  if (withQuestions && questions.length === 0) redirect(`/fragebogen/${survey.id}/bearbeiten?fehler=leer`)
+  if (withQuestions && !hasQuestion(questions)) redirect(`/fragebogen/${survey.id}/bearbeiten?fehler=leer`)
 
   await prisma.$transaction(async tx => {
     await tx.survey.update({

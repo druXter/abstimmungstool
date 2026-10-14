@@ -13,12 +13,14 @@ type Item = { id: string; label: string }
  * Pflicht: bei einer Antwort pro Zeile über die eingebaute Formularprüfung, bei mehreren im Browser (mindestens ein
  * Kreuz je Zeile); parseSurveyAnswers prüft beides noch einmal.
  */
-export default function GridInput({ questionId, rows, columns, multiple, required, initial }: {
+export default function GridInput({ questionId, rows, columns, multiple, required, markRows = false, initial }: {
   questionId: string
   rows: Item[]
   columns: Item[]
   multiple: boolean
   required: boolean
+  /** Pflicht an jeder Zeile zeigen (wenn der Fragetitel mit seinem Sternchen ausgeblendet ist). */
+  markRows?: boolean
   /** Bisherige Antworten als "<Zeile>:<Spalte>". */
   initial: string[]
 }) {
@@ -51,7 +53,10 @@ export default function GridInput({ questionId, rows, columns, multiple, require
               key={row.id} role={multiple ? 'group' : 'radiogroup'} aria-labelledby={rowLabel} data-testid="grid-row"
               className={`rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:grid ${columnsClass} sm:min-w-fit sm:items-center sm:rounded-none sm:border-0 sm:border-t sm:p-0 ${r % 2 ? 'sm:bg-gray-50/60 sm:dark:bg-gray-900/40' : ''}`}
             >
-              <span id={rowLabel} className="mb-2 block text-sm font-medium sm:mb-0 sm:px-3 sm:py-2.5 sm:font-normal">{row.label}</span>
+              <span id={rowLabel} className="mb-2 block text-sm font-medium sm:mb-0 sm:px-3 sm:py-2.5 sm:font-normal">
+                {row.label}
+                {markRows && <span aria-hidden className="ml-1 text-red-700 dark:text-red-300">*</span>}
+              </span>
               <div className="flex flex-wrap gap-2 sm:contents">
                 {columns.map((c, ci) => {
                   const key = `${row.id}:${c.id}`

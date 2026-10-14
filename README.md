@@ -608,6 +608,17 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   | `SCALE` Lineare Skala | ein Wert von 0/1 bis 2-10, Beschriftung der Enden | Verteilung, Durchschnitt, Median |
   | `GRID_SINGLE` Raster, eine pro Zeile | 1-20 Zeilen (Aussagen) × 2-10 Spalten, je Zeile eine Spalte | Tabelle je Feld: Anzahl und Anteil der Antwortenden der Zeile |
   | `GRID_MULTI` Raster, mehrere pro Zeile | wie oben, je Zeile beliebig viele Spalten | wie oben |
+  | `SCALE_GRID` Skalen-Raster | 1-20 Zeilen mit derselben Skala (wie `SCALE`): Gegensatzpaare (`labelRight`, z.B. UEQ-S) oder Aussagen | je Zeile und gesamt n, Durchschnitt, zentriert (minus Skalenmitte, bei 1-7 also -3…+3), Lage auf der Skala; im CSV eine Spalte je Zeile |
+  | `INFO` Überschrift / Text | keine Frage: Überschrift (`text`, wie ein Fragentitel) und/oder Text (`hint`, bis 2000 Zeichen) | nur als Zwischenüberschrift, nicht im CSV |
+
+  **Titel ausblenden** (`hideTitle`, jede Frage): Der Titel ist nur für Screenreader da, in Auswertung und CSV steht er
+  weiter. Die Frage bekommt keine Nummer (Nummern zählen nur sichtbare Titel, `questionNumbers`) und schließt ohne
+  Trennlinie an den Block davor an. Bei Pflicht zeigen Raster das Sternchen an jeder Zeile.
+  **"+ UEQ-S einfügen"** im Editor legt eine Anleitung (`INFO`) und die acht Gegensatzpaare des UEQ-S als zwei
+  Skalen-Raster 1-7 mit ausgeblendetem Titel an (pragmatische und hedonische Qualität) - für Teilnehmende ein Block,
+  in der Auswertung stehen beide Skalenwerte zentriert wie in der offiziellen UEQ-Auswertung.
+  **Skalen-Raster mobil:** je Zeile ein Block, bei Gegensatzpaaren beide Begriffe über den Knöpfen, bei Aussagen die
+  Skalenenden darunter; ab `sm` "links | Knöpfe | rechts" bzw. "Aussage | Knöpfe", die Knöpfe aller Zeilen untereinander.
 
   Raster: Zeilen und Spalten sind beide `SurveyOption` (`isRow`), eine Antwort trägt `rowId` (Zeile) und `optionId`
   (Spalte), das Formularfeld heißt `q_<Frage>_<Zeile>`. Pflicht heißt: jede Zeile beantworten. **Mobil** (unter `sm`)
