@@ -9,6 +9,7 @@ import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
 import { clientIp, reserve, surveyRule } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
+import { surveyLang, withLang } from './lib/survey-i18n'
 import {
   DEFAULT_SCALE, getSurveyLevel, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
@@ -22,6 +23,8 @@ type QuestionInput = {
   required: boolean
   hideTitle: boolean
   options: string[]
+  /** Nur SINGLE/MULTI: Positionen der Antwortmöglichkeiten mit Textfeld ("Sonstiges: ___"). */
+  optionsWithText: number[]
   /** Nur Raster und Skalen-Raster: die Zeilen (options sind beim Raster die Spalten), right = rechter Begriff eines Gegensatzpaars. */
   rows: { label: string; right: string | null }[]
   maxChoices: number | null
@@ -65,6 +68,13 @@ function parseQuestions(formData: FormData): QuestionInput[] {
       return list
     }
     const options = kind === 'SINGLE' || kind === 'MULTI' ? labels('o', MAX_OPTIONS) : grid ? labels('o', MAX_GRID_COLUMNS) : []
+    // Textfeld je Option (s<i>_t<j> am Eingabefeld s<i>_o<j>) - über das Label zugeordnet, weil leere Felder wegfallen.
+    const withText = new Set<string>()
+    if (kind === 'SINGLE' || kind === 'MULTI') {
+      for (let j = 0; j < MAX_OPTIONS; j++) {
+        if (formData.get(`s${i}_t${j}`) === 'on') withText.add(formString(formData, `s${i}_o${j}`, MAX_OPTION_LENGTH))
+      }
+    }
     const rows: QuestionInput['rows'] = []
     if (grid) rows.push(...labels('r', MAX_GRID_ROWS).map(label => ({ label, right: null })))
     if (kind === 'SCALE_GRID') {
@@ -86,6 +96,7 @@ function parseQuestions(formData: FormData): QuestionInput[] {
       required: formData.get(`s${i}_required`) === 'on',
       hideTitle: formData.get(`s${i}_hideTitle`) === 'on',
       options,
+      optionsWithText: options.flatMap((label, index) => (withText.has(label) ? [index] : [])),
       rows,
       // "höchstens alle" ist keine Grenze.
       maxChoices: kind === 'MULTI' && Number.isInteger(max) && max >= 1 && max < options.length ? max : null,
@@ -101,7 +112,7 @@ function parseQuestions(formData: FormData): QuestionInput[] {
 }
 
 const EMPTY_QUESTION: Omit<QuestionInput, 'kind' | 'text' | 'hint'> = {
-  required: false, hideTitle: false, options: [], rows: [], maxChoices: null, multiline: false, scaleMin: null, scaleMax: null, minLabel: null, maxLabel: null, optOutLabel: null
+  required: false, hideTitle: false, options: [], optionsWithText: [], rows: [], maxChoices: null, multiline: false, scaleMin: null, scaleMax: null, minLabel: null, maxLabel: null, optOutLabel: null
 }
 
 /** Mindestens eine echte Frage - nur Überschriften wären ein leerer Fragebogen. */
@@ -117,7 +128,7 @@ async function writeQuestions(tx: Prisma.TransactionClient, surveyId: string, qu
         multiline: q.multiline, scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel, optOutLabel: q.optOutLabel,
         options: {
           create: [
-            ...q.options.map((label, index) => ({ position: index, label })),
+            ...q.options.map((label, index) => ({ position: index, label, allowText: q.optionsWithText.includes(index) })),
             ...q.rows.map((row, index) => ({ position: index, label: row.label, labelRight: row.right, isRow: true }))
           ]
         }
@@ -209,29 +220,32 @@ export async function updateSurvey(formData: FormData) {
  */
 export async function submitSurvey(formData: FormData): Promise<void> {
   const surveyId = formString(formData, 'surveyId', 50)
-  const base = `/fragebogen/${surveyId}${formData.get('embed') === '1' ? '/einbetten' : ''}`
+  const page = `/fragebogen/${surveyId}${formData.get('embed') === '1' ? '/einbetten' : ''}`
+  // Rückmeldungen hängen ?hinweis=/?danke= an; ?lang=en bleibt dabei erhalten (Englisch aus der Campus-App).
+  const lang = surveyLang(formData.get('lang'))
+  const to = (query: string) => withLang(page, lang, query)
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
-    include: { questions: { orderBy: { position: 'asc' }, include: { options: { select: { id: true, isRow: true } } } } }
+    include: { questions: { orderBy: { position: 'asc' }, include: { options: { select: { id: true, isRow: true, allowText: true } } } } }
   })
   if (!survey) return
-  if (!isSurveyOpen(survey)) redirect(`${base}?hinweis=geschlossen`)
+  if (!isSurveyOpen(survey)) redirect(to('hinweis=geschlossen'))
 
   const parsed = parseSurveyAnswers(survey.questions, formData)
-  if (!parsed.ok) redirect(`${base}?hinweis=${parsed.error}`)
-  if (parsed.rows.length === 0) redirect(`${base}?hinweis=leer`)
+  if (!parsed.ok) redirect(to(`hinweis=${parsed.error}`))
+  if (parsed.rows.length === 0) redirect(to('hinweis=leer'))
 
   // Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt - sonst teilten sich alle einen Zähler.
   const ip = await clientIp()
   const throttled = async () => ip !== 'unknown' && !(await reserve([surveyRule(ip, survey.id)]))
 
   if (survey.identity === 'ANONYMOUS') {
-    if (await throttled()) redirect(`${base}?hinweis=gedrosselt`)
+    if (await throttled()) redirect(to('hinweis=gedrosselt'))
     await prisma.surveyResponse.create({ data: { surveyId: survey.id, answers: { create: parsed.rows } } })
   } else {
     const voterKey = surveyVoterKey(await getOrCreateVoterToken())
     const existing = await prisma.surveyResponse.findUnique({ where: { surveyId_voterKey: { surveyId: survey.id, voterKey } }, select: { id: true } })
-    if (!existing && (await throttled())) redirect(`${base}?hinweis=gedrosselt`)
+    if (!existing && (await throttled())) redirect(to('hinweis=gedrosselt'))
     await prisma.$transaction(async tx => {
       // upsert statt create: Ein Doppelklick (zwei gleichzeitige erste Abgaben) ergibt trotzdem nur eine Antwort.
       const response = await tx.surveyResponse.upsert({
@@ -244,7 +258,7 @@ export async function submitSurvey(formData: FormData): Promise<void> {
     })
   }
   revalidatePath(manageUrl(survey.id))
-  redirect(`${base}?danke=1`)
+  redirect(to('danke=1'))
 }
 
 export async function closeSurvey(formData: FormData) {

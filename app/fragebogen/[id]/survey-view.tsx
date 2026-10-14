@@ -1,31 +1,27 @@
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
-import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, otherTextField, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { surveyTexts, withLang, type SurveyLang } from '../../lib/survey-i18n'
 import { submitSurvey } from '../../survey-actions'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
 import { Card, inputClass } from '../../ui/kit'
 import MultiChoice from './multi-choice'
 import GridInput from './grid-input'
-import { CookieGate } from './embed-helpers'
+import { CookieGate, OtherText } from './embed-helpers'
 
-// Rückmeldungen von submitSurvey (?hinweis=...). Nur feste Texte - ein unbekannter Wert zeigt nichts an. Kommt eine
-// Abgabe nach dem Ende (?hinweis=geschlossen), zeigt die Seite ohnehin "beendet".
-const NOTICES: Record<string, { tone: 'warning' | 'error'; text: string }> = {
-  pflicht: { tone: 'error', text: 'Bitte beantworte alle Pflichtfragen - deine Antworten wurden nicht gespeichert.' },
-  auswahl: { tone: 'error', text: 'Bei einer Frage passt die Auswahl nicht (z.B. zu viele Kreuze) - deine Antworten wurden nicht gespeichert.' },
-  leer: { tone: 'error', text: 'Bitte beantworte mindestens eine Frage.' },
-  gedrosselt: { tone: 'warning', text: 'Von deinem Netzwerk aus kamen in der letzten Stunde sehr viele Antworten. Bitte versuche es später noch einmal.' }
-}
+// Rückmeldungen von submitSurvey (?hinweis=...), Texte in app/lib/survey-i18n.ts. Ein unbekannter Wert zeigt nichts
+// an. Kommt eine Abgabe nach dem Ende (?hinweis=geschlossen), zeigt die Seite ohnehin "beendet".
+const NOTICE_TONES: Record<string, 'warning' | 'error'> = { pflicht: 'error', auswahl: 'error', leer: 'error', gedrosselt: 'warning' }
 
-export type SurveySearch = { hinweis?: string; danke?: string }
+export type SurveySearch = { hinweis?: string; danke?: string; lang?: string }
 
 /** Lädt einen Fragebogen samt Fragen zum Ausfüllen, null wenn es ihn nicht gibt. */
 export async function loadSurveyForView(id: string) {
   return prisma.survey.findUnique({
     where: { id },
-    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true, isRow: true, labelRight: true } } } } }
+    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true, isRow: true, labelRight: true, allowText: true } } } } }
   })
 }
 
@@ -35,11 +31,13 @@ type ViewSurvey = NonNullable<Awaited<ReturnType<typeof loadSurveyForView>>>
  * Fragebogen zum Ausfüllen - dieselbe Ansicht auf /fragebogen/<id> und eingebettet
  * (/fragebogen/<id>/einbetten, `embed`). Ohne JavaScript bedienbar: Pflichtfragen über die
  * eingebaute Formularprüfung, Mehrfachauswahl zusätzlich im Browser (multi-choice.tsx), und
- * submitSurvey prüft alles noch einmal. Im Modus COOKIE mit den bisherigen Antworten vorausgefüllt.
+ * submitSurvey prüft alles noch einmal. Im Modus COOKIE mit den bisherigen Antworten vorausgefüllt. Feste Texte
+ * je nach `lang` (?lang=en) auf Deutsch oder Englisch, die Fragen selbst so, wie die Verwaltung sie geschrieben hat.
  */
-export default async function SurveyView({ survey, search, embed }: { survey: ViewSurvey; search: SurveySearch; embed: boolean }) {
+export default async function SurveyView({ survey, search, embed, lang }: { survey: ViewSurvey; search: SurveySearch; embed: boolean; lang: SurveyLang }) {
+  const t = surveyTexts(lang)
   const open = isSurveyOpen(survey)
-  const notice = search.hinweis && Object.hasOwn(NOTICES, search.hinweis) ? NOTICES[search.hinweis] : null
+  const notice = search.hinweis && Object.hasOwn(NOTICE_TONES, search.hinweis) ? { tone: NOTICE_TONES[search.hinweis], text: t.notices[search.hinweis] } : null
   const base = `/fragebogen/${survey.id}${embed ? '/einbetten' : ''}`
 
   const token = survey.identity === 'COOKIE' ? await getVoterToken() : null
@@ -63,11 +61,11 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
       <Card className="space-y-3" >
         {header}
         <div role="status" className="rounded-lg border border-green-200 bg-green-50 p-4 text-green-900 dark:border-green-900 dark:bg-green-950 dark:text-green-100">
-          <p className="font-medium">Danke!</p>
-          <p className="mt-1 whitespace-pre-line text-sm">{survey.thanksText || 'Deine Antworten sind angekommen.'}</p>
+          <p className="font-medium">{t.thanks}</p>
+          <p className="mt-1 whitespace-pre-line text-sm">{survey.thanksText || t.thanksDefault}</p>
         </div>
         {survey.identity === 'COOKIE' && open && (
-          <Link href={base} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">Antworten ansehen oder ändern</Link>
+          <Link href={withLang(base, lang)} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">{t.viewOrChange}</Link>
         )}
       </Card>
     )
@@ -77,7 +75,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
     return (
       <Card className="space-y-3">
         {header}
-        <Notice tone="info">Dieser Fragebogen ist beendet - Antworten sind nicht mehr möglich.</Notice>
+        <Notice tone="info">{t.closed}</Notice>
       </Card>
     )
   }
@@ -87,6 +85,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
     <form action={submitSurvey} className="space-y-4">
       <input type="hidden" name="surveyId" value={survey.id} />
       {embed && <input type="hidden" name="embed" value="1" />}
+      {lang === 'en' && <input type="hidden" name="lang" value="en" />}
       {survey.questions.map(q => {
         const name = answerField(q.id)
         const mineHere = given(q.id)
@@ -109,12 +108,12 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
         const legend = (
           <legend className={q.hideTitle ? 'sr-only' : 'font-medium'}>
             {number && `${number}. `}{q.text}
-            {q.required && <span className="ml-1 text-red-700 dark:text-red-300" title="Pflichtfrage">*</span>}
+            {q.required && <span className="ml-1 text-red-700 dark:text-red-300" title={t.required}>*</span>}
           </legend>
         )
         const hint = q.hint || (q.kind === 'MULTI'
-          ? (q.maxChoices ? `Höchstens ${q.maxChoices} ankreuzen.` : 'Mehrere Antworten möglich.')
-          : q.kind === 'GRID_MULTI' ? 'Pro Zeile mehrere Antworten möglich.' : null)
+          ? (q.maxChoices ? t.maxChoices(q.maxChoices) : t.multiple)
+          : q.kind === 'GRID_MULTI' ? t.gridMultiple : null)
         // Ausgeblendeter Titel einer Pflichtfrage: Raster markieren jede Zeile, alle anderen bekommen einen kurzen Hinweis.
         const rowsMarked = q.hideTitle && q.required && (isGrid(q.kind) || q.kind === 'SCALE_GRID')
         return (
@@ -122,21 +121,33 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
           <fieldset className="space-y-2" data-testid="survey-field">
             {legend}
             {hint && <p className={`${q.hideTitle ? '' : '-mt-1'} text-xs text-gray-500 dark:text-gray-400`}>{hint}</p>}
-            {q.hideTitle && q.required && !rowsMarked && <p className="text-xs text-gray-500 dark:text-gray-400">Pflichtfrage <span className="text-red-700 dark:text-red-300">*</span></p>}
+            {q.hideTitle && q.required && !rowsMarked && <p className="text-xs text-gray-500 dark:text-gray-400">{t.required} <span className="text-red-700 dark:text-red-300">*</span></p>}
 
             {q.kind === 'SINGLE' && (
               <div className="space-y-1.5">
                 {columns.map(o => (
-                  <label key={o.id} className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                    <input type="radio" name={name} value={o.id} required={q.required} defaultChecked={mineHere.some(a => a.optionId === o.id)} className="mt-0.5 h-4 w-4 shrink-0" />
-                    <span className="text-sm">{o.label}</span>
-                  </label>
+                  <div key={o.id}>
+                    <label className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                      <input id={`${name}_${o.id}`} type="radio" name={name} value={o.id} required={q.required} defaultChecked={mineHere.some(a => a.optionId === o.id)} className="mt-0.5 h-4 w-4 shrink-0" />
+                      <span className="text-sm">{o.label}</span>
+                    </label>
+                    {o.allowText && (
+                      <OtherText
+                        name={otherTextField(q.id, o.id)} targetId={`${name}_${o.id}`} label={t.otherLabel(o.label)} placeholder={t.otherPlaceholder}
+                        defaultValue={mineHere.find(a => a.optionId === o.id)?.text ?? ''}
+                      />
+                    )}
+                  </div>
                 ))}
               </div>
             )}
 
             {q.kind === 'MULTI' && (
-              <MultiChoice name={name} options={columns} required={q.required} max={q.maxChoices} initial={mineHere.flatMap(a => (a.optionId ? [a.optionId] : []))} />
+              <MultiChoice
+                name={name} options={columns} required={q.required} max={q.maxChoices} initial={mineHere.flatMap(a => (a.optionId ? [a.optionId] : []))}
+                texts={Object.fromEntries(mineHere.flatMap(a => (a.optionId && a.text ? [[a.optionId, a.text]] : [])))} otherFields={Object.fromEntries(columns.filter(o => o.allowText).map(o => [o.id, otherTextField(q.id, o.id)]))}
+                lang={lang}
+              />
             )}
 
             {q.kind === 'TEXT' && (q.multiline
@@ -146,7 +157,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
 
             {isGrid(q.kind) && (
               <GridInput
-                questionId={q.id} rows={rows} columns={columns} multiple={q.kind === 'GRID_MULTI'} required={q.required} markRows={rowsMarked}
+                questionId={q.id} rows={rows} columns={columns} multiple={q.kind === 'GRID_MULTI'} required={q.required} markRows={rowsMarked} lang={lang}
                 initial={mineHere.flatMap(a => (a.rowId && a.optionId ? [`${a.rowId}:${a.optionId}`] : []))}
               />
             )}
@@ -165,11 +176,11 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
       })}
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
-          {survey.questions.some(q => q.required) && <><span className="text-red-700 dark:text-red-300">*</span> Pflichtfrage · </>}
-          {survey.identity === 'ANONYMOUS' ? 'Anonym, ohne Konto.' : 'Ohne Konto, eine Antwort pro Gerät.'}{' '}
-          <a href="/datenschutz" target="_blank" rel="noopener" className="underline">Datenschutz</a>
+          {survey.questions.some(q => q.required) && <><span className="text-red-700 dark:text-red-300">*</span> {t.required} · </>}
+          {survey.identity === 'ANONYMOUS' ? t.anonymous : t.perDevice}{' '}
+          <a href="/datenschutz" target="_blank" rel="noopener" className="underline">{t.privacy}</a>
         </p>
-        <SubmitButton inline>{mine ? 'Änderungen speichern' : 'Absenden'}</SubmitButton>
+        <SubmitButton inline>{mine ? t.saveChanges : t.submit}</SubmitButton>
       </div>
     </form>
   )
@@ -178,8 +189,8 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
     <Card className="space-y-5">
       {header}
       {notice && <Notice tone={notice.tone}>{notice.text}</Notice>}
-      {mine && <Notice tone="info">Du hast schon geantwortet. Du kannst deine Antworten ändern, solange der Fragebogen läuft.</Notice>}
-      {embed && survey.identity === 'COOKIE' ? <CookieGate href={`/fragebogen/${survey.id}`}>{form}</CookieGate> : form}
+      {mine && <Notice tone="info">{t.alreadyAnswered}</Notice>}
+      {embed && survey.identity === 'COOKIE' ? <CookieGate href={withLang(`/fragebogen/${survey.id}`, lang)} lang={lang}>{form}</CookieGate> : form}
     </Card>
   )
 }

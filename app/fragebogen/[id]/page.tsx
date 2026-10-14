@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation'
 import { getCurrentUser } from '../../lib/auth'
 import { getSurveyLevel } from '../../lib/survey'
 import { ButtonLink } from '../../ui/kit'
+import { surveyLang } from '../../lib/survey-i18n'
 import SurveyView, { loadSurveyForView, type SurveySearch } from './survey-view'
 
 export const dynamic = 'force-dynamic'
@@ -19,6 +20,7 @@ export default async function SurveyPage({ params, searchParams }: { params: Pro
   // Nur ein Komfort-Link für Verwaltende - die Verwaltungsseite prüft selbst.
   const user = await getCurrentUser()
   const manageable = !!user && !!(await getSurveyLevel(user, survey))
+  const search = await searchParams
 
   return (
     <main className="px-4 py-8">
@@ -28,7 +30,7 @@ export default async function SurveyPage({ params, searchParams }: { params: Pro
             <ButtonLink href={`/fragebogen/${survey.id}/verwalten`} size="sm">Verwalten</ButtonLink>
           </div>
         )}
-        <SurveyView survey={survey} search={await searchParams} embed={false} />
+        <SurveyView survey={survey} search={search} embed={false} lang={surveyLang(search.lang)} />
       </div>
     </main>
   )

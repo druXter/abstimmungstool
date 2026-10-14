@@ -102,6 +102,7 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
               required: q.required,
               hideTitle: q.hideTitle,
               options: q.options.filter(o => !o.isRow).length >= 2 ? q.options.filter(o => !o.isRow).map(o => o.label) : ['', ''],
+              optionsText: q.options.filter(o => !o.isRow).length >= 2 ? q.options.filter(o => !o.isRow).map(o => o.allowText) : [false, false],
               rows: q.options.some(o => o.isRow) ? q.options.filter(o => o.isRow).map(o => o.label) : ['', ''],
               rowsRight: q.options.some(o => o.isRow) ? q.options.filter(o => o.isRow).map(o => o.labelRight ?? '') : ['', ''],
               maxChoices: q.maxChoices ?? 0,

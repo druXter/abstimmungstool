@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useId, useRef, useState, type CSSProperties } from 'react'
+import { surveyTexts, type SurveyLang } from '../../lib/survey-i18n'
 
 type Item = { id: string; label: string }
 
@@ -13,7 +14,7 @@ type Item = { id: string; label: string }
  * Pflicht: bei einer Antwort pro Zeile über die eingebaute Formularprüfung, bei mehreren im Browser (mindestens ein
  * Kreuz je Zeile); parseSurveyAnswers prüft beides noch einmal.
  */
-export default function GridInput({ questionId, rows, columns, multiple, required, markRows = false, initial }: {
+export default function GridInput({ questionId, rows, columns, multiple, required, markRows = false, initial, lang = 'de' }: {
   questionId: string
   rows: Item[]
   columns: Item[]
@@ -23,7 +24,9 @@ export default function GridInput({ questionId, rows, columns, multiple, require
   markRows?: boolean
   /** Bisherige Antworten als "<Zeile>:<Spalte>". */
   initial: string[]
+  lang?: SurveyLang
 }) {
+  const message = surveyTexts(lang).chooseInRow
   const id = useId()
   const [checked, setChecked] = useState(() => new Set(initial))
   const firstInRow = useRef(new Map<string, HTMLInputElement>())
@@ -32,9 +35,9 @@ export default function GridInput({ questionId, rows, columns, multiple, require
     if (!multiple) return
     for (const row of rows) {
       const empty = !columns.some(c => checked.has(`${row.id}:${c.id}`))
-      firstInRow.current.get(row.id)?.setCustomValidity(required && empty ? 'Bitte kreuze in dieser Zeile mindestens eine Antwort an.' : '')
+      firstInRow.current.get(row.id)?.setCustomValidity(required && empty ? message : '')
     }
-  }, [multiple, required, rows, columns, checked])
+  }, [multiple, required, rows, columns, checked, message])
 
   const template = { '--grid-cols': columns.length } as CSSProperties
   const columnsClass = 'sm:grid-cols-[minmax(8rem,2fr)_repeat(var(--grid-cols),minmax(3.75rem,1fr))]'

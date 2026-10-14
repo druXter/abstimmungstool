@@ -90,5 +90,4 @@ Freitext als Liste. Ergebnisse sieht nur die Verwaltung.
 ## Später
 
 * Weitere Identitäten (L8 Teil 2): rsvp-app schickt nach dem Event den Link an Eingecheckte, Identität `RSVP`.
-* Englische Oberfläche der eingebetteten Seite (Campus-App ist zweisprachig), z. B. per `?lang=en`.
 * Weitere Fragearten (Dropdown, Datum), bedingte Fragen, Fragen nachträglich ändern trotz Antworten.

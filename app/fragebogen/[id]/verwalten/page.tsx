@@ -160,13 +160,22 @@ export default async function ManageSurveyPage({
                     return (
                       <li key={o.id}>
                         <div className="flex items-center gap-2 text-sm">
-                          <span className="grow">{o.label}</span>
+                          <span className="grow">{o.label}{o.allowText && <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">(mit Textfeld)</span>}</span>
                           {responses.length > 0 && <span className="tabular-nums text-gray-500 dark:text-gray-400">{count} · {pct}%</span>}
                         </div>
                         {responses.length > 0 && (
                           <div className="mt-1 h-1.5 overflow-hidden rounded bg-gray-100 dark:bg-gray-700">
                             <div className="h-1.5 bg-indigo-500" style={{ width: `${pct}%` }} />
                           </div>
+                        )}
+                        {/* Eingetippte Texte zu dieser Antwort ("Sonstiges: ___"), neueste zuerst. */}
+                        {(q.optionTexts.get(o.id)?.length ?? 0) > 0 && (
+                          <details className="mt-1 text-sm" data-testid="option-texts">
+                            <summary className="cursor-pointer text-xs text-gray-600 dark:text-gray-400">{q.optionTexts.get(o.id)!.length} eingetippte Antwort{q.optionTexts.get(o.id)!.length === 1 ? '' : 'en'}</summary>
+                            <ul className="mt-1 max-h-60 divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+                              {q.optionTexts.get(o.id)!.map((text, j) => <li key={j} className="whitespace-pre-line px-3 py-1.5">{text}</li>)}
+                            </ul>
+                          </details>
                         )}
                       </li>
                     )

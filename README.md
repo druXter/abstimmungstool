@@ -621,6 +621,12 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   **"+ UEQ-S einfügen"** im Editor legt eine Anleitung (`INFO`) und die acht Gegensatzpaare des UEQ-S als zwei
   Skalen-Raster 1-7 mit ausgeblendetem Titel an (pragmatische und hedonische Qualität) - für Teilnehmende ein Block,
   in der Auswertung stehen beide Skalenwerte zentriert wie in der offiziellen UEQ-Auswertung.
+  **Antwort mit Textfeld** (`SurveyOption.allowText`, Einfach-/Mehrfachauswahl, z.B. "Sonstiges: ___"): unter der Antwort
+  ein Eingabefeld (`q_<Frage>_text_<Option>`), Tippen kreuzt die Antwort an. Der Text landet in `SurveyAnswer.text`,
+  aber nur bei gewählter Antwort; die Auswertung listet die Texte unter der Antwort, das CSV als "Sonstiges: Text".
+  **Englisch** (`?lang=en`, z.B. aus der zweisprachigen Campus-App): feste Texte der Ausfüllseite (Knöpfe, Hinweise,
+  Danke, Prüfmeldungen) auf Englisch (`app/lib/survey-i18n.ts`), die Sprache bleibt beim Absenden erhalten. Fragen,
+  Beschreibung und Danke-Text bleiben, wie die Verwaltung sie geschrieben hat.
   **Ausweich-Antwort** (`optOutLabel`, nur Skalen-Raster, z.B. "nicht genutzt"): je Zeile ein gestrichelter Knopf
   neben der Skala (mobil darunter über die ganze Breite, ab `sm` als letzte Spalte), Formularwert `x`, gespeichert als
   `SurveyAnswer.optOut` ohne `number`. Zählt als beantwortet (auch bei Pflicht), nie im Mittelwert; die Auswertung

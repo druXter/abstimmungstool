@@ -705,6 +705,8 @@ model SurveyOption {
   position   Int
   label      String
   isRow      Boolean        @default(false)
+  // Nur Antwortmöglichkeiten von SINGLE/MULTI: mit Textfeld (z.B. "Sonstiges: ___"), der Text landet in SurveyAnswer.text.
+  allowText  Boolean        @default(false)
   // Nur Zeilen eines SCALE_GRID: rechter Begriff eines Gegensatzpaars (label ist dann der linke), null = Aussage.
   labelRight String?
   answers    SurveyAnswer[] @relation("SurveyAnswerOption")

@@ -110,6 +110,11 @@ export function answerField(questionId: string, rowId?: string): string {
   return rowId ? `q_${questionId}_${rowId}` : `q_${questionId}`
 }
 
+/** Textfeld einer Antwortmöglichkeit mit allowText ("Sonstiges: ___"). */
+export function otherTextField(questionId: string, optionId: string): string {
+  return `q_${questionId}_text_${optionId}`
+}
+
 /** Teilt die Optionen einer Frage in Spalten bzw. Antwortmöglichkeiten (columns) und Rasterzeilen (rows). */
 export function splitOptions<T extends { isRow: boolean }>(options: T[]): { columns: T[]; rows: T[] } {
   return { columns: options.filter(o => !o.isRow), rows: options.filter(o => o.isRow) }
@@ -124,7 +129,7 @@ export type QuestionForForm = {
   scaleMin: number | null
   scaleMax: number | null
   optOutLabel?: string | null
-  options: { id: string; isRow: boolean }[]
+  options: { id: string; isRow: boolean; allowText?: boolean }[]
 }
 
 export function scaleRange(q: Pick<QuestionForForm, 'scaleMin' | 'scaleMax'>): { min: number; max: number } {
@@ -178,11 +183,16 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
         for (const optionId of chosen) given.push({ questionId: q.id, optionId, rowId: row.id, text: null, number: null })
       }
     } else if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
-      const ids = new Set(q.options.filter(o => !o.isRow).map(o => o.id))
+      const columns = q.options.filter(o => !o.isRow)
+      const ids = new Set(columns.map(o => o.id))
       const chosen = [...new Set(formData.getAll(name).filter((v): v is string => typeof v === 'string' && ids.has(v)))]
       if (q.kind === 'SINGLE' && chosen.length > 1) return { ok: false, error: 'auswahl' }
       if (q.kind === 'MULTI' && q.maxChoices !== null && chosen.length > q.maxChoices) return { ok: false, error: 'auswahl' }
-      for (const optionId of chosen) given.push({ questionId: q.id, optionId, text: null, number: null })
+      // Text nur zu einer GEWÄHLTEN Option mit Textfeld - ein Text ohne Kreuz zählt nicht (der Browser kreuzt beim Tippen selbst an).
+      for (const optionId of chosen) {
+        const withText = columns.find(o => o.id === optionId)?.allowText
+        given.push({ questionId: q.id, optionId, text: withText ? formString(formData, otherTextField(q.id, optionId), MAX_SHORT_TEXT) || null : null, number: null })
+      }
     } else if (q.kind === 'TEXT') {
       const text = formString(formData, name, q.multiline ? MAX_LONG_TEXT : MAX_SHORT_TEXT)
       if (text) given.push({ questionId: q.id, optionId: null, text, number: null })
@@ -236,6 +246,11 @@ export async function loadSurveyResults(surveyId: string) {
     // counts: je Option bzw. beim Raster je Feld (gridKey); rowAnswered: Antwortende je Rasterzeile.
     const counts = new Map<string, number>()
     const rowAnswered = new Map<string, number>()
+    // Texte zu Antwortmöglichkeiten mit Textfeld ("Sonstiges: ___"), neueste zuerst.
+    const optionTexts = new Map<string, string[]>()
+    for (const a of [...answers].reverse()) {
+      if (a.optionId && !a.rowId && a.text) optionTexts.set(a.optionId, [...(optionTexts.get(a.optionId) ?? []), a.text])
+    }
     for (const a of answers) {
       if (!a.optionId) continue
       const key = a.rowId ? gridKey(a.rowId, a.optionId) : a.optionId
@@ -264,6 +279,7 @@ export async function loadSurveyResults(surveyId: string) {
       answered,
       counts,
       rowAnswered,
+      optionTexts,
       rowScale,
       rowOptOut,
       scale: q.kind === 'SCALE' || q.kind === 'SCALE_GRID' ? scaleStats(numbers(answers), min, max) : null,
@@ -313,7 +329,10 @@ export function describeAnswer(q: SurveyResults['questions'][number], answers: A
     }).join('; ')
   }
   if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
-    return q.columns.filter(o => mine.some(a => a.optionId === o.id)).map(o => o.label).join(', ')
+    return q.columns.flatMap(o => {
+      const answer = mine.find(a => a.optionId === o.id)
+      return answer ? [answer.text ? `${o.label}: ${answer.text}` : o.label] : []
+    }).join(', ')
   }
   if (q.kind === 'TEXT') return mine[0]?.text ?? ''
   return mine[0]?.number !== undefined && mine[0]?.number !== null ? String(mine[0].number) : ''

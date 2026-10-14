@@ -70,10 +70,10 @@ test('Fragebogen anlegen: alle Fragearten, Pflicht, Skala, Höchstzahl - Übersi
   await page.getByRole('button', { name: '+ Weitere Frage' }).click()
   await page.getByLabel('Frage 2', { exact: true }).fill('Was hast du besucht?')
   await page.getByLabel('Art').nth(1).selectOption('MULTI')
-  await page.getByLabel('Frage 2, Option 1').fill('Rallye')
-  await page.getByLabel('Frage 2, Option 2').fill('Kneipentour')
+  await page.getByLabel('Frage 2, Option 1', { exact: true }).fill('Rallye')
+  await page.getByLabel('Frage 2, Option 2', { exact: true }).fill('Kneipentour')
   await page.getByRole('button', { name: '+ Option hinzufügen' }).click()
-  await page.getByLabel('Frage 2, Option 3').fill('Stadtführung')
+  await page.getByLabel('Frage 2, Option 3', { exact: true }).fill('Stadtführung')
   await page.getByLabel('Höchstens').selectOption('2')
 
   await page.getByRole('button', { name: '+ Weitere Frage' }).click()
@@ -840,4 +840,95 @@ test('Ausweich-Antwort am Desktop: eigene Spalte rechts neben der Skala, ohne JS
   await guest.getByRole('button', { name: 'Absenden' }).click()
   await expect(guest.getByText('Danke!')).toBeVisible()
   expect(await prisma.surveyAnswer.count({ where: { response: { surveyId: survey.id }, optOut: true, number: null } })).toBe(1)
+})
+
+/** Einfach- und Mehrfachauswahl mit "Sonstiges" samt Textfeld. */
+async function createOtherSurvey(ownerId: string) {
+  const options = (labels: string[]) => ({ create: labels.map((label, position) => ({ label, position, allowText: label === 'Sonstiges' })) })
+  return prisma.survey.create({
+    data: {
+      title: `Sonstiges ${unique()}`, ownerId,
+      questions: {
+        create: [
+          { position: 0, kind: 'SINGLE', text: 'Was trifft auf dich zu?', required: true, options: options(['Bachelor', 'Master', 'Sonstiges']) },
+          { position: 1, kind: 'MULTI', text: 'Wie hast du von der App erfahren?', options: options(['Plakat', 'Freunde', 'Sonstiges']) }
+        ]
+      }
+    }
+  })
+}
+
+test('Sonstiges mit Textfeld: im Editor einschalten, Tippen kreuzt an, Texte in Auswertung und CSV', async ({ page, browser }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/fragebogen/neu')
+  await page.getByLabel('Titel', { exact: true }).fill('Mit Sonstiges')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Was trifft zu?')
+  await page.getByLabel('Frage 1, Option 1', { exact: true }).fill('Bachelor')
+  await page.getByLabel('Frage 1, Option 2', { exact: true }).fill('Sonstiges')
+  await page.getByLabel('Frage 1, Option 2 mit Textfeld').check()
+  await page.getByRole('button', { name: 'Fragebogen anlegen' }).click()
+  await page.waitForURL(/\/fragebogen\/[^/]+\/verwalten\?angelegt=1/)
+  const created = new URL(page.url()).pathname.split('/')[2]
+  const options = await prisma.surveyOption.findMany({ where: { question: { surveyId: created } }, orderBy: { position: 'asc' } })
+  expect(options.map(o => [o.label, o.allowText])).toEqual([['Bachelor', false], ['Sonstiges', true]])
+  await page.getByRole('link', { name: 'Bearbeiten' }).click()
+  await expect(page.getByLabel('Frage 1, Option 2 mit Textfeld')).toBeChecked()
+
+  const survey = await createOtherSurvey(owner.id)
+  const guest = await visitor(browser)
+  await guest.goto(`/fragebogen/${survey.id}`)
+  // Tippen ins Textfeld kreuzt die Antwort an - bei Einfach- wie Mehrfachauswahl.
+  await guest.getByLabel('Sonstiges: bitte angeben').first().fill('Gasthörer')
+  await expect(guest.getByRole('radio', { name: 'Sonstiges' })).toBeChecked()
+  await guest.getByRole('checkbox', { name: 'Plakat' }).check()
+  await guest.getByLabel('Sonstiges: bitte angeben').nth(1).fill('Instagram')
+  await expect(guest.getByRole('checkbox', { name: 'Sonstiges' })).toBeChecked()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Danke!')).toBeVisible()
+
+  // Ein Text ohne Kreuz zählt nicht (ohne JavaScript möglich).
+  const second = await visitor(browser)
+  await second.goto(`/fragebogen/${survey.id}`)
+  await second.getByRole('radio', { name: 'Master' }).check()
+  await second.evaluate(() => {
+    const field = document.querySelectorAll<HTMLInputElement>('input[name*="_text_"]')[1]
+    field.value = 'soll nicht zählen'
+  })
+  await second.getByRole('button', { name: 'Absenden' }).click()
+  await expect(second.getByText('Danke!')).toBeVisible()
+
+  const answers = await prisma.surveyAnswer.findMany({ where: { response: { surveyId: survey.id } }, include: { option: true } })
+  expect(answers.map(a => `${a.option?.label}${a.text ? `=${a.text}` : ''}`).sort()).toEqual(['Master', 'Plakat', 'Sonstiges=Gasthörer', 'Sonstiges=Instagram'])
+
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  const texts = page.getByTestId('option-texts').first()
+  await texts.locator('summary').click()
+  await expect(texts).toContainText('1 eingetippte Antwort')
+  await expect(texts).toContainText('Gasthörer')
+  const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
+  expect(csv).toContain('"Sonstiges: Gasthörer";"Plakat, Sonstiges: Instagram"')
+})
+
+test('Englisch (?lang=en): feste Texte, Hinweise und Danke auf Englisch, die Sprache bleibt nach dem Absenden', async ({ browser }) => {
+  const owner = await createAccount()
+  const survey = await createOtherSurvey(owner.id)
+  const guest = await visitor(browser)
+  await guest.goto(`/fragebogen/${survey.id}/einbetten?lang=en`)
+  await expect(guest.getByRole('button', { name: 'Submit' })).toBeVisible()
+  await expect(guest.getByText('Anonymous, no account needed.')).toBeVisible()
+  await expect(guest.getByText('You can choose more than one answer.')).toBeVisible()
+  await expect(guest.getByLabel('Sonstiges: please specify').first()).toBeVisible()
+  expect(await guest.locator('[data-embed]').getAttribute('lang')).toBe('en')
+
+  await guest.evaluate(() => document.querySelectorAll('form').forEach(f => f.setAttribute('novalidate', '')))
+  await guest.getByRole('button', { name: 'Submit' }).click()
+  await expect(guest.getByText('Please answer all required questions - your answers have not been saved.')).toBeVisible()
+  expect(new URL(guest.url()).searchParams.get('lang')).toBe('en')
+
+  await guest.getByRole('radio', { name: 'Bachelor' }).check()
+  await guest.getByRole('button', { name: 'Submit' }).click()
+  await expect(guest.getByText('Thank you!')).toBeVisible()
+  await expect(guest.getByText('Your answers have been received.')).toBeVisible()
+  expect(new URL(guest.url()).pathname).toBe(`/fragebogen/${survey.id}/einbetten`)
 })

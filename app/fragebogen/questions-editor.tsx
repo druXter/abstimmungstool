@@ -13,6 +13,8 @@ export type EditorQuestion = {
   hideTitle: boolean
   /** Auswahl: Antwortmöglichkeiten, Raster: Spalten. */
   options: string[]
+  /** Nur Auswahl: je Antwortmöglichkeit ein Textfeld ("Sonstiges: ___"), gleiche Länge wie options. */
+  optionsText: boolean[]
   /** Nur Raster und Skalen-Raster: Zeilen (Aussagen bzw. linker Begriff eines Gegensatzpaars). */
   rows: string[]
   /** Nur Skalen-Raster: rechter Begriff je Zeile, leer = Aussage statt Gegensatzpaar. */
@@ -71,7 +73,7 @@ function ueqS(): EditorQuestion[] {
 const isGridKind = (kind: SurveyQuestionKind) => kind === 'GRID_SINGLE' || kind === 'GRID_MULTI'
 
 function emptyQuestion(): EditorQuestion {
-  return { text: '', hint: '', kind: 'SINGLE', required: false, hideTitle: false, options: ['', ''], rows: ['', ''], rowsRight: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '', optOutLabel: '' }
+  return { text: '', hint: '', kind: 'SINGLE', required: false, hideTitle: false, options: ['', ''], optionsText: [false, false], rows: ['', ''], rowsRight: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '', optOutLabel: '' }
 }
 
 const field = 'rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900'
@@ -192,10 +194,18 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         placeholder={`Option ${j + 1}`}
                         className={`grow min-w-0 ${field}`}
                       />
+                      <label className="flex shrink-0 cursor-pointer items-center gap-1 text-xs text-gray-600 dark:text-gray-400" title="Teilnehmende können bei dieser Antwort etwas eintippen, z.B. bei Sonstiges">
+                        <input
+                          type="checkbox" name={`s${i}_t${j}`} checked={q.optionsText[j] ?? false} aria-label={`Frage ${i + 1}, Option ${j + 1} mit Textfeld`}
+                          onChange={e => update(i, prev => ({ optionsText: prev.options.map((_, k) => (k === j ? e.target.checked : prev.optionsText[k] ?? false)) }))}
+                          className="h-4 w-4"
+                        />
+                        <span className="hidden sm:inline">Textfeld</span>
+                      </label>
                       {q.options.length > MIN_OPTIONS && (
                         <button
                           type="button" aria-label={`Option ${j + 1} entfernen`}
-                          onClick={() => update(i, prev => ({ options: prev.options.filter((_, k) => k !== j) }))}
+                          onClick={() => update(i, prev => ({ options: prev.options.filter((_, k) => k !== j), optionsText: prev.options.map((_, k) => prev.optionsText[k] ?? false).filter((_, k) => k !== j) }))}
                           className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
@@ -204,9 +214,15 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                     </li>
                   ))}
                 </ul>
+                {q.optionsText.some(Boolean) && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    Mit Textfeld: Teilnehmende können bei dieser Antwort etwas eintippen (z.B. bei &quot;Sonstiges&quot;). Die Texte stehen in der
+                    Auswertung unter der Antwort und im CSV hinter ihr.
+                  </p>
+                )}
                 <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                   {q.options.length < MAX_OPTIONS && (
-                    <button type="button" onClick={() => update(i, prev => ({ options: [...prev.options, ''] }))} className={linkButton}>
+                    <button type="button" onClick={() => update(i, prev => ({ options: [...prev.options, ''], optionsText: [...prev.options.map((_, k) => prev.optionsText[k] ?? false), false] }))} className={linkButton}>
                       + Option hinzufügen
                     </button>
                   )}
