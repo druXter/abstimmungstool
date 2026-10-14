@@ -44,8 +44,11 @@ const TEXTS = {
       pflicht: 'Bitte beantworte alle Pflichtfragen - deine Antworten wurden nicht gespeichert.',
       auswahl: 'Bei einer Frage passt die Auswahl nicht (z.B. zu viele Kreuze) - deine Antworten wurden nicht gespeichert.',
       leer: 'Bitte beantworte mindestens eine Frage.',
-      gedrosselt: 'Von deinem Netzwerk aus kamen in der letzten Stunde sehr viele Antworten. Bitte versuche es später noch einmal.'
-    } as Record<string, string>
+      gedrosselt: 'Von deinem Netzwerk aus kamen in der letzten Stunde sehr viele Antworten. Bitte versuche es später noch einmal.',
+      ungueltig: 'Das Formular ist abgelaufen oder wurde schon abgeschickt. Bitte fülle es noch einmal aus - deine Antworten wurden nicht gespeichert.',
+      'zu-schnell': 'Das ging sehr schnell. Bitte nimm dir einen Moment für die Fragen und schicke das Formular dann noch einmal ab.'
+    } as Record<string, string>,
+    honeypot: 'Dieses Feld bitte leer lassen'
   },
   en: {
     submit: 'Submit',
@@ -72,8 +75,11 @@ const TEXTS = {
       pflicht: 'Please answer all required questions - your answers have not been saved.',
       auswahl: 'The selection for one question is not valid (e.g. too many ticks) - your answers have not been saved.',
       leer: 'Please answer at least one question.',
-      gedrosselt: 'There have been a great many responses from your network in the last hour. Please try again later.'
-    } as Record<string, string>
+      gedrosselt: 'There have been a great many responses from your network in the last hour. Please try again later.',
+      ungueltig: 'The form has expired or has already been submitted. Please fill it in again - your answers have not been saved.',
+      'zu-schnell': 'That was very quick. Please take a moment to answer the questions and then submit the form again.'
+    } as Record<string, string>,
+    honeypot: 'Please leave this field empty'
   }
 } satisfies Record<SurveyLang, unknown>
 

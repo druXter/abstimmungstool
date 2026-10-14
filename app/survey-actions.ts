@@ -10,6 +10,7 @@ import { formString, normalizeEmail } from './lib/form'
 import { clientIp, reserve, surveyRule } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
 import { surveyLang, withLang } from './lib/survey-i18n'
+import { checkFormToken, consumeFormToken, HONEYPOT_FIELD } from './lib/survey-token'
 import {
   DEFAULT_SCALE, getSurveyLevel, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
@@ -214,7 +215,8 @@ export async function updateSurvey(formData: FormData) {
 }
 
 /**
- * Eine Abgabe (Seite /fragebogen/<id> oder eingebettet /fragebogen/<id>/einbetten, Feld `embed`).
+ * Eine Abgabe (Seite /fragebogen/<id> oder eingebettet /fragebogen/<id>/einbetten, Feld `embed`). Braucht ein gültiges
+ * Einmal-Token aus der Seite (formToken, app/lib/survey-token.ts); ein ausgefülltes Lockfeld wird still verworfen.
  * ANONYMOUS: immer eine neue Antwort, jede gedrosselt. COOKIE: eine Antwort pro Gerät
  * (voter_token), eine erneute Abgabe ersetzt die bisherige; gedrosselt wird nur die erste.
  */
@@ -231,9 +233,21 @@ export async function submitSurvey(formData: FormData): Promise<void> {
   if (!survey) return
   if (!isSurveyOpen(survey)) redirect(to('hinweis=geschlossen'))
 
+  // Schutz vor Skripten (app/lib/survey-token.ts): gültiges, frisches Einmal-Token aus der Seite, Mindest-Ausfüllzeit.
+  const token = checkFormToken(survey.id, formData.get('formToken'))
+  if (!token.ok) redirect(to(`hinweis=${token.reason}`))
+  // Lockfeld ausgefüllt: ein Bot. Er bekommt dieselbe Antwort wie ein Mensch, gespeichert wird nichts.
+  if (formString(formData, HONEYPOT_FIELD, 200)) {
+    await consumeFormToken(token.nonce)
+    redirect(to('danke=1'))
+  }
+
   const parsed = parseSurveyAnswers(survey.questions, formData)
   if (!parsed.ok) redirect(to(`hinweis=${parsed.error}`))
   if (parsed.rows.length === 0) redirect(to('hinweis=leer'))
+
+  // Erst jetzt verbrauchen: Eine abgelehnte Abgabe (Pflicht fehlt) lädt die Seite ohnehin mit neuem Token neu.
+  if (!(await consumeFormToken(token.nonce))) redirect(to('hinweis=ungueltig'))
 
   // Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt - sonst teilten sich alle einen Zähler.
   const ip = await clientIp()
@@ -285,6 +299,18 @@ export async function clearSurveyResponses(formData: FormData) {
   if (!survey) return
   await prisma.surveyResponse.deleteMany({ where: { surveyId: survey.id } })
   redirect(manageUrl(survey.id, 'geleert=1'))
+}
+
+/**
+ * Einzelne Abgaben löschen (z.B. nach einem Spam-Angriff, auch alle identischen auf einmal). Nur Owner und Admins.
+ * Es werden nur Abgaben DIESES Fragebogens gelöscht, auch wenn das Formular andere IDs mitschickt.
+ */
+export async function deleteSurveyResponses(formData: FormData) {
+  const survey = await manageableSurvey(formString(formData, 'surveyId', 50), 'owner')
+  if (!survey) return
+  const ids = formData.getAll('responseId').filter((v): v is string => typeof v === 'string' && v.length <= 50).slice(0, 5000)
+  const { count } = await prisma.surveyResponse.deleteMany({ where: { surveyId: survey.id, id: { in: ids } } })
+  redirect(manageUrl(survey.id, `entfernt=${count}#antworten`))
 }
 
 export async function deleteSurvey(formData: FormData) {

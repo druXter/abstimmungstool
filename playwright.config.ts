@@ -71,6 +71,9 @@ const SERVER_ENV: Record<string, string> = {
   CRON_SECRET: TEST_CRON_SECRET,
   // Eingebettete Fragebögen (tests/e2e/survey.spec.ts): EMBED_HOST darf einbetten, die ungültigen Einträge
   // müssen wegfallen, ohne die CSP zu verändern.
+  // Fragebögen: keine Mindest-Ausfüllzeit (die Tests füllen in Millisekunden aus), fester Schlüssel für die Tokens.
+  SURVEY_MIN_FILL_MS: '0',
+  SURVEY_FORM_SECRET: 'nur-fuer-e2e-tests-fragebogen-token-schluessel',
   EMBED_ALLOWED_ORIGINS: `${EMBED_HOST}, ${SAME_SITE_HOST} https://*.ramonroeser.de javascript:alert(1) https://x.test;script-src *`,
   TZ: 'Europe/Berlin'
 }

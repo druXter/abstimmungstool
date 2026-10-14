@@ -99,7 +99,9 @@ export default function DatenschutzPage() {
             &quot;einmal pro Gerät&quot;, merkt sich dein Browser die zufällige Kennung <code>voter_token</code> (wie
             oben beim Abstimmen), damit du deine Antworten später ändern kannst. Die Antworten sieht nur, wer den
             Fragebogen verwaltet (auch als CSV-Export), einschließlich der Konten, mit denen er geteilt ist. Schreib in
-            Freitextfelder daher nichts, woran man dich erkennen soll, wenn du anonym bleiben möchtest.
+            Freitextfelder daher nichts, woran man dich erkennen soll, wenn du anonym bleiben möchtest. Zum Schutz vor
+            automatisierten Massen-Abgaben enthält das Formular eine zufällige Einmal-Kennung; nach dem Absenden merken
+            wir uns nur deren Hash, damit sie nicht ein zweites Mal verwendet werden kann (höchstens 24 Stunden).
           </p>
           <p className="mt-2">
             <strong>Eingebettet in anderen Apps:</strong> Ein Fragebogen kann als eingebetteter Rahmen (iFrame) in einer
@@ -223,7 +225,7 @@ export default function DatenschutzPage() {
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
             Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes, erste Stimmabgaben in
             offenen Abstimmungen, eingegebene PINs und Beitritte bei Live-Runden sowie abgegebene Fragebögen. Dazu wird
-            deine <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
+            deine <strong>IP-Adresse</strong> (bei IPv6 nur ihr Netzanteil, das /64-Präfix) ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
             (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
             deiner Stimme wird die IP-Adresse nicht verknüpft. Rechtsgrundlage ist unser

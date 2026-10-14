@@ -318,6 +318,22 @@ export function csvColumns(q: SurveyResults['questions'][number]): { header: str
   return [{ header: q.text, value: answers => describeAnswer(q, answers) }]
 }
 
+/**
+ * Fingerabdruck einer Abgabe: gleiche Antworten = gleicher Wert. Viele identische Abgaben in kurzer Zeit sind ein
+ * Hinweis auf ein Skript (die Verwaltung zeigt sie gruppiert und kann sie gemeinsam löschen).
+ */
+export function responseSignature(answers: AnswerRow[]): string {
+  return answers
+    .map(a => [a.questionId, a.rowId ?? '', a.optionId ?? '', a.number ?? '', a.optOut ? 'x' : '', (a.text ?? '').trim().toLowerCase()].join('\u0001'))
+    .sort()
+    .join('\u0002')
+}
+
+/** Wie viele Abgaben in den letzten `ms` Millisekunden kamen (Hinweis auf Bursts in der Verwaltung). */
+export function countSince(responses: { createdAt: Date }[], ms: number, now = Date.now()): number {
+  return responses.filter(r => r.createdAt.getTime() > now - ms).length
+}
+
 /** Antwort einer Abgabe auf eine Frage als Text (CSV, eine Zelle je Frage). */
 export function describeAnswer(q: SurveyResults['questions'][number], answers: AnswerRow[]): string {
   const mine = answers.filter(a => a.questionId === q.id)

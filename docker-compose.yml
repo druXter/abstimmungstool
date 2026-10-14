@@ -6,7 +6,9 @@ services:
     ports:
       # Port 3006 gewählt, da 3000-3005 auf diesem Server bereits belegt sind
       # (siehe andere Docker-Compose-Services) - bei Bedarf anpassen.
-      - "3006:3000"
+      # Nur auf localhost: Der Cloudflare-Tunnel verbindet sich über 127.0.0.1. Auf allen Schnittstellen wäre die App
+      # am Tunnel vorbei erreichbar - dann ließe sich X-Forwarded-For frei setzen und jede Drosselung umgehen.
+      - "127.0.0.1:3006:3000"
     volumes:
       # Speichert die SQLite-Datenbank sicher außerhalb des Containers, damit
       # Abstimmungen bei Updates nicht verloren gehen.

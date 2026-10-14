@@ -3,10 +3,10 @@ import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
 import {
-  formatDecimal, getSurveyLevel, gridKey, IDENTITY_LABELS, isGrid, isQuestion, isSurveyOpen, KIND_LABELS, loadSurveyResults, questionNumbers, scaleCenter,
+  countSince, csvColumns, formatDecimal, getSurveyLevel, responseSignature, gridKey, IDENTITY_LABELS, isGrid, isQuestion, isSurveyOpen, KIND_LABELS, loadSurveyResults, questionNumbers, scaleCenter,
   scaleRange, scaleRowLabel, type ScaleStats
 } from '../../../lib/survey'
-import { clearSurveyResponses, deleteSurvey, shareSurvey, unshareSurvey } from '../../../survey-actions'
+import { clearSurveyResponses, deleteSurvey, deleteSurveyResponses, shareSurvey, unshareSurvey } from '../../../survey-actions'
 import CopyableField from '../../../ui/copyable-field'
 import ConfirmForm from '../../../ui/confirm-form'
 import Notice from '../../../ui/notice'
@@ -48,10 +48,10 @@ export default async function ManageSurveyPage({
   searchParams
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ angelegt?: string; geleert?: string; fehler?: string; geteilt?: string; teilenFehler?: string }>
+  searchParams: Promise<{ angelegt?: string; geleert?: string; entfernt?: string; fehler?: string; geteilt?: string; teilenFehler?: string }>
 }) {
   const { id } = await params
-  const { angelegt, geleert, fehler, geteilt, teilenFehler } = await searchParams
+  const { angelegt, geleert, entfernt, fehler, geteilt, teilenFehler } = await searchParams
   const survey = await prisma.survey.findUnique({
     where: { id },
     include: {
@@ -84,6 +84,7 @@ export default async function ManageSurveyPage({
       <div className="space-y-6">
         {angelegt === '1' && <Notice tone="success">Fragebogen angelegt. Teile den Link oder bette ihn in eine App ein.</Notice>}
         {geleert === '1' && <Notice tone="success">Alle Antworten gelöscht. Die Fragen lassen sich wieder ändern.</Notice>}
+        {entfernt && /^\d+$/.test(entfernt) && <Notice tone="success">{entfernt === '1' ? '1 Antwort' : `${entfernt} Antworten`} gelöscht.</Notice>}
         {geteilt === '1' && <Notice tone="success">Freigabe hinzugefügt.</Notice>}
         {teilenFehler && Object.hasOwn(SHARE_ERRORS, teilenFehler) && <Notice tone="error">{SHARE_ERRORS[teilenFehler]}</Notice>}
         {fehler === 'beantwortet' && <Notice tone="warning">Es wurde schon geantwortet - die Fragen lassen sich nicht mehr ändern.</Notice>}
@@ -267,6 +268,8 @@ export default async function ManageSurveyPage({
           ))}
         </Card>
 
+        {responses.length > 0 && <ResponsesCard surveyId={id} questions={questions} responses={responses} canDelete={isOwner} />}
+
         {isOwner && (
           <Card className="space-y-3">
             <h2 className="font-semibold">Gemeinsam verwalten</h2>
@@ -387,5 +390,90 @@ function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<
         </table>
       </div>
     </div>
+  )
+}
+
+type Results = Awaited<ReturnType<typeof loadSurveyResults>>
+const SHOWN_RESPONSES = 300
+
+/**
+ * Einzelne Abgaben (neueste zuerst) mit Kurzfassung und Löschen - und darüber Gruppen identischer Abgaben, die ein
+ * Skript verraten (z.B. 40-mal dieselben Antworten in einer Stunde) und sich gemeinsam löschen lassen. Löschen nur
+ * Owner und Admins (deleteSurveyResponses prüft selbst); Konten mit Freigabe sehen die Liste nur.
+ */
+function ResponsesCard({ surveyId, questions, responses, canDelete }: { surveyId: string; questions: Results['questions']; responses: Results['responses']; canDelete: boolean }) {
+  const columns = questions.flatMap(q => csvColumns(q))
+  const summary = (r: Results['responses'][number]) => {
+    const text = columns.map(c => c.value(r.answers)).filter(Boolean).join(' · ')
+    return text.length > 160 ? `${text.slice(0, 159)}…` : text || '(nur leere Antworten)'
+  }
+  const groups = new Map<string, Results['responses']>()
+  for (const r of responses) {
+    const key = responseSignature(r.answers)
+    groups.set(key, [...(groups.get(key) ?? []), r])
+  }
+  const groupOf = (r: Results['responses'][number]) => groups.get(responseSignature(r.answers))!
+  const identical = [...groups.values()].filter(g => g.length > 1).sort((a, b) => b.length - a.length)
+  const newest = [...responses].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+  const lastHour = countSince(responses, 60 * 60 * 1000)
+  const ids = (list: Results['responses']) => list.map(r => <input key={r.id} type="hidden" name="responseId" value={r.id} />)
+
+  return (
+    <Card className="space-y-4">
+      <div id="antworten" className="scroll-mt-20 flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="font-semibold">Einzelne Antworten</h2>
+        <span className="text-xs text-gray-500 dark:text-gray-400">{lastHour} in der letzten Stunde</span>
+      </div>
+      {identical.length > 0 && (
+        <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200" data-testid="identical-groups">
+          <p>
+            Identische Abgaben - bei kurzen Fragebögen normal, viele gleiche in kurzer Zeit deuten aber auf ein Skript hin.
+          </p>
+          <ul className="space-y-2">
+            {identical.slice(0, 10).map(group => (
+              <li key={group[0].id} className="flex flex-wrap items-center justify-between gap-2">
+                <span className="min-w-0">
+                  <strong>{group.length}×</strong> {summary(group[0])}
+                  <span className="block text-xs opacity-80">
+                    {formatShortDate(group.reduce((a, r) => (r.createdAt < a ? r.createdAt : a), group[0].createdAt))} bis {formatShortDate(group.reduce((a, r) => (r.createdAt > a ? r.createdAt : a), group[0].createdAt))}
+                  </span>
+                </span>
+                {canDelete && (
+                  <ConfirmForm action={deleteSurveyResponses} message={`Alle ${group.length} identischen Abgaben löschen?`}>
+                    <input type="hidden" name="surveyId" value={surveyId} />
+                    {ids(group)}
+                    <button type="submit" className={buttonClass('danger', 'sm')}>alle {group.length} löschen</button>
+                  </ConfirmForm>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <details className="text-sm" data-testid="response-list">
+        <summary className="cursor-pointer text-gray-600 dark:text-gray-400">
+          Alle {responses.length} Abgaben ansehen{responses.length > SHOWN_RESPONSES ? ` (die neuesten ${SHOWN_RESPONSES}, alle im CSV)` : ''}
+        </summary>
+        <ul className="mt-2 max-h-[32rem] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+          {newest.slice(0, SHOWN_RESPONSES).map(r => (
+            <li key={r.id} className="flex items-start justify-between gap-3 px-3 py-2">
+              <span className="min-w-0">
+                <span className="block text-xs text-gray-500 dark:text-gray-400">
+                  {formatShortDate(r.createdAt)}{groupOf(r).length > 1 && ` · ${groupOf(r).length}× identisch`}
+                </span>
+                <span className="break-words">{summary(r)}</span>
+              </span>
+              {canDelete && (
+                <ConfirmForm action={deleteSurveyResponses} message="Diese Abgabe löschen?">
+                  <input type="hidden" name="surveyId" value={surveyId} />
+                  {ids([r])}
+                  <button type="submit" className="shrink-0 text-xs font-medium text-red-700 hover:underline dark:text-red-300">löschen</button>
+                </ConfirmForm>
+              )}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </Card>
   )
 }

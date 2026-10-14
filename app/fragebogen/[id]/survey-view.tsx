@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
 import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, otherTextField, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
 import { surveyTexts, withLang, type SurveyLang } from '../../lib/survey-i18n'
+import { HONEYPOT_FIELD, issueFormToken } from '../../lib/survey-token'
 import { submitSurvey } from '../../survey-actions'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
@@ -13,7 +14,7 @@ import { CookieGate, OtherText } from './embed-helpers'
 
 // Rückmeldungen von submitSurvey (?hinweis=...), Texte in app/lib/survey-i18n.ts. Ein unbekannter Wert zeigt nichts
 // an. Kommt eine Abgabe nach dem Ende (?hinweis=geschlossen), zeigt die Seite ohnehin "beendet".
-const NOTICE_TONES: Record<string, 'warning' | 'error'> = { pflicht: 'error', auswahl: 'error', leer: 'error', gedrosselt: 'warning' }
+const NOTICE_TONES: Record<string, 'warning' | 'error'> = { pflicht: 'error', auswahl: 'error', leer: 'error', gedrosselt: 'warning', ungueltig: 'warning', 'zu-schnell': 'warning' }
 
 export type SurveySearch = { hinweis?: string; danke?: string; lang?: string }
 
@@ -86,6 +87,12 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
       <input type="hidden" name="surveyId" value={survey.id} />
       {embed && <input type="hidden" name="embed" value="1" />}
       {lang === 'en' && <input type="hidden" name="lang" value="en" />}
+      {/* Einmal-Token gegen Skripte und ein Lockfeld für Bots (app/lib/survey-token.ts): für Menschen unsichtbar, für
+          Screenreader verborgen und nicht per Tab erreichbar. */}
+      <input type="hidden" name="formToken" value={issueFormToken(survey.id)} />
+      <div aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden">
+        <label>{t.honeypot}<input type="text" name={HONEYPOT_FIELD} tabIndex={-1} autoComplete="off" defaultValue="" /></label>
+      </div>
       {survey.questions.map(q => {
         const name = answerField(q.id)
         const mineHere = given(q.id)

@@ -662,7 +662,25 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   gemeinsam verwalten (`SurveyAccess`: alles außer Antworten löschen, Löschen, Teilen). **Bearbeiten**: Grunddaten,
   Danke-Text und Enddatum jederzeit, Fragen und "wer darf antworten" nur ohne Antworten - nach einem Probedurchlauf
   "Alle Antworten löschen" (nur Owner).
-* **Grenze:** Anonym lässt sich mehrfaches Ausfüllen nicht verhindern, nur bremsen. Oberfläche nur auf Deutsch.
+* **Schutz vor Manipulation** (getestet in `tests/e2e/survey-security.spec.ts`):
+  * **Einmal-Token** im Formular (`app/lib/survey-token.ts`): HMAC über Fragebogen, Zeitpunkt und Nonce
+    (`SURVEY_FORM_SECRET`), höchstens 20 h alt, frühestens `SURVEY_MIN_FILL_MS` (Standard 3 s) nach dem Laden, und nur
+    einmal verwendbar (Nonce als Hash in `LoginThrottle`, 24 h). Ein Skript muss für jede Abgabe die Seite laden und
+    warten, statt ein Formular beliebig oft abzuschicken. Dazu ein unsichtbares Lockfeld (`website`): ausgefüllt sieht
+    es für den Bot nach Erfolg aus, gespeichert wird nichts.
+  * **Drosselung** je IP und Fragebogen (200 pro Stunde), bei IPv6 je /64-Netz (`ipBucket` in `app/lib/throttle.ts`,
+    gilt für alle Drosseln des Tools) - sonst ließe sich mit wechselnden Adressen aus dem eigenen /64 jede Grenze
+    umgehen. Gefälschte vordere `X-Forwarded-For`-Einträge zählen nicht (live geprüft, `TRUST_PROXY_HOPS=1` hinter dem
+    Cloudflare-Tunnel); deshalb lauscht der Container nur auf `127.0.0.1:3006`.
+  * **Größe:** Abgaben an die öffentlichen Fragebogen-Seiten höchstens 512 KB (`proxy.ts`), statt der globalen 16 MB.
+  * **Aufräumen:** Die Übersicht listet einzelne Abgaben, gruppiert identische ("12× identisch", typisch für Skripte)
+    und zeigt die Abgaben der letzten Stunde; Owner können einzelne oder alle identischen löschen.
+  * Eingaben: nur Optionen der jeweiligen Frage, Skalenwerte als ganze Zahl im Bereich, Texte gekürzt, Ausgabe nur
+    als Text (React), CSV mit Schutz vor Formeln (`csvCell`). Alle Verwaltungsaktionen prüfen die Berechtigung am
+    Fragebogen selbst - manipulierte `surveyId`/`responseId` in Formularen bewirken nichts (IDOR-Test).
+* **Grenze:** Anonym lässt sich mehrfaches Ausfüllen nicht verhindern, nur bremsen und im Nachhinein aufräumen: Wer viele
+  IP-Adressen hat (z.B. viele Handys im Mobilfunk), kommt durch. Für verbindliche Ergebnisse persönliche Links oder
+  Identität über rsvp-app nutzen (L8 Teil 2).
 
 ## Ergebnis-Meldung an rsvp-app
 

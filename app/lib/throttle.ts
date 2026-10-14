@@ -53,7 +53,25 @@ export async function clientIp(): Promise<string> {
   const forwarded = (await headers()).get('x-forwarded-for')
   if (!forwarded) return 'unknown'
   const parts = forwarded.split(',').map(p => p.trim()).filter(Boolean)
-  return parts[parts.length - hops] ?? 'unknown'
+  const ip = parts[parts.length - hops]
+  return ip ? ipBucket(ip) : 'unknown'
+}
+
+/**
+ * Wofür gezählt wird: IPv4 einzeln, IPv6 je /64-Netz. Ein Anschluss (Handy, Heimrouter) bekommt ein ganzes /64 und
+ * kann darin beliebig viele Adressen nutzen - je Adresse gezählt, ließe sich jede Drossel mit einem Skript, das die
+ * Adresse wechselt, umgehen. IPv4-Adressen in IPv6-Schreibweise (::ffff:1.2.3.4) zählen als IPv4.
+ */
+export function ipBucket(ip: string): string {
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(ip)
+  if (mapped) return mapped[1]
+  if (!ip.includes(':')) return ip
+  const [head, tail = ''] = ip.toLowerCase().split('%')[0].split('::')
+  const left = head ? head.split(':') : []
+  const right = ip.includes('::') && tail ? tail.split(':') : []
+  const groups = ip.includes('::') ? [...left, ...Array(Math.max(8 - left.length - right.length, 0)).fill('0'), ...right] : left
+  if (groups.length !== 8 || groups.some(g => !/^[0-9a-f]{1,4}$/.test(g))) return ip
+  return `${groups.slice(0, 4).map(g => g.replace(/^0+(?=.)/, '')).join(':')}::/64`
 }
 
 /**

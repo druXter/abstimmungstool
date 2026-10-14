@@ -87,6 +87,24 @@ gibt – sonst passten Antworten nicht mehr zu den Fragen. „Alle Antworten lö
 Auswertung: Auswahl als Anteil der Antwortenden der Frage, Skala als Verteilung mit Durchschnitt und Median,
 Freitext als Liste. Ergebnisse sieht nur die Verwaltung.
 
+## Schutz vor Manipulation (2026-10-14)
+
+Vor dem Einsatz in der Campus-App (viele Informatik-Erstis) geprüft und gehärtet - Details und Tests im README
+("Schutz vor Manipulation"). Anonyme Fragebögen lassen sich nie ganz gegen Mehrfach-Abgaben schützen; Ziel ist, es
+Skripten schwer zu machen und Angriffe sichtbar und aufräumbar zu machen:
+
+| Angriff | Gegenmaßnahme |
+| --- | --- |
+| Formular per Skript tausendfach abschicken | Einmal-Token (signiert, einmal verwendbar, Mindest-Ausfüllzeit), Lockfeld |
+| Drosselung mit wechselnden IPv6-Adressen umgehen | Zählung je /64-Netz |
+| `X-Forwarded-For` fälschen | nur der letzte Eintrag zählt (vom Tunnel gesetzt), Container nur auf localhost |
+| Riesige Anfragen | 512 KB Grenze vor der Verarbeitung |
+| Fremde Options-IDs, Werte außerhalb der Skala, überlange Texte | serverseitig verworfen bzw. gekürzt |
+| XSS, CSV-Injection über Freitexte | Ausgabe nur als Text, Formeln im CSV entschärft |
+| Fremde Fragebögen über manipulierte Formularfelder ändern (IDOR) | Berechtigung je Aktion am Fragebogen selbst |
+| Fragebogen auf fremden Seiten einbetten (Clickjacking) | `frame-ancestors` nur für erlaubte Seiten, Verwaltung nie einbettbar |
+| Trotzdem durchgekommene Spam-Welle | Übersicht: identische Abgaben gruppiert, einzeln oder gruppenweise löschbar |
+
 ## Später
 
 * Weitere Identitäten (L8 Teil 2): rsvp-app schickt nach dem Event den Link an Eingecheckte, Identität `RSVP`.
