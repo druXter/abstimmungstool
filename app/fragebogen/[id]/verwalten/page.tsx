@@ -332,7 +332,8 @@ function MeanMarker({ stats, range }: { stats: ScaleStats; range: { min: number;
 }
 
 /**
- * Auswertung eines Skalen-Rasters: je Zeile Anzahl, Mittelwert, zentrierter Wert und die Lage auf der Skala, darüber
+ * Auswertung eines Skalen-Rasters: je Zeile Anzahl (n = echte Skalenwerte, die Ausweich-Antwort in eigener Spalte),
+ * Mittelwert, zentrierter Wert und die Lage auf der Skala, darüber
  * der Mittelwert über alle Zeilen (beim UEQ-S der Skalenwert, z.B. "pragmatische Qualität").
  */
 function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<typeof loadSurveyResults>>['questions'][number]; answered: boolean }) {
@@ -344,7 +345,7 @@ function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<
         <p className="text-sm text-gray-700 dark:text-gray-300">
           Gesamt: Durchschnitt <strong>{formatDecimal(question.scale.mean)}</strong>
           {odd && <> · zentriert <strong>{centered(question.scale.mean, range)}</strong></>}
-          <span className="text-gray-500 dark:text-gray-400"> (Skala {range.min}–{range.max}{odd ? `, Mitte ${scaleCenter(range)}` : ''})</span>
+          <span className="text-gray-500 dark:text-gray-400"> (Skala {range.min}–{range.max}{odd ? `, Mitte ${scaleCenter(range)}` : ''}{question.optOutLabel ? `; „${question.optOutLabel}“ zählt nicht mit` : ''})</span>
         </p>
       )}
       <div className="overflow-x-auto">
@@ -353,6 +354,7 @@ function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<
             <tr className="text-xs text-gray-500 dark:text-gray-400">
               <th className="py-1.5 pr-3 text-left font-medium">Zeile</th>
               <th className="px-2 py-1.5 text-right font-medium">n</th>
+              {question.optOutLabel && <th className="px-2 py-1.5 text-right font-medium">{question.optOutLabel}</th>}
               <th className="px-2 py-1.5 text-right font-medium">Ø</th>
               {odd && <th className="px-2 py-1.5 text-right font-medium">zentriert</th>}
               <th className="px-2 py-1.5 text-left font-medium">Lage ({range.min}–{range.max})</th>
@@ -365,6 +367,7 @@ function ScaleGridResult({ question, answered }: { question: Awaited<ReturnType<
                 <tr key={row.id} className="border-t border-gray-100 dark:border-gray-700">
                   <th scope="row" className="py-1.5 pr-3 text-left font-normal">{scaleRowLabel(row)}</th>
                   <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{stats?.count ?? 0}</td>
+                  {question.optOutLabel && <td className="px-2 py-1.5 text-right tabular-nums text-gray-500 dark:text-gray-400">{question.rowOptOut.get(row.id) ?? 0}</td>}
                   <td className="px-2 py-1.5 text-right tabular-nums">{stats ? formatDecimal(stats.mean) : '–'}</td>
                   {odd && <td className="px-2 py-1.5 text-right tabular-nums">{stats ? centered(stats.mean, range) : '–'}</td>}
                   <td className="w-1/3 px-2 py-1.5">{stats ? <MeanMarker stats={stats} range={range} /> : answered ? <span className="text-xs text-gray-400">noch keine Antwort</span> : null}</td>

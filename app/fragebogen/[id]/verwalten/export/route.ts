@@ -43,7 +43,11 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
       const line = (label: string, stats: typeof q.scale) => stats
         ? [nr, q.text, KIND_LABELS[q.kind], `${label}: Durchschnitt ${formatDecimal(stats.mean)} (zentriert ${formatDecimal(stats.mean - center)})`, String(stats.count), '']
         : [nr, q.text, KIND_LABELS[q.kind], `${label}: keine Antwort`, '0', '']
-      for (const row of q.rows) rows.push(line(scaleRowLabel(row), q.rowScale.get(row.id) ?? null))
+      for (const row of q.rows) {
+        rows.push(line(scaleRowLabel(row), q.rowScale.get(row.id) ?? null))
+        // Ausweich-Antwort je Zeile getrennt gezählt, nicht im Mittelwert.
+        if (q.optOutLabel) rows.push([nr, q.text, KIND_LABELS[q.kind], `${scaleRowLabel(row)}: ${q.optOutLabel}`, String(q.rowOptOut.get(row.id) ?? 0), ''])
+      }
       rows.push(line('Gesamt', q.scale))
     } else if (q.kind === 'SCALE' && q.scale) {
       for (const d of q.scale.distribution) rows.push([nr, q.text, KIND_LABELS[q.kind], String(d.value), String(d.count), share(d.count)])

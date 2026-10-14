@@ -729,3 +729,115 @@ test('Editor warnt, wenn eine Frage ohne Titel an eine andere Frage anschließt'
   await expect(page.getByTestId('hidden-title-warning')).toHaveCount(0)
   await expect(page.getByText('gehört zur Überschrift in Block 2')).toBeVisible()
 })
+
+/** Skalen-Raster wie "Wie hilfreich waren die Funktionen?" - 1 bis 5 plus Ausweich-Antwort "nicht genutzt", Pflicht. */
+async function createOptOutSurvey(ownerId: string, data: Partial<Prisma.SurveyUncheckedCreateInput> = {}) {
+  return prisma.survey.create({
+    data: {
+      title: `Funktionen ${unique()}`, ownerId, ...data,
+      questions: {
+        create: [{
+          position: 0, kind: 'SCALE_GRID', text: 'Wie hilfreich waren die Funktionen?', required: true, scaleMin: 1, scaleMax: 5,
+          minLabel: 'gar nicht hilfreich', maxLabel: 'sehr hilfreich', optOutLabel: 'nicht genutzt',
+          options: { create: ['Mensaplan', 'Campus-Karte', 'Bus-Fahrplan'].map((label, position) => ({ label, position, isRow: true })) }
+        }]
+      }
+    }
+  })
+}
+
+test('Ausweich-Antwort im Editor: Feld nur beim Skalen-Raster, wird gespeichert und wieder geladen', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/fragebogen/neu')
+  await page.getByLabel('Titel', { exact: true }).fill('Ausweich')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Wie hilfreich?')
+  await page.getByLabel('Art').selectOption('SCALE')
+  await expect(page.getByLabel('Frage 1, Ausweich-Antwort')).toHaveCount(0)
+  await page.getByLabel('Art').selectOption('SCALE_GRID')
+  await page.getByLabel('Frage 1, Zeile 1, links').fill('Mensaplan')
+  await page.getByLabel('Frage 1, Ausweich-Antwort').fill('nicht genutzt')
+  await page.getByRole('button', { name: 'Fragebogen anlegen' }).click()
+  await page.waitForURL(/\/fragebogen\/[^/]+\/verwalten\?angelegt=1/)
+  const id = new URL(page.url()).pathname.split('/')[2]
+  expect((await prisma.surveyQuestion.findFirstOrThrow({ where: { surveyId: id } })).optOutLabel).toBe('nicht genutzt')
+  await page.getByRole('link', { name: 'Bearbeiten' }).click()
+  await expect(page.getByLabel('Frage 1, Ausweich-Antwort')).toHaveValue('nicht genutzt')
+})
+
+test('Ausweich-Antwort am Handy: abgesetzt unter der Skala, erfüllt die Pflicht, zählt nicht im Mittelwert', async ({ page, browser }) => {
+  const owner = await createAccount()
+  const survey = await createOptOutSurvey(owner.id, { identity: 'COOKIE' })
+  const context = await browser.newContext({ locale: 'de-DE', viewport: { width: 375, height: 800 }, extraHTTPHeaders: { 'x-forwarded-for': uniqueIp() } })
+  const guest = await context.newPage()
+  await guest.goto(`/fragebogen/${survey.id}`)
+
+  const row = guest.getByRole('radiogroup', { name: 'Campus-Karte' })
+  const optOut = row.locator('label').filter({ has: guest.getByRole('radio', { name: 'nicht genutzt' }) })
+  const [scale5, opt] = await Promise.all([scaleRowButton(guest, 'Campus-Karte', '5').boundingBox(), optOut.boundingBox()])
+  expect(opt!.y).toBeGreaterThan(scale5!.y + scale5!.height)
+  expect(opt!.width).toBeGreaterThan(200)
+  expect(await guest.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await scaleRowButton(guest, 'Mensaplan', '5').click()
+  await optOut.click()
+  await guest.getByRole('radiogroup', { name: 'Bus-Fahrplan' }).locator('label').filter({ has: guest.getByRole('radio', { name: 'nicht genutzt' }) }).click()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Deine Antworten sind angekommen.')).toBeVisible()
+
+  const answers = await prisma.surveyAnswer.findMany({ where: { response: { surveyId: survey.id } }, include: { row: true } })
+  expect(answers.map(a => `${a.row?.label}=${a.optOut ? 'aus' : a.number}`).sort()).toEqual(['Bus-Fahrplan=aus', 'Campus-Karte=aus', 'Mensaplan=5'])
+
+  // Vorausgefüllt: auch die Ausweich-Antwort ist wieder gewählt.
+  await guest.getByRole('link', { name: 'Antworten ansehen oder ändern' }).click()
+  await expect(row.getByRole('radio', { name: 'nicht genutzt' })).toBeChecked()
+  await context.close()
+
+  const other = await visitor(browser)
+  await other.goto(`/fragebogen/${survey.id}`)
+  for (const [name, value] of [['Mensaplan', '2'], ['Campus-Karte', '4'], ['Bus-Fahrplan', '1']]) await scaleRowButton(other, name, value).click()
+  await other.getByRole('button', { name: 'Absenden' }).click()
+  await expect(other.getByText('Danke!')).toBeVisible()
+
+  await login(page, owner.email)
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  const result = page.getByTestId('survey-result').first()
+  // Mensaplan (5 + 2) / 2 = 3,5; Campus-Karte nur 4 (einmal "nicht genutzt"). Gesamt (5+2+4+1)/4 = 3.
+  await expect(result).toContainText('Gesamt: Durchschnitt 3 · zentriert ±0')
+  await expect(result).toContainText('„nicht genutzt“ zählt nicht mit')
+  const karte = result.getByRole('row', { name: /Campus-Karte/ }).getByRole('cell')
+  await expect(karte.nth(0)).toHaveText('1')
+  await expect(karte.nth(1)).toHaveText('1')
+  await expect(karte.nth(2)).toHaveText('4')
+  await expect(result.getByRole('row', { name: /Mensaplan/ }).getByRole('cell').nth(2)).toHaveText('3,5')
+
+  const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
+  expect(csv).toContain('"Campus-Karte: nicht genutzt";"1"')
+  expect(csv).toContain('"5";"nicht genutzt";"nicht genutzt"')
+  expect(csv).toContain('"2";"4";"1"')
+})
+
+test('Ausweich-Antwort am Desktop: eigene Spalte rechts neben der Skala, ohne JS-Prüfung serverseitig korrekt', async ({ browser }) => {
+  const owner = await createAccount()
+  const survey = await createOptOutSurvey(owner.id)
+  const guest = await visitor(browser)
+  await guest.setViewportSize({ width: 1100, height: 900 })
+  await guest.goto(`/fragebogen/${survey.id}`)
+
+  const optOut = guest.getByRole('radiogroup', { name: 'Mensaplan' }).locator('label').filter({ has: guest.getByRole('radio', { name: 'nicht genutzt' }) })
+  const [scale5, opt] = await Promise.all([scaleRowButton(guest, 'Mensaplan', '5').boundingBox(), optOut.boundingBox()])
+  expect(opt!.x).toBeGreaterThan(scale5!.x + scale5!.width)
+  expect(Math.abs(opt!.y - scale5!.y)).toBeLessThan(2)
+
+  await guest.evaluate(() => document.querySelectorAll('form').forEach(f => f.setAttribute('novalidate', '')))
+  await optOut.click()
+  await scaleRowButton(guest, 'Campus-Karte', '3').click()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Bitte beantworte alle Pflichtfragen')).toBeVisible()
+  await optOut.click()
+  await scaleRowButton(guest, 'Campus-Karte', '3').click()
+  await scaleRowButton(guest, 'Bus-Fahrplan', '4').click()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Danke!')).toBeVisible()
+  expect(await prisma.surveyAnswer.count({ where: { response: { surveyId: survey.id }, optOut: true, number: null } })).toBe(1)
+})

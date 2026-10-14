@@ -36,6 +36,10 @@ CSV eine Spalte je Item. *Überschrift/Text* (`INFO`) gliedert den Fragebogen oh
 (`hideTitle`) lässt eine Frage an den Block davor anschließen - so ergeben die beiden UEQ-S-Skalen (pragmatisch,
 hedonisch) unter einer gemeinsamen Anleitung einen Block, werden aber getrennt ausgewertet.
 
+**Ausweich-Antwort (ergänzt 2026-10-14):** Ein Skalen-Raster kann je Zeile eine Antwort neben der Skala anbieten
+(z.B. "nicht genutzt"). Vorher ging das nur als Raster mit einer Spalte "nicht genutzt" - dann gab es keine
+Mittelwerte. Jetzt zählt die Ausweich-Antwort als beantwortet, aber nicht im Mittelwert, und wird getrennt gezählt.
+
 **Nummern (überarbeitet 2026-10-14):** Zuerst zählten nur sichtbare Fragentitel. Das wirkte durcheinander: Die
 UEQ-Überschrift sieht aus wie ein Fragentitel, hatte aber keine Nummer. Jetzt gilt eine Überschrift, auf die direkt
 Fragen mit ausgeblendetem Titel folgen, als deren Titel und trägt die Nummer - die Gruppe zählt als eine Frage. Andere

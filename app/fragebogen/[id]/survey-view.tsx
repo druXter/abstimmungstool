@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
-import { answerField, isGrid, isSurveyOpen, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
 import { submitSurvey } from '../../survey-actions'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
@@ -46,7 +46,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
   const mine = token
     ? await prisma.surveyResponse.findUnique({
         where: { surveyId_voterKey: { surveyId: survey.id, voterKey: surveyVoterKey(token) } },
-        select: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true } } }
+        select: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true, optOut: true } } }
       })
     : null
   const given = (questionId: string) => mine?.answers.filter(a => a.questionId === questionId) ?? []
@@ -156,7 +156,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
             {q.kind === 'SCALE_GRID' && (
               <ScaleGridInput
                 questionId={q.id} question={q} rows={rows} required={q.required} markRows={rowsMarked}
-                values={new Map(mineHere.flatMap(a => (a.rowId && a.number !== null ? [[a.rowId, a.number] as const] : [])))}
+                values={new Map(mineHere.flatMap(a => (a.rowId && (a.number !== null || a.optOut) ? [[a.rowId, a.optOut ? OPT_OUT_VALUE : a.number!] as const] : [])))}
               />
             )}
           </fieldset>
@@ -185,12 +185,14 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
 }
 
 /** Ein Wert einer Skala als Knopf (Radiobutton darunter, nur für Screenreader sichtbar und mit Tastatur bedienbar). */
-function ScaleButton({ name, value, required, checked, label }: { name: string; value: number; required: boolean; checked: boolean; label: string }) {
+function ScaleButton({ name, value, required, checked, label, text, wide = false }: {
+  name: string; value: number | string; required: boolean; checked: boolean; label: string; text?: string; wide?: boolean
+}) {
   return (
     <label className="cursor-pointer">
       <input type="radio" name={name} value={value} required={required} defaultChecked={checked} aria-label={label} className="peer sr-only" />
-      <span className="flex h-10 items-center justify-center rounded-lg border border-gray-300 text-sm font-medium tabular-nums transition hover:bg-gray-50 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:hover:bg-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-300 dark:border-gray-600 dark:hover:bg-gray-700 dark:peer-checked:bg-blue-600">
-        {value}
+      <span className={`flex h-10 items-center justify-center rounded-lg border border-gray-300 text-sm ${wide ? 'whitespace-nowrap px-3 text-gray-600 dark:text-gray-300 border-dashed' : 'font-medium tabular-nums'} transition hover:bg-gray-50 peer-checked:border-blue-600 peer-checked:bg-blue-600 peer-checked:text-white peer-checked:hover:bg-blue-700 peer-focus-visible:ring-2 peer-focus-visible:ring-blue-300 dark:border-gray-600 dark:hover:bg-gray-700 dark:peer-checked:bg-blue-600`}>
+        {text ?? value}
       </span>
     </label>
   )
@@ -204,16 +206,21 @@ function ScaleButton({ name, value, required, checked, label }: { name: string; 
  */
 function ScaleGridInput({ questionId, question, rows, required, markRows, values }: {
   questionId: string
-  question: { scaleMin: number | null; scaleMax: number | null; minLabel: string | null; maxLabel: string | null }
+  question: { scaleMin: number | null; scaleMax: number | null; minLabel: string | null; maxLabel: string | null; optOutLabel: string | null }
   rows: { id: string; label: string; labelRight: string | null }[]
   required: boolean
   markRows: boolean
-  values: Map<string, number>
+  values: Map<string, number | string>
 }) {
   const { min, max } = scaleRange(question)
   const scale = Array.from({ length: max - min + 1 }, (_, i) => min + i)
   const pairs = rows.some(r => r.labelRight)
   const ends = question.minLabel || question.maxLabel
+  const optOut = question.optOutLabel
+  // Ab sm eine Spalte mehr für die Ausweich-Antwort, abgesetzt rechts.
+  const columns = pairs
+    ? (optOut ? 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]')
+    : (optOut ? 'sm:grid-cols-[minmax(0,1fr)_auto_auto]' : 'sm:grid-cols-[minmax(0,1fr)_auto]')
   const mark = markRows && <span className="ml-1 text-red-700 dark:text-red-300" title="Pflicht">*</span>
   const buttons = (row: { id: string; label: string; labelRight: string | null }) => (
     <div
@@ -238,7 +245,7 @@ function ScaleGridInput({ questionId, question, rows, required, markRows, values
       {rows.map(row => (
         <div
           key={row.id} role="radiogroup" aria-label={scaleRowLabel(row)} data-testid="scale-row"
-          className={`rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:grid sm:items-center sm:gap-3 sm:rounded-none sm:border-0 sm:p-0 sm:py-1 ${pairs ? 'sm:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)]' : 'sm:grid-cols-[minmax(0,1fr)_auto] sm:border-b sm:border-gray-100 sm:pb-1.5 sm:last:border-b-0 sm:dark:border-gray-700/60'}`}
+          className={`rounded-lg border border-gray-200 p-3 dark:border-gray-700 sm:grid sm:items-center sm:gap-3 sm:rounded-none sm:border-0 sm:p-0 sm:py-1 ${columns} ${pairs ? '' : 'sm:border-b sm:border-gray-100 sm:pb-1.5 sm:last:border-b-0 sm:dark:border-gray-700/60'}`}
         >
           {row.labelRight ? (
             <div className="mb-2 flex items-end justify-between gap-3 text-sm font-medium sm:contents">
@@ -254,6 +261,15 @@ function ScaleGridInput({ questionId, question, rows, required, markRows, values
             <div className="mt-1 flex justify-between gap-4 text-xs text-gray-500 dark:text-gray-400 sm:hidden">
               <span>{question.minLabel}</span>
               <span className="text-right">{question.maxLabel}</span>
+            </div>
+          )}
+          {/* Am Handy abgesetzt unter der Skala über die ganze Breite, ab sm als letzte Spalte (bei Paaren nach dem rechten Begriff). */}
+          {optOut && (
+            <div className="mt-2 sm:order-last sm:mt-0 sm:ml-2">
+              <ScaleButton
+                name={answerField(questionId, row.id)} value={OPT_OUT_VALUE} required={required} checked={values.get(row.id) === OPT_OUT_VALUE}
+                label={optOut} text={optOut} wide
+              />
             </div>
           )}
         </div>

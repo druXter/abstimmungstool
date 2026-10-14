@@ -30,13 +30,15 @@ type QuestionInput = {
   scaleMax: number | null
   minLabel: string | null
   maxLabel: string | null
+  optOutLabel: string | null
 }
 
 /**
  * Liest die Fragen aus dem Editor (app/fragebogen/questions-editor.tsx): s<i>_text, s<i>_hint,
  * s<i>_kind, s<i>_required, s<i>_hideTitle, bei Auswahl s<i>_o<j> und s<i>_max (höchstens n Kreuze), beim Raster
  * s<i>_r<j> (Zeilen) und s<i>_o<j> (Spalten), beim Skalen-Raster s<i>_r<j>/s<i>_rr<j> (Zeile, rechter Begriff),
- * bei Freitext s<i>_multiline, bei Skala und Skalen-Raster s<i>_from/s<i>_to/s<i>_fromLabel/s<i>_toLabel.
+ * bei Freitext s<i>_multiline, bei Skala und Skalen-Raster s<i>_from/s<i>_to/s<i>_fromLabel/s<i>_toLabel, beim
+ * Skalen-Raster zusätzlich s<i>_optOut (Ausweich-Antwort).
  * Überschrift/Text-Blöcke (INFO) brauchen Überschrift oder Text. Fragen ohne Text fallen still weg, ebenso
  * Auswahlfragen mit weniger als zwei Optionen und Raster ohne Zeile oder mit weniger als zwei Spalten; doppelte
  * Einträge zählen einmal.
@@ -91,14 +93,15 @@ function parseQuestions(formData: FormData): QuestionInput[] {
       scaleMin: scaled ? ((SCALE_MINS as readonly number[]).includes(from) ? from : DEFAULT_SCALE.min) : null,
       scaleMax: scaled ? (Number.isInteger(to) && to >= SCALE_MAX_MIN && to <= SCALE_MAX_MAX ? to : DEFAULT_SCALE.max) : null,
       minLabel: scaled ? formString(formData, `s${i}_fromLabel`, MAX_SCALE_LABEL_LENGTH) || null : null,
-      maxLabel: scaled ? formString(formData, `s${i}_toLabel`, MAX_SCALE_LABEL_LENGTH) || null : null
+      maxLabel: scaled ? formString(formData, `s${i}_toLabel`, MAX_SCALE_LABEL_LENGTH) || null : null,
+      optOutLabel: kind === 'SCALE_GRID' ? formString(formData, `s${i}_optOut`, MAX_SCALE_LABEL_LENGTH) || null : null
     })
   }
   return questions
 }
 
 const EMPTY_QUESTION: Omit<QuestionInput, 'kind' | 'text' | 'hint'> = {
-  required: false, hideTitle: false, options: [], rows: [], maxChoices: null, multiline: false, scaleMin: null, scaleMax: null, minLabel: null, maxLabel: null
+  required: false, hideTitle: false, options: [], rows: [], maxChoices: null, multiline: false, scaleMin: null, scaleMax: null, minLabel: null, maxLabel: null, optOutLabel: null
 }
 
 /** Mindestens eine echte Frage - nur Überschriften wären ein leerer Fragebogen. */
@@ -111,7 +114,7 @@ async function writeQuestions(tx: Prisma.TransactionClient, surveyId: string, qu
     await tx.surveyQuestion.create({
       data: {
         surveyId, position, text: q.text, hint: q.hint, kind: q.kind, required: q.required, hideTitle: q.hideTitle, maxChoices: q.maxChoices,
-        multiline: q.multiline, scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel,
+        multiline: q.multiline, scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel, optOutLabel: q.optOutLabel,
         options: {
           create: [
             ...q.options.map((label, index) => ({ position: index, label })),

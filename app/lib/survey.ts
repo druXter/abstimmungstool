@@ -23,6 +23,8 @@ export const MAX_HINT_LENGTH = 300
 export const MAX_INFO_TEXT_LENGTH = 2000
 export const MAX_OPTION_LENGTH = 150
 export const MAX_SCALE_LABEL_LENGTH = 40
+/** Formularwert der Ausweich-Antwort eines Skalen-Rasters (statt einer Zahl). */
+export const OPT_OUT_VALUE = 'x'
 /** Freitext: einzeilig bzw. mehrzeilig. */
 export const MAX_SHORT_TEXT = 300
 export const MAX_LONG_TEXT = 2000
@@ -121,6 +123,7 @@ export type QuestionForForm = {
   multiline: boolean
   scaleMin: number | null
   scaleMax: number | null
+  optOutLabel?: string | null
   options: { id: string; isRow: boolean }[]
 }
 
@@ -128,7 +131,7 @@ export function scaleRange(q: Pick<QuestionForForm, 'scaleMin' | 'scaleMax'>): {
   return { min: q.scaleMin ?? DEFAULT_SCALE.min, max: q.scaleMax ?? DEFAULT_SCALE.max }
 }
 
-export type AnswerRow = { questionId: string; optionId: string | null; rowId?: string | null; text: string | null; number: number | null }
+export type AnswerRow = { questionId: string; optionId: string | null; rowId?: string | null; text: string | null; number: number | null; optOut?: boolean }
 
 /** Fehler beim Einlesen, als ?hinweis= an die Seite (feste Texte dort). */
 export type SubmitError = 'pflicht' | 'auswahl'
@@ -154,7 +157,13 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
     }
     if (q.kind === 'SCALE_GRID') {
       for (const row of splitOptions(q.options).rows) {
-        const value = scaleValue(formString(formData, answerField(q.id, row.id), 5))
+        const raw = formString(formData, answerField(q.id, row.id), 5)
+        // Ausweich-Antwort ("nicht genutzt"): beantwortet, aber ohne Wert - nur, wenn die Frage eine hat.
+        if (raw === OPT_OUT_VALUE && q.optOutLabel) {
+          given.push({ questionId: q.id, optionId: null, rowId: row.id, text: null, number: null, optOut: true })
+          continue
+        }
+        const value = scaleValue(raw)
         if (value === 'invalid') return { ok: false, error: 'auswahl' }
         if (value === null && q.required) return { ok: false, error: 'pflicht' }
         if (value !== null) given.push({ questionId: q.id, optionId: null, rowId: row.id, text: null, number: value })
@@ -217,7 +226,7 @@ export async function loadSurveyResults(surveyId: string) {
     prisma.surveyResponse.findMany({
       where: { surveyId },
       orderBy: { createdAt: 'asc' },
-      include: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true } } }
+      include: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true, optOut: true } } }
     })
   ])
 
@@ -240,9 +249,14 @@ export async function loadSurveyResults(surveyId: string) {
     const { min, max } = scaleRange(q)
     const numbers = (list: typeof answers) => list.flatMap(a => (a.number !== null ? [a.number] : []))
     // Skalen-Raster: Statistik je Zeile, scale über alle Zeilen (z.B. der Skalenwert "pragmatische Qualität" im UEQ-S).
+    // Ausweich-Antworten zählen getrennt (rowOptOut), nie im Mittelwert - numbers() nimmt nur echte Werte.
     const rowScale = new Map<string, ScaleStats | null>()
+    const rowOptOut = new Map<string, number>()
     if (q.kind === 'SCALE_GRID') {
-      for (const row of q.options.filter(o => o.isRow)) rowScale.set(row.id, scaleStats(numbers(answers.filter(a => a.rowId === row.id)), min, max))
+      for (const row of q.options.filter(o => o.isRow)) {
+        rowScale.set(row.id, scaleStats(numbers(answers.filter(a => a.rowId === row.id)), min, max))
+        rowOptOut.set(row.id, answers.filter(a => a.rowId === row.id && a.optOut).length)
+      }
     }
     return {
       ...q,
@@ -251,6 +265,7 @@ export async function loadSurveyResults(surveyId: string) {
       counts,
       rowAnswered,
       rowScale,
+      rowOptOut,
       scale: q.kind === 'SCALE' || q.kind === 'SCALE_GRID' ? scaleStats(numbers(answers), min, max) : null,
       // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
       texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ text: a.text, at: a.at }] : [])).reverse() : []
@@ -278,8 +293,9 @@ export function csvColumns(q: SurveyResults['questions'][number]): { header: str
     return q.rows.map(row => ({
       header: `${q.text}: ${scaleRowLabel(row)}`,
       value: answers => {
-        const value = answers.find(a => a.questionId === q.id && a.rowId === row.id)?.number
-        return value === undefined || value === null ? '' : String(value)
+        const answer = answers.find(a => a.questionId === q.id && a.rowId === row.id)
+        if (answer?.optOut) return q.optOutLabel ?? ''
+        return answer?.number === undefined || answer.number === null ? '' : String(answer.number)
       }
     }))
   }

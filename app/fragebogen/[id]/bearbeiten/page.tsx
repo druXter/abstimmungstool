@@ -109,7 +109,8 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
               scaleMin: q.scaleMin ?? DEFAULT_SCALE.min,
               scaleMax: q.scaleMax ?? DEFAULT_SCALE.max,
               minLabel: q.minLabel ?? '',
-              maxLabel: q.maxLabel ?? ''
+              maxLabel: q.maxLabel ?? '',
+              optOutLabel: q.optOutLabel ?? ''
             }))}
           />
         )}

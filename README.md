@@ -621,6 +621,10 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   **"+ UEQ-S einfügen"** im Editor legt eine Anleitung (`INFO`) und die acht Gegensatzpaare des UEQ-S als zwei
   Skalen-Raster 1-7 mit ausgeblendetem Titel an (pragmatische und hedonische Qualität) - für Teilnehmende ein Block,
   in der Auswertung stehen beide Skalenwerte zentriert wie in der offiziellen UEQ-Auswertung.
+  **Ausweich-Antwort** (`optOutLabel`, nur Skalen-Raster, z.B. "nicht genutzt"): je Zeile ein gestrichelter Knopf
+  neben der Skala (mobil darunter über die ganze Breite, ab `sm` als letzte Spalte), Formularwert `x`, gespeichert als
+  `SurveyAnswer.optOut` ohne `number`. Zählt als beantwortet (auch bei Pflicht), nie im Mittelwert; die Auswertung
+  zählt sie je Zeile in einer eigenen Spalte, im CSV steht ihr Text.
   **Skalen-Raster mobil:** je Zeile ein Block, bei Gegensatzpaaren beide Begriffe über den Knöpfen, bei Aussagen die
   Skalenenden darunter; ab `sm` "links | Knöpfe | rechts" bzw. "Aussage | Knöpfe", die Knöpfe aller Zeilen untereinander.
 

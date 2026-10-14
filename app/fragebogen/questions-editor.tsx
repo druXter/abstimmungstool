@@ -24,6 +24,8 @@ export type EditorQuestion = {
   scaleMax: number
   minLabel: string
   maxLabel: string
+  /** Nur Skalen-Raster: Ausweich-Antwort neben der Skala, leer = keine. */
+  optOutLabel: string
 }
 
 // Spiegeln die Grenzen aus app/lib/survey.ts (die Server Action prüft selbst noch einmal).
@@ -69,7 +71,7 @@ function ueqS(): EditorQuestion[] {
 const isGridKind = (kind: SurveyQuestionKind) => kind === 'GRID_SINGLE' || kind === 'GRID_MULTI'
 
 function emptyQuestion(): EditorQuestion {
-  return { text: '', hint: '', kind: 'SINGLE', required: false, hideTitle: false, options: ['', ''], rows: ['', ''], rowsRight: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '' }
+  return { text: '', hint: '', kind: 'SINGLE', required: false, hideTitle: false, options: ['', ''], rows: ['', ''], rowsRight: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '', optOutLabel: '' }
 }
 
 const field = 'rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900'
@@ -277,6 +279,20 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                   onChange={e => update(i, () => ({ maxLabel: e.target.value }))} placeholder={`Beschriftung für ${q.scaleMax} (optional), z.B. sehr`}
                   className={field}
                 />
+                {q.kind === 'SCALE_GRID' && (
+                  <div className="sm:col-span-2 space-y-1">
+                    <input
+                      name={`s${i}_optOut`} maxLength={40} value={q.optOutLabel} aria-label={`Frage ${i + 1}, Ausweich-Antwort`}
+                      onChange={e => update(i, () => ({ optOutLabel: e.target.value }))}
+                      placeholder="Ausweich-Antwort (optional), z.B. nicht genutzt oder kann ich nicht beurteilen"
+                      className={`w-full ${field}`}
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                      Erscheint in jeder Zeile neben der Skala. Zählt als beantwortet (auch bei Pflicht), aber nicht im Mittelwert - die
+                      Auswertung zählt sie je Zeile getrennt.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </fieldset>

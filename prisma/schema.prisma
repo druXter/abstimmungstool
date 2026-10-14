@@ -688,6 +688,9 @@ model SurveyQuestion {
   scaleMax   Int?
   minLabel   String?
   maxLabel   String?
+  // Nur SCALE_GRID: Ausweich-Antwort neben der Skala (z.B. "nicht genutzt"), zählt als beantwortet, aber nicht im
+  // Mittelwert. null = keine.
+  optOutLabel String?
   options    SurveyOption[]
   answers    SurveyAnswer[]
 
@@ -736,6 +739,8 @@ model SurveyAnswer {
   row        SurveyOption?  @relation("SurveyAnswerRow", fields: [rowId], references: [id], onDelete: Cascade)
   text       String?
   number     Int?
+  // Skalen-Raster: Ausweich-Antwort statt eines Werts (number ist dann null).
+  optOut     Boolean        @default(false)
 
   @@index([questionId])
   @@index([responseId])
