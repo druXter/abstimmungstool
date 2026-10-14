@@ -1,7 +1,7 @@
 import { getCurrentUser } from '../../../lib/auth'
 import { prisma } from '../../../lib/prisma'
 import { currentPlayer } from '../../../lib/live-player'
-import { ANSWER_GRACE_MS, getLiveLevel, loadView, settleQuestion, waitForLive } from '../../../lib/live'
+import { ANSWER_GRACE_MS, getLiveLevel, listenForLive, loadView, settleQuestion } from '../../../lib/live'
 
 export const dynamic = 'force-dynamic'
 
@@ -42,15 +42,20 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const deadline = Date.now() + HOLD_MS
   for (;;) {
+    // Erst horchen, dann laden: Eine Änderung, die während des Ladens passiert, weckt sonst niemanden.
+    const listener = listenForLive(id, { activity: asHost, abort: request.signal })
     await settleQuestion(id)
     const view = await loadView(id, playerId)
-    if (!view) return Response.json({ error: playerId ? 'gone' : 'not-found' }, { status: playerId ? 410 : 404, headers: NO_STORE })
-    if (view.sig !== since || Date.now() >= deadline) return Response.json(view, { headers: NO_STORE })
+    if (!view || view.sig !== since || Date.now() >= deadline) {
+      listener.cancel()
+      if (!view) return Response.json({ error: playerId ? 'gone' : 'not-found' }, { status: playerId ? 410 : 404, headers: NO_STORE })
+      return Response.json(view, { headers: NO_STORE })
+    }
 
     // Zum Ende des Zeitlimits aufwachen, damit die Auflösung pünktlich kommt.
     let wakeAt = Math.min(deadline, Date.now() + POLL_FALLBACK_MS)
     if (view.question?.endsAt) wakeAt = Math.min(wakeAt, Math.max(view.question.endsAt + ANSWER_GRACE_MS + 50, Date.now() + 100))
-    await waitForLive(id, wakeAt - Date.now(), { activity: asHost, abort: request.signal })
+    await listener.wait(wakeAt - Date.now())
     if (request.signal.aborted) return new Response(null, { status: 499 })
   }
 }

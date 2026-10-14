@@ -169,20 +169,40 @@ export function notifyLive(sessionId: string, kind: 'state' | 'activity' = 'stat
   signal.emit(kind === 'state' ? sessionId : `${sessionId}:activity`)
 }
 
-/** Wartet, bis sich an der Runde etwas tut, höchstens `ms` (oder bis die Anfrage abbricht). */
-export function waitForLive(sessionId: string, ms: number, opts: { activity: boolean; abort?: AbortSignal }): Promise<void> {
+/**
+ * Horcht ab SOFORT auf Änderungen an der Runde; `wait(ms)` wartet dann höchstens `ms` (oder bis die Anfrage
+ * abbricht) - und kehrt sofort zurück, wenn seit dem Anmelden schon etwas passiert ist. Deshalb VOR dem Laden der
+ * Ansicht anmelden: Kommt das Signal, während die Ansicht noch geladen wird, ginge es sonst verloren, und die Anfrage
+ * merkte die Änderung erst beim nächsten Nachsehen (POLL_FALLBACK_MS in app/api/live/[id]/route.ts).
+ * `cancel()` meldet ab, ohne zu warten.
+ */
+export function listenForLive(sessionId: string, opts: { activity: boolean; abort?: AbortSignal }): { wait: (ms: number) => Promise<void>; cancel: () => void } {
   const events = opts.activity ? [sessionId, `${sessionId}:activity`] : [sessionId]
-  return new Promise(resolve => {
-    const done = () => {
-      clearTimeout(timer)
-      for (const event of events) signal.off(event, done)
-      opts.abort?.removeEventListener('abort', done)
-      resolve()
-    }
-    const timer = setTimeout(done, Math.max(ms, 0))
-    for (const event of events) signal.on(event, done)
-    opts.abort?.addEventListener('abort', done)
-  })
+  let fired = false
+  let wake: (() => void) | null = null
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const onEvent = () => {
+    fired = true
+    wake?.()
+  }
+  const cancel = () => {
+    clearTimeout(timer)
+    for (const event of events) signal.off(event, onEvent)
+    opts.abort?.removeEventListener('abort', onEvent)
+  }
+  for (const event of events) signal.on(event, onEvent)
+  opts.abort?.addEventListener('abort', onEvent)
+  return {
+    cancel,
+    wait: ms => new Promise(resolve => {
+      wake = () => {
+        cancel()
+        resolve()
+      }
+      if (fired || opts.abort?.aborted) return wake()
+      timer = setTimeout(wake, Math.max(ms, 0))
+    })
+  }
 }
 
 // ---------------------------------------------------------------------------------------
