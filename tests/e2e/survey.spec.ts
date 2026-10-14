@@ -398,3 +398,133 @@ test('Nicht freigegebene Website und normale Seiten lassen sich nicht einbetten'
   await hostPage(page, EMBED_HOST, `${BASE_URL}/fragebogen/${survey.id}`)
   await expect(page.frameLocator('#f').getByRole('heading', { name: survey.title })).toHaveCount(0)
 })
+
+const GRID: QuestionSeed[] = [
+  { text: 'Wie fandest du die Angebote?', kind: 'GRID_SINGLE', required: true },
+  { text: 'An welchen Tagen warst du dabei?', kind: 'GRID_MULTI', required: true }
+]
+
+/** Raster-Fragebogen: Zeilen und Spalten als Optionen (isRow), wie ihn der Editor anlegt. */
+async function createGridSurvey(ownerId: string, data: Partial<Prisma.SurveyUncheckedCreateInput> = {}) {
+  const survey = await createSurvey(ownerId, GRID, data)
+  const [rating, days] = survey.questions
+  const add = (questionId: string, labels: string[], isRow: boolean) =>
+    prisma.surveyOption.createMany({ data: labels.map((label, position) => ({ questionId, label, position, isRow })) })
+  await add(rating.id, ['Rallye', 'Kneipentour', 'Stadtführung'], true)
+  await add(rating.id, ['gut', 'okay', 'schlecht'], false)
+  await add(days.id, ['Rallye', 'Kneipentour'], true)
+  await add(days.id, ['Mo', 'Di', 'Mi'], false)
+  return survey
+}
+
+test('Raster anlegen: Zeilen und Spalten im Editor, eine bzw. mehrere pro Zeile', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  await page.goto('/fragebogen/neu')
+  await page.getByLabel('Titel').fill('Raster-Test')
+  await page.getByLabel('Frage 1', { exact: true }).fill('Wie fandest du die Angebote?')
+  await page.getByLabel('Art').selectOption('GRID_SINGLE')
+  await page.getByLabel('Frage 1, Zeile 1', { exact: true }).fill('Rallye')
+  await page.getByLabel('Frage 1, Zeile 2', { exact: true }).fill('Kneipentour')
+  await page.getByRole('button', { name: '+ Zeile hinzufügen' }).click()
+  await page.getByLabel('Frage 1, Zeile 3', { exact: true }).fill('Stadtführung')
+  await page.getByLabel('Frage 1, Spalte 1', { exact: true }).fill('gut')
+  await page.getByLabel('Frage 1, Spalte 2', { exact: true }).fill('schlecht')
+  await page.getByRole('button', { name: '+ Spalte hinzufügen' }).click()
+  await page.getByLabel('Frage 1, Spalte 3', { exact: true }).fill('okay')
+  await page.getByRole('button', { name: 'Spalte 2 entfernen' }).click()
+  await page.getByRole('button', { name: 'Fragebogen anlegen' }).click()
+  await page.waitForURL(/\/fragebogen\/[^/]+\/verwalten\?angelegt=1/)
+
+  const id = new URL(page.url()).pathname.split('/')[2]
+  const [question] = await prisma.surveyQuestion.findMany({ where: { surveyId: id }, include: { options: { orderBy: { position: 'asc' } } } })
+  expect(question.kind).toBe('GRID_SINGLE')
+  expect(question.options.filter(o => o.isRow).map(o => o.label)).toEqual(['Rallye', 'Kneipentour', 'Stadtführung'])
+  expect(question.options.filter(o => !o.isRow).map(o => o.label)).toEqual(['gut', 'okay'])
+
+  // Bearbeiten lädt Zeilen und Spalten wieder in den Editor.
+  await page.getByRole('link', { name: 'Bearbeiten' }).click()
+  await expect(page.getByLabel('Frage 1, Zeile 3', { exact: true })).toHaveValue('Stadtführung')
+  await expect(page.getByLabel('Frage 1, Spalte 2', { exact: true })).toHaveValue('okay')
+})
+
+test('Raster am Handy: Block je Zeile mit Knöpfen, Pflicht je Zeile, Antworten landen pro Zeile', async ({ browser }) => {
+  const owner = await createAccount()
+  const survey = await createGridSurvey(owner.id)
+  const context = await browser.newContext({ locale: 'de-DE', viewport: { width: 375, height: 800 }, extraHTTPHeaders: { 'x-forwarded-for': uniqueIp() } })
+  const page = await context.newPage()
+  await page.goto(`/fragebogen/${survey.id}`)
+
+  const rating = page.getByRole('radiogroup', { name: 'Kneipentour' })
+  // Knöpfe statt Tabelle: kein Spaltenkopf, Spaltennamen sichtbar, kein waagrechtes Scrollen.
+  await expect(rating.getByText('schlecht')).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+
+  await page.getByRole('radiogroup', { name: 'Rallye' }).getByText('gut').click()
+  await rating.getByText('okay').click()
+  await expect(rating.getByRole('radio', { name: 'okay' })).toBeChecked()
+  await page.getByRole('group', { name: 'Rallye' }).getByText('Mo').click()
+  await page.getByRole('group', { name: 'Rallye' }).getByText('Mi').click()
+  await page.getByRole('group', { name: 'Kneipentour' }).getByText('Di').click()
+
+  // Stadtführung fehlt noch: der Browser hält das Formular an.
+  await page.getByRole('button', { name: 'Absenden' }).click()
+  await expect(page).toHaveURL(new RegExp(`/fragebogen/${survey.id}$`))
+  await page.getByRole('radiogroup', { name: 'Stadtführung' }).getByText('schlecht').click()
+  // Ein Tag-Kreuz wieder weg: die Zeile ist leer, die Pflicht greift auch bei mehreren pro Zeile.
+  await page.getByRole('group', { name: 'Kneipentour' }).getByText('Di').click()
+  await page.getByRole('button', { name: 'Absenden' }).click()
+  await expect(page).toHaveURL(new RegExp(`/fragebogen/${survey.id}$`))
+  await page.getByRole('group', { name: 'Kneipentour' }).getByText('Di').click()
+  await page.getByRole('button', { name: 'Absenden' }).click()
+  await expect(page.getByText('Danke!')).toBeVisible()
+
+  const answers = await prisma.surveyAnswer.findMany({ where: { response: { surveyId: survey.id } }, include: { row: true, option: true } })
+  expect(answers.map(a => `${a.row?.label}: ${a.option?.label}`).sort()).toEqual(
+    ['Kneipentour: Di', 'Kneipentour: okay', 'Rallye: Mi', 'Rallye: Mo', 'Rallye: gut', 'Stadtführung: schlecht']
+  )
+  await context.close()
+})
+
+test('Raster am Desktop: Tabelle mit Spaltenköpfen, ohne JS-Prüfung serverseitig abgelehnt, Auswertung und CSV', async ({ page, browser }) => {
+  const owner = await createAccount()
+  const survey = await createGridSurvey(owner.id, { identity: 'COOKIE' })
+  const guest = await visitor(browser)
+  await guest.setViewportSize({ width: 1100, height: 900 })
+  await guest.goto(`/fragebogen/${survey.id}`)
+
+  // Echte Radiobuttons in der Tabelle, Spaltennamen nur als Kopf (in der Zelle nur für Screenreader, 1 px).
+  const row = guest.getByRole('radiogroup', { name: 'Rallye' })
+  await expect(row.getByRole('radio', { name: 'gut' })).toBeVisible()
+  expect((await row.getByText('gut').boundingBox())?.width).toBeLessThanOrEqual(1)
+
+  // Ohne Browser-Prüfung abgeschickt: fehlende Zeilen lehnt der Server ab.
+  await guest.evaluate(() => document.querySelectorAll('form').forEach(f => f.setAttribute('novalidate', '')))
+  await row.getByRole('radio', { name: 'gut' }).check()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Bitte beantworte alle Pflichtfragen')).toBeVisible()
+
+  for (const [name, column] of [['Rallye', 'gut'], ['Kneipentour', 'gut'], ['Stadtführung', 'schlecht']]) {
+    await guest.getByRole('radiogroup', { name }).getByRole('radio', { name: column }).check()
+  }
+  await guest.getByRole('group', { name: 'Rallye' }).getByRole('checkbox', { name: 'Mo' }).check()
+  await guest.getByRole('group', { name: 'Kneipentour' }).getByRole('checkbox', { name: 'Mo' }).check()
+  await guest.getByRole('group', { name: 'Kneipentour' }).getByRole('checkbox', { name: 'Mi' }).check()
+  await guest.getByRole('button', { name: 'Absenden' }).click()
+  await expect(guest.getByText('Deine Antworten sind angekommen.')).toBeVisible()
+
+  // Einmal pro Gerät: vorausgefüllt, auch im Raster.
+  await guest.getByRole('link', { name: 'Antworten ansehen oder ändern' }).click()
+  await expect(guest.getByRole('radiogroup', { name: 'Stadtführung' }).getByRole('radio', { name: 'schlecht' })).toBeChecked()
+  await expect(guest.getByRole('group', { name: 'Kneipentour' }).getByRole('checkbox', { name: 'Mi' })).toBeChecked()
+
+  await login(page, owner.email)
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  const grid = page.getByTestId('survey-result').first()
+  await expect(grid.getByRole('row', { name: /Rallye/ })).toContainText('1 · 100%')
+  await expect(grid.getByRole('row', { name: /Stadtführung/ }).getByRole('cell').nth(2)).toContainText('1 · 100%')
+
+  const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
+  expect(csv).toContain('"Kneipentour: gut";"1";"100 %"')
+  expect(csv).toContain('"Rallye: gut; Kneipentour: gut; Stadtführung: schlecht";"Rallye: Mo; Kneipentour: Mo, Mi"')
+})

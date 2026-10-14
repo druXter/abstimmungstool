@@ -1,11 +1,12 @@
 import { prisma } from '../../../../lib/prisma'
 import { getCurrentUser } from '../../../../lib/auth'
 import { csvResponse } from '../../../../lib/csv'
-import { describeAnswer, formatDecimal, getSurveyLevel, KIND_LABELS, loadSurveyResults } from '../../../../lib/survey'
+import { describeAnswer, formatDecimal, getSurveyLevel, gridKey, isGrid, KIND_LABELS, loadSurveyResults } from '../../../../lib/survey'
 
 /**
  * CSV-Export eines Fragebogens für alle, die ihn verwalten dürfen (getSurveyLevel): oben die Auswertung je Frage,
- * darunter jede Abgabe als Zeile mit einer Spalte je Frage (Mehrfachauswahl durch Komma getrennt). Gleiches Format
+ * darunter jede Abgabe als Zeile mit einer Spalte je Frage (Mehrfachauswahl durch Komma getrennt, Raster als
+ * "Zeile: Spalte; Zeile: Spalte"). Gleiches Format
  * wie die anderen Exporte (app/lib/csv.ts, mit Schutz vor CSV-Injection - Freitexte sind frei eingegeben).
  */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -20,8 +21,17 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
   for (const [i, q] of questions.entries()) {
     const nr = String(i + 1)
     const share = (count: number) => (q.answered > 0 ? `${Math.round((count / q.answered) * 100)} %` : '')
-    if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
-      for (const o of q.options) rows.push([nr, q.text, KIND_LABELS[q.kind], o.label, String(q.counts.get(o.id) ?? 0), share(q.counts.get(o.id) ?? 0)])
+    if (isGrid(q.kind)) {
+      // Je Feld "Zeile: Spalte", Anteil an den Antwortenden dieser Zeile.
+      for (const row of q.rows) {
+        const answered = q.rowAnswered.get(row.id) ?? 0
+        for (const c of q.columns) {
+          const count = q.counts.get(gridKey(row.id, c.id)) ?? 0
+          rows.push([nr, q.text, KIND_LABELS[q.kind], `${row.label}: ${c.label}`, String(count), answered > 0 ? `${Math.round((count / answered) * 100)} %` : ''])
+        }
+      }
+    } else if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
+      for (const o of q.columns) rows.push([nr, q.text, KIND_LABELS[q.kind], o.label, String(q.counts.get(o.id) ?? 0), share(q.counts.get(o.id) ?? 0)])
     } else if (q.kind === 'SCALE' && q.scale) {
       for (const d of q.scale.distribution) rows.push([nr, q.text, KIND_LABELS[q.kind], String(d.value), String(d.count), share(d.count)])
       rows.push([nr, q.text, KIND_LABELS[q.kind], `Durchschnitt: ${formatDecimal(q.scale.mean)}`, String(q.scale.count), ''])

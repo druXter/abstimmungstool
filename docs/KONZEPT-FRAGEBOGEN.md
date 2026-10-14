@@ -23,7 +23,17 @@ der Live-Runden (eigene Actions, eigener Editor, gleiche Verwaltung mit Reitern)
 | `SurveyAnswer` | Antwort auf eine Frage: gewählte Option (eine Zeile je Option), Text oder Zahl |
 
 Fragearten: **Einfachauswahl** (Radiobuttons), **Mehrfachauswahl** (Checkboxen, optional höchstens n), **Freitext**
-(einzeilig bis 300 Zeichen, mehrzeilig bis 2000) und **lineare Skala** (von 0 oder 1 bis 2–10, Beschriftung links/rechts).
+(einzeilig bis 300 Zeichen, mehrzeilig bis 2000), **lineare Skala** (von 0 oder 1 bis 2–10, Beschriftung links/rechts)
+und **Raster** (wie in Nextcloud Forms, ergänzt 2026-10-14): Zeilen (Aussagen) mal Spalten (Antwortmöglichkeiten), je
+Zeile eine oder mehrere Spalten. Zeilen und Spalten sind beide `SurveyOption` (`isRow`), eine Antwort trägt Zeile
+(`rowId`) und Spalte (`optionId`). Pflicht heißt beim Raster: jede Zeile beantworten.
+
+**Raster am Handy:** Eine Tabelle mit fünf Spalten ist auf 360 px nicht bedienbar (winzige Ziele, waagrechtes
+Scrollen, Spaltenköpfe außer Sicht). Deshalb wird unter `sm` jede Zeile ein Block – Aussage als Überschrift, Spalten als
+umbrechende Knöpfe mit ihrem Namen (rund bei einer Antwort, eckig mit ✓ bei mehreren). Ab `sm` eine Tabelle mit
+Spaltenköpfen und echten Radiobuttons/Checkboxen. Beide Ansichten nutzen dieselben Felder (nur CSS), damit nichts
+doppelt abgeschickt wird und es ohne JavaScript geht. Jede Zeile ist eine eigene Gruppe (`radiogroup` bzw. `group`),
+benannt nach der Aussage.
 
 ## Wer antworten darf
 
@@ -63,4 +73,4 @@ Freitext als Liste. Ergebnisse sieht nur die Verwaltung.
 
 * Weitere Identitäten (L8 Teil 2): rsvp-app schickt nach dem Event den Link an Eingecheckte, Identität `RSVP`.
 * Englische Oberfläche der eingebetteten Seite (Campus-App ist zweisprachig), z. B. per `?lang=en`.
-* Weitere Fragearten (Dropdown, Datum, Matrix), bedingte Fragen, Fragen nachträglich ändern trotz Antworten.
+* Weitere Fragearten (Dropdown, Datum), bedingte Fragen, Fragen nachträglich ändern trotz Antworten.

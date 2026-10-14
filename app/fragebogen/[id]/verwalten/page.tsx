@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { baseUrl } from '../../../lib/base-url'
-import { formatDecimal, getSurveyLevel, IDENTITY_LABELS, isSurveyOpen, KIND_LABELS, loadSurveyResults } from '../../../lib/survey'
+import { formatDecimal, getSurveyLevel, gridKey, IDENTITY_LABELS, isGrid, isSurveyOpen, KIND_LABELS, loadSurveyResults } from '../../../lib/survey'
 import { clearSurveyResponses, deleteSurvey, shareSurvey, unshareSurvey } from '../../../survey-actions'
 import CopyableField from '../../../ui/copyable-field'
 import ConfirmForm from '../../../ui/confirm-form'
@@ -140,7 +140,7 @@ export default async function ManageSurveyPage({
 
               {(q.kind === 'SINGLE' || q.kind === 'MULTI') && (
                 <ul className="space-y-1.5">
-                  {q.options.map(o => {
+                  {q.columns.map(o => {
                     const count = q.counts.get(o.id) ?? 0
                     const pct = q.answered > 0 ? Math.round((count / q.answered) * 100) : 0
                     return (
@@ -158,6 +158,48 @@ export default async function ManageSurveyPage({
                     )
                   })}
                 </ul>
+              )}
+
+              {isGrid(q.kind) && (
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-max border-collapse text-sm">
+                    <thead>
+                      <tr className="text-xs text-gray-500 dark:text-gray-400">
+                        <th className="py-1.5 pr-3 text-left font-medium">{q.kind === 'GRID_MULTI' ? 'mehrere pro Zeile' : ''}</th>
+                        {q.columns.map(c => <th key={c.id} className="px-2 py-1.5 text-center font-medium">{c.label}</th>)}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {q.rows.map(row => {
+                        const answered = q.rowAnswered.get(row.id) ?? 0
+                        return (
+                          <tr key={row.id} className="border-t border-gray-100 dark:border-gray-700">
+                            <th scope="row" className="py-1.5 pr-3 text-left font-normal">
+                              {row.label}
+                              {responses.length > 0 && <span className="ml-1 text-xs text-gray-500 dark:text-gray-400">({answered})</span>}
+                            </th>
+                            {q.columns.map(c => {
+                              const count = q.counts.get(gridKey(row.id, c.id)) ?? 0
+                              const pct = answered > 0 ? Math.round((count / answered) * 100) : 0
+                              return (
+                                <td key={c.id} className="px-1 py-1 text-center tabular-nums">
+                                  {/* Anteil der Antwortenden dieser Zeile, je dunkler, desto mehr. */}
+                                  <span
+                                    className={`block rounded px-2 py-1 ${pct >= 50 ? 'text-white' : ''}`}
+                                    style={{ backgroundColor: count ? `rgb(99 102 241 / ${0.12 + (pct / 100) * 0.8})` : undefined }}
+                                    title={`${row.label} - ${c.label}: ${count} (${pct} %)`}
+                                  >
+                                    {responses.length > 0 ? <>{count}<span className="text-[10px] opacity-75"> · {pct}%</span></> : '–'}
+                                  </span>
+                                </td>
+                              )
+                            })}
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
 
               {q.kind === 'SCALE' && (

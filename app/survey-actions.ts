@@ -10,7 +10,7 @@ import { formString, normalizeEmail } from './lib/form'
 import { clientIp, reserve, surveyRule } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
 import {
-  DEFAULT_SCALE, getSurveyLevel, isSurveyOpen, MAX_DESCRIPTION_LENGTH, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
+  DEFAULT_SCALE, getSurveyLevel, isGrid, isSurveyOpen, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
   SCALE_MINS, SURVEY_IDENTITIES, SURVEY_QUESTION_KINDS, surveyVoterKey, type SurveyLevel
 } from './lib/survey'
@@ -21,6 +21,8 @@ type QuestionInput = {
   kind: SurveyQuestionKind
   required: boolean
   options: string[]
+  /** Nur Raster: die Zeilen (options sind dann die Spalten). */
+  rows: string[]
   maxChoices: number | null
   multiline: boolean
   scaleMin: number | null
@@ -31,9 +33,10 @@ type QuestionInput = {
 
 /**
  * Liest die Fragen aus dem Editor (app/fragebogen/questions-editor.tsx): s<i>_text, s<i>_hint,
- * s<i>_kind, s<i>_required, bei Auswahl s<i>_o<j> und s<i>_max (höchstens n Kreuze), bei Freitext
- * s<i>_multiline, bei der Skala s<i>_from/s<i>_to/s<i>_fromLabel/s<i>_toLabel. Fragen ohne Text
- * fallen still weg, ebenso Auswahlfragen mit weniger als zwei Optionen; doppelte Optionen zählen einmal.
+ * s<i>_kind, s<i>_required, bei Auswahl s<i>_o<j> und s<i>_max (höchstens n Kreuze), beim Raster s<i>_r<j>
+ * (Zeilen) und s<i>_o<j> (Spalten), bei Freitext s<i>_multiline, bei der Skala s<i>_from/s<i>_to/s<i>_fromLabel/
+ * s<i>_toLabel. Fragen ohne Text fallen still weg, ebenso Auswahlfragen mit weniger als zwei Optionen und Raster
+ * ohne Zeile oder mit weniger als zwei Spalten; doppelte Einträge zählen einmal.
  */
 function parseQuestions(formData: FormData): QuestionInput[] {
   const questions: QuestionInput[] = []
@@ -41,15 +44,19 @@ function parseQuestions(formData: FormData): QuestionInput[] {
     const text = formString(formData, `s${i}_text`, MAX_QUESTION_LENGTH)
     if (!text) continue
     const kind = SURVEY_QUESTION_KINDS.find(k => k === formData.get(`s${i}_kind`)) ?? 'SINGLE'
-    const choice = kind === 'SINGLE' || kind === 'MULTI'
-    const options: string[] = []
-    if (choice) {
-      for (let j = 0; j < MAX_OPTIONS; j++) {
-        const label = formString(formData, `s${i}_o${j}`, MAX_OPTION_LENGTH)
-        if (label && !options.includes(label)) options.push(label)
+    const grid = isGrid(kind)
+    const labels = (prefix: string, max: number) => {
+      const list: string[] = []
+      for (let j = 0; j < max; j++) {
+        const label = formString(formData, `s${i}_${prefix}${j}`, MAX_OPTION_LENGTH)
+        if (label && !list.includes(label)) list.push(label)
       }
-      if (options.length < MIN_OPTIONS) continue
+      return list
     }
+    const options = kind === 'SINGLE' || kind === 'MULTI' ? labels('o', MAX_OPTIONS) : grid ? labels('o', MAX_GRID_COLUMNS) : []
+    const rows = grid ? labels('r', MAX_GRID_ROWS) : []
+    if ((kind === 'SINGLE' || kind === 'MULTI' || grid) && options.length < MIN_OPTIONS) continue
+    if (grid && rows.length === 0) continue
     const max = Number.parseInt(formString(formData, `s${i}_max`, 3), 10)
     const from = Number.parseInt(formString(formData, `s${i}_from`, 3), 10)
     const to = Number.parseInt(formString(formData, `s${i}_to`, 3), 10)
@@ -59,6 +66,7 @@ function parseQuestions(formData: FormData): QuestionInput[] {
       kind,
       required: formData.get(`s${i}_required`) === 'on',
       options,
+      rows,
       // "höchstens alle" ist keine Grenze.
       maxChoices: kind === 'MULTI' && Number.isInteger(max) && max >= 1 && max < options.length ? max : null,
       multiline: kind === 'TEXT' && formData.get(`s${i}_multiline`) === 'on',
@@ -77,7 +85,12 @@ async function writeQuestions(tx: Prisma.TransactionClient, surveyId: string, qu
       data: {
         surveyId, position, text: q.text, hint: q.hint, kind: q.kind, required: q.required, maxChoices: q.maxChoices, multiline: q.multiline,
         scaleMin: q.scaleMin, scaleMax: q.scaleMax, minLabel: q.minLabel, maxLabel: q.maxLabel,
-        options: { create: q.options.map((label, index) => ({ position: index, label })) }
+        options: {
+          create: [
+            ...q.options.map((label, index) => ({ position: index, label })),
+            ...q.rows.map((label, index) => ({ position: index, label, isRow: true }))
+          ]
+        }
       }
     })
   }
@@ -168,7 +181,7 @@ export async function submitSurvey(formData: FormData): Promise<void> {
   const base = `/fragebogen/${surveyId}${formData.get('embed') === '1' ? '/einbetten' : ''}`
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
-    include: { questions: { orderBy: { position: 'asc' }, include: { options: { select: { id: true } } } } }
+    include: { questions: { orderBy: { position: 'asc' }, include: { options: { select: { id: true, isRow: true } } } } }
   })
   if (!survey) return
   if (!isSurveyOpen(survey)) redirect(`${base}?hinweis=geschlossen`)

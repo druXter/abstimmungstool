@@ -1,12 +1,13 @@
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
-import { answerField, isSurveyOpen, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { answerField, isGrid, isSurveyOpen, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
 import { submitSurvey } from '../../survey-actions'
 import Notice from '../../ui/notice'
 import SubmitButton from '../../ui/submit-button'
 import { Card, inputClass } from '../../ui/kit'
 import MultiChoice from './multi-choice'
+import GridInput from './grid-input'
 import { CookieGate } from './embed-helpers'
 
 // Rückmeldungen von submitSurvey (?hinweis=...). Nur feste Texte - ein unbekannter Wert zeigt nichts an. Kommt eine
@@ -24,7 +25,7 @@ export type SurveySearch = { hinweis?: string; danke?: string }
 export async function loadSurveyForView(id: string) {
   return prisma.survey.findUnique({
     where: { id },
-    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true } } } } }
+    include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' }, select: { id: true, label: true, isRow: true } } } } }
   })
 }
 
@@ -45,7 +46,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
   const mine = token
     ? await prisma.surveyResponse.findUnique({
         where: { surveyId_voterKey: { surveyId: survey.id, voterKey: surveyVoterKey(token) } },
-        select: { answers: { select: { questionId: true, optionId: true, text: true, number: true } } }
+        select: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true } } }
       })
     : null
   const given = (questionId: string) => mine?.answers.filter(a => a.questionId === questionId) ?? []
@@ -88,13 +89,16 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
       {survey.questions.map((q, i) => {
         const name = answerField(q.id)
         const mineHere = given(q.id)
+        const { columns, rows } = splitOptions(q.options)
         const legend = (
           <legend className="font-medium">
             {i + 1}. {q.text}
             {q.required && <span className="ml-1 text-red-700 dark:text-red-300" title="Pflichtfrage">*</span>}
           </legend>
         )
-        const hint = q.hint || (q.kind === 'MULTI' ? (q.maxChoices ? `Höchstens ${q.maxChoices} ankreuzen.` : 'Mehrere Antworten möglich.') : null)
+        const hint = q.hint || (q.kind === 'MULTI'
+          ? (q.maxChoices ? `Höchstens ${q.maxChoices} ankreuzen.` : 'Mehrere Antworten möglich.')
+          : q.kind === 'GRID_MULTI' ? 'Pro Zeile mehrere Antworten möglich.' : null)
         return (
           // Trennlinie am umgebenden div: Ein Rahmen am fieldset würde neben der Frage (legend) verlaufen.
           <div key={q.id} className="border-t border-gray-100 pt-4 first-of-type:border-0 first-of-type:pt-0 dark:border-gray-700">
@@ -104,7 +108,7 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
 
             {q.kind === 'SINGLE' && (
               <div className="space-y-1.5">
-                {q.options.map(o => (
+                {columns.map(o => (
                   <label key={o.id} className="flex cursor-pointer items-start gap-2.5 rounded-lg px-2 py-1.5 hover:bg-gray-50 dark:hover:bg-gray-700/50">
                     <input type="radio" name={name} value={o.id} required={q.required} defaultChecked={mineHere.some(a => a.optionId === o.id)} className="mt-0.5 h-4 w-4 shrink-0" />
                     <span className="text-sm">{o.label}</span>
@@ -114,12 +118,19 @@ export default async function SurveyView({ survey, search, embed }: { survey: Vi
             )}
 
             {q.kind === 'MULTI' && (
-              <MultiChoice name={name} options={q.options} required={q.required} max={q.maxChoices} initial={mineHere.flatMap(a => (a.optionId ? [a.optionId] : []))} />
+              <MultiChoice name={name} options={columns} required={q.required} max={q.maxChoices} initial={mineHere.flatMap(a => (a.optionId ? [a.optionId] : []))} />
             )}
 
             {q.kind === 'TEXT' && (q.multiline
               ? <textarea name={name} aria-label={q.text} required={q.required} maxLength={MAX_LONG_TEXT} rows={4} defaultValue={mineHere[0]?.text ?? ''} className={inputClass} />
               : <input name={name} aria-label={q.text} required={q.required} maxLength={MAX_SHORT_TEXT} defaultValue={mineHere[0]?.text ?? ''} className={inputClass} />
+            )}
+
+            {isGrid(q.kind) && (
+              <GridInput
+                questionId={q.id} rows={rows} columns={columns} multiple={q.kind === 'GRID_MULTI'} required={q.required}
+                initial={mineHere.flatMap(a => (a.rowId && a.optionId ? [`${a.rowId}:${a.optionId}`] : []))}
+              />
             )}
 
             {q.kind === 'SCALE' && <ScaleInput name={name} question={q} required={q.required} value={mineHere[0]?.number ?? null} />}

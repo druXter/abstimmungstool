@@ -8,7 +8,10 @@ export type EditorQuestion = {
   hint: string
   kind: SurveyQuestionKind
   required: boolean
+  /** Auswahl: Antwortmöglichkeiten, Raster: Spalten. */
   options: string[]
+  /** Nur Raster: Zeilen (Aussagen). */
+  rows: string[]
   /** Mehrfachauswahl: höchstens so viele, 0 = beliebig viele. */
   maxChoices: number
   multiline: boolean
@@ -22,16 +25,22 @@ export type EditorQuestion = {
 const MAX_QUESTIONS = 50
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 20
+const MAX_GRID_ROWS = 20
+const MAX_GRID_COLUMNS = 10
 
 const KINDS: { kind: SurveyQuestionKind; label: string; hint: string }[] = [
   { kind: 'SINGLE', label: 'Einfachauswahl', hint: 'Genau eine Antwort wählen (Radiobuttons).' },
   { kind: 'MULTI', label: 'Mehrfachauswahl', hint: 'Beliebig viele Antworten ankreuzen, auf Wunsch höchstens eine bestimmte Zahl.' },
   { kind: 'TEXT', label: 'Freitext', hint: 'Antwort frei eintippen - einzeilig (bis 300 Zeichen) oder mehrzeilig (bis 2000).' },
-  { kind: 'SCALE', label: 'Lineare Skala', hint: 'Einen Wert auf einer Skala wählen, z.B. 1 bis 5 von "gar nicht" bis "sehr".' }
+  { kind: 'SCALE', label: 'Lineare Skala', hint: 'Einen Wert auf einer Skala wählen, z.B. 1 bis 5 von "gar nicht" bis "sehr".' },
+  { kind: 'GRID_SINGLE', label: 'Raster (eine pro Zeile)', hint: 'Mehrere Aussagen (Zeilen) mit denselben Antwortmöglichkeiten (Spalten), je Zeile genau eine - z.B. jedes Angebot mit "gut / okay / schlecht" bewerten. Als Pflichtfrage muss jede Zeile beantwortet werden.' },
+  { kind: 'GRID_MULTI', label: 'Raster (mehrere pro Zeile)', hint: 'Wie das Raster, aber je Zeile beliebig viele Spalten - z.B. "An welchen Tagen hast du welches Angebot genutzt?". Als Pflichtfrage braucht jede Zeile mindestens ein Kreuz.' }
 ]
 
+const isGridKind = (kind: SurveyQuestionKind) => kind === 'GRID_SINGLE' || kind === 'GRID_MULTI'
+
 function emptyQuestion(): EditorQuestion {
-  return { text: '', hint: '', kind: 'SINGLE', required: false, options: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '' }
+  return { text: '', hint: '', kind: 'SINGLE', required: false, options: ['', ''], rows: ['', ''], maxChoices: 0, multiline: false, scaleMin: 1, scaleMax: 5, minLabel: '', maxLabel: '' }
 }
 
 const field = 'rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900'
@@ -39,8 +48,8 @@ const smallSelect = 'rounded-lg border border-gray-300 dark:border-gray-600 bg-w
 const linkButton = 'text-sm font-medium text-blue-700 dark:text-blue-300 hover:underline'
 
 /**
- * Fragen eines Fragebogens bearbeiten: Text, Hinweis, Art, Pflicht und je nach Art Optionen, Freitext-
- * Länge oder Skala. Die Felder heißen s<i>_… (gelesen von parseQuestions in app/survey-actions.ts) und
+ * Fragen eines Fragebogens bearbeiten: Text, Hinweis, Art, Pflicht und je nach Art Optionen, Zeilen und Spalten
+ * (Raster), Freitext-Länge oder Skala. Die Felder heißen s<i>_… (gelesen von parseQuestions in app/survey-actions.ts) und
  * werden nach jedem Verschieben/Löschen neu durchnummeriert.
  */
 export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[] }) {
@@ -155,6 +164,25 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
               </>
             )}
 
+            {isGridKind(q.kind) && (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <LabelList
+                  title="Zeilen (Aussagen)" name={`s${i}_r`} items={q.rows} max={MAX_GRID_ROWS} min={1} question={i + 1} itemLabel="Zeile"
+                  placeholder={j => (j === 0 ? 'z.B. Campus-Rallye' : `Zeile ${j + 1}`)}
+                  onChange={rows => update(i, () => ({ rows }))}
+                />
+                <LabelList
+                  title="Spalten (Antwortmöglichkeiten)" name={`s${i}_o`} items={q.options} max={MAX_GRID_COLUMNS} min={MIN_OPTIONS} question={i + 1} itemLabel="Spalte"
+                  placeholder={j => (['z.B. gut', 'z.B. okay', 'z.B. schlecht'][j] ?? `Spalte ${j + 1}`)}
+                  onChange={options => update(i, () => ({ options }))}
+                />
+                <p className="sm:col-span-2 text-xs text-gray-500 dark:text-gray-400">
+                  Am Handy erscheint jede Zeile als eigener Block mit den Spalten als Knöpfen, auf größeren Bildschirmen als Tabelle. Kurze
+                  Spaltennamen lesen sich in beiden Ansichten am besten.
+                </p>
+              </div>
+            )}
+
             {q.kind === 'TEXT' && (
               <label className="flex items-center gap-1.5 text-sm cursor-pointer">
                 <input type="checkbox" name={`s${i}_multiline`} checked={q.multiline} onChange={e => update(i, () => ({ multiline: e.target.checked }))} className="w-4 h-4" />
@@ -202,6 +230,49 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
         >
           + Weitere Frage
         </button>
+      )}
+    </div>
+  )
+}
+
+/** Liste kurzer Einträge (Zeilen bzw. Spalten eines Rasters) mit Hinzufügen und Entfernen. Felder <name><j>. */
+function LabelList({ title, name, items, min, max, question, itemLabel, placeholder, onChange }: {
+  title: string
+  name: string
+  items: string[]
+  min: number
+  max: number
+  question: number
+  itemLabel: string
+  placeholder: (index: number) => string
+  onChange: (items: string[]) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium">{title}</p>
+      <ul className="space-y-2">
+        {items.map((label, j) => (
+          <li key={j} className="flex items-center gap-2">
+            <input
+              name={`${name}${j}`} maxLength={150} value={label} required={j < min} aria-label={`Frage ${question}, ${itemLabel} ${j + 1}`}
+              onChange={e => onChange(items.map((x, k) => (k === j ? e.target.value : x)))}
+              placeholder={placeholder(j)}
+              className={`grow min-w-0 ${field}`}
+            />
+            {items.length > min && (
+              <button
+                type="button" aria-label={`${itemLabel} ${j + 1} entfernen`}
+                onClick={() => onChange(items.filter((_, k) => k !== j))}
+                className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+              >
+                ✕
+              </button>
+            )}
+          </li>
+        ))}
+      </ul>
+      {items.length < max && (
+        <button type="button" onClick={() => onChange([...items, ''])} className={linkButton}>+ {itemLabel} hinzufügen</button>
       )}
     </div>
   )

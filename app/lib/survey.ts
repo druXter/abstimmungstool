@@ -11,6 +11,9 @@ import { formString } from './form'
 export const MAX_QUESTIONS = 50
 export const MIN_OPTIONS = 2
 export const MAX_OPTIONS = 20
+/** Raster: Zeilen (Aussagen) und Spalten (Antwortmöglichkeiten) - mehr Spalten passen auch am Handy nicht mehr sinnvoll. */
+export const MAX_GRID_ROWS = 20
+export const MAX_GRID_COLUMNS = 10
 export const MAX_TITLE_LENGTH = 200
 export const MAX_DESCRIPTION_LENGTH = 2000
 export const MAX_THANKS_LENGTH = 1000
@@ -27,14 +30,20 @@ export const SCALE_MAX_MIN = 2
 export const SCALE_MAX_MAX = 10
 export const DEFAULT_SCALE = { min: 1, max: 5 }
 
-export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE']
+export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI']
 export const SURVEY_IDENTITIES: readonly SurveyIdentity[] = ['ANONYMOUS', 'COOKIE']
 
 export const KIND_LABELS: Record<SurveyQuestionKind, string> = {
   SINGLE: 'Einfachauswahl',
   MULTI: 'Mehrfachauswahl',
   TEXT: 'Freitext',
-  SCALE: 'Lineare Skala'
+  SCALE: 'Lineare Skala',
+  GRID_SINGLE: 'Raster, eine Antwort pro Zeile',
+  GRID_MULTI: 'Raster, mehrere Antworten pro Zeile'
+}
+
+export function isGrid(kind: SurveyQuestionKind): kind is 'GRID_SINGLE' | 'GRID_MULTI' {
+  return kind === 'GRID_SINGLE' || kind === 'GRID_MULTI'
 }
 
 export const IDENTITY_LABELS: Record<SurveyIdentity, { title: string; short: string; hint: string }> = {
@@ -77,9 +86,14 @@ export function surveyVoterKey(token: string): string {
   return `cookie:${token}`
 }
 
-/** Das Feld einer Frage im Formular zum Ausfüllen. */
-export function answerField(questionId: string): string {
-  return `q_${questionId}`
+/** Das Feld einer Frage im Formular zum Ausfüllen - beim Raster eins je Zeile. */
+export function answerField(questionId: string, rowId?: string): string {
+  return rowId ? `q_${questionId}_${rowId}` : `q_${questionId}`
+}
+
+/** Teilt die Optionen einer Frage in Spalten bzw. Antwortmöglichkeiten (columns) und Rasterzeilen (rows). */
+export function splitOptions<T extends { isRow: boolean }>(options: T[]): { columns: T[]; rows: T[] } {
+  return { columns: options.filter(o => !o.isRow), rows: options.filter(o => o.isRow) }
 }
 
 export type QuestionForForm = {
@@ -90,22 +104,22 @@ export type QuestionForForm = {
   multiline: boolean
   scaleMin: number | null
   scaleMax: number | null
-  options: { id: string }[]
+  options: { id: string; isRow: boolean }[]
 }
 
 export function scaleRange(q: Pick<QuestionForForm, 'scaleMin' | 'scaleMax'>): { min: number; max: number } {
   return { min: q.scaleMin ?? DEFAULT_SCALE.min, max: q.scaleMax ?? DEFAULT_SCALE.max }
 }
 
-export type AnswerRow = { questionId: string; optionId: string | null; text: string | null; number: number | null }
+export type AnswerRow = { questionId: string; optionId: string | null; rowId?: string | null; text: string | null; number: number | null }
 
 /** Fehler beim Einlesen, als ?hinweis= an die Seite (feste Texte dort). */
 export type SubmitError = 'pflicht' | 'auswahl'
 
 /**
- * Liest eine Abgabe (Felder q_<Frage-ID>, siehe survey-form.tsx). Nur Optionen der jeweiligen Frage,
- * Einfachauswahl und Skala genau ein Wert, Texte gekürzt. Pflichtfragen ohne Antwort und zu viele
- * Kreuze bei Mehrfachauswahl lehnen ab - die Seite prüft das schon im Browser, ohne JavaScript
+ * Liest eine Abgabe (Felder q_<Frage-ID>, beim Raster q_<Frage-ID>_<Zeilen-ID>, siehe survey-view.tsx). Nur
+ * Optionen der jeweiligen Frage, Einfachauswahl und Skala genau ein Wert, Texte gekürzt. Pflichtfragen ohne
+ * Antwort (beim Raster: eine Zeile ohne Antwort) und zu viele Kreuze bei Mehrfachauswahl lehnen ab - die Seite prüft das schon im Browser, ohne JavaScript
  * landet es hier.
  */
 export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormData): { ok: true; rows: AnswerRow[] } | { ok: false; error: SubmitError } {
@@ -113,8 +127,17 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
   for (const q of questions) {
     const name = answerField(q.id)
     const given: AnswerRow[] = []
-    if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
-      const ids = new Set(q.options.map(o => o.id))
+    if (isGrid(q.kind)) {
+      const { columns, rows: gridRows } = splitOptions(q.options)
+      const ids = new Set(columns.map(o => o.id))
+      for (const row of gridRows) {
+        const chosen = [...new Set(formData.getAll(answerField(q.id, row.id)).filter((v): v is string => typeof v === 'string' && ids.has(v)))]
+        if (q.kind === 'GRID_SINGLE' && chosen.length > 1) return { ok: false, error: 'auswahl' }
+        if (q.required && chosen.length === 0) return { ok: false, error: 'pflicht' }
+        for (const optionId of chosen) given.push({ questionId: q.id, optionId, rowId: row.id, text: null, number: null })
+      }
+    } else if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
+      const ids = new Set(q.options.filter(o => !o.isRow).map(o => o.id))
       const chosen = [...new Set(formData.getAll(name).filter((v): v is string => typeof v === 'string' && ids.has(v)))]
       if (q.kind === 'SINGLE' && chosen.length > 1) return { ok: false, error: 'auswahl' }
       if (q.kind === 'MULTI' && q.maxChoices !== null && chosen.length > q.maxChoices) return { ok: false, error: 'auswahl' }
@@ -166,20 +189,33 @@ export async function loadSurveyResults(surveyId: string) {
     prisma.surveyResponse.findMany({
       where: { surveyId },
       orderBy: { createdAt: 'asc' },
-      include: { answers: { select: { questionId: true, optionId: true, text: true, number: true } } }
+      include: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true } } }
     })
   ])
 
   const results = questions.map(q => {
     const answers = responses.flatMap(r => r.answers.filter(a => a.questionId === q.id).map(a => ({ ...a, at: r.updatedAt })))
     const answered = new Set(responses.filter(r => r.answers.some(a => a.questionId === q.id)).map(r => r.id)).size
+    // counts: je Option bzw. beim Raster je Feld (gridKey); rowAnswered: Antwortende je Rasterzeile.
     const counts = new Map<string, number>()
-    for (const a of answers) if (a.optionId) counts.set(a.optionId, (counts.get(a.optionId) ?? 0) + 1)
+    const rowAnswered = new Map<string, number>()
+    for (const a of answers) {
+      if (!a.optionId) continue
+      const key = a.rowId ? gridKey(a.rowId, a.optionId) : a.optionId
+      counts.set(key, (counts.get(key) ?? 0) + 1)
+    }
+    if (isGrid(q.kind)) {
+      for (const r of responses) {
+        for (const rowId of new Set(r.answers.filter(a => a.questionId === q.id && a.rowId).map(a => a.rowId!))) rowAnswered.set(rowId, (rowAnswered.get(rowId) ?? 0) + 1)
+      }
+    }
     const { min, max } = scaleRange(q)
     return {
       ...q,
+      ...splitOptions(q.options),
       answered,
       counts,
+      rowAnswered,
       scale: q.kind === 'SCALE' ? scaleStats(answers.flatMap(a => (a.number !== null ? [a.number] : [])), min, max) : null,
       // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
       texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ text: a.text, at: a.at }] : [])).reverse() : []
@@ -190,11 +226,23 @@ export async function loadSurveyResults(surveyId: string) {
 
 export type SurveyResults = Awaited<ReturnType<typeof loadSurveyResults>>
 
+/** Schlüssel eines Rasterfelds in SurveyResults counts. */
+export function gridKey(rowId: string, columnId: string): string {
+  return `${rowId}:${columnId}`
+}
+
 /** Antwort einer Abgabe auf eine Frage als Text (CSV, eine Zelle je Frage). */
 export function describeAnswer(q: SurveyResults['questions'][number], answers: AnswerRow[]): string {
   const mine = answers.filter(a => a.questionId === q.id)
+  if (isGrid(q.kind)) {
+    // "Zeile: Spalte, Spalte; Zeile: Spalte" - in der Reihenfolge des Fragebogens.
+    return q.rows.flatMap(row => {
+      const chosen = q.columns.filter(c => mine.some(a => a.rowId === row.id && a.optionId === c.id)).map(c => c.label)
+      return chosen.length ? [`${row.label}: ${chosen.join(', ')}`] : []
+    }).join('; ')
+  }
   if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
-    return q.options.filter(o => mine.some(a => a.optionId === o.id)).map(o => o.label).join(', ')
+    return q.columns.filter(o => mine.some(a => a.optionId === o.id)).map(o => o.label).join(', ')
   }
   if (q.kind === 'TEXT') return mine[0]?.text ?? ''
   return mine[0]?.number !== undefined && mine[0]?.number !== null ? String(mine[0].number) : ''

@@ -616,11 +616,15 @@ enum SurveyIdentity {
   COOKIE
 }
 
+// GRID_SINGLE/GRID_MULTI: Raster - Zeilen (Aussagen) mal Spalten (Antwortmöglichkeiten), je Zeile eine bzw.
+// beliebig viele Spalten.
 enum SurveyQuestionKind {
   SINGLE
   MULTI
   TEXT
   SCALE
+  GRID_SINGLE
+  GRID_MULTI
 }
 
 model Survey {
@@ -667,7 +671,7 @@ model SurveyQuestion {
   hint       String?
   kind       SurveyQuestionKind
   required   Boolean            @default(false)
-  // Nur MULTI: höchstens so viele Optionen, null = beliebig viele.
+  // Nur MULTI: höchstens so viele Optionen, null = beliebig viele. Pflicht heißt beim Raster: jede Zeile beantworten.
   maxChoices Int?
   // Nur TEXT: mehrzeiliges Feld (längere Antworten).
   multiline  Boolean            @default(false)
@@ -682,13 +686,16 @@ model SurveyQuestion {
   @@unique([surveyId, position])
 }
 
+// Antwortmöglichkeit bei SINGLE/MULTI, beim Raster eine Spalte - oder mit isRow eine Zeile (Positionen je Art getrennt).
 model SurveyOption {
   id         String         @id @default(cuid())
   questionId String
   question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   position   Int
   label      String
-  answers    SurveyAnswer[]
+  isRow      Boolean        @default(false)
+  answers    SurveyAnswer[] @relation("SurveyAnswerOption")
+  rowAnswers SurveyAnswer[] @relation("SurveyAnswerRow")
 }
 
 // Ein ausgefüllter Fragebogen. voterKey ("cookie:<token>") nur im Modus COOKIE - eindeutig pro
@@ -705,7 +712,8 @@ model SurveyResponse {
   @@unique([surveyId, voterKey])
 }
 
-// Antwort auf eine Frage: SINGLE/MULTI eine Zeile je gewählter Option, TEXT mit text, SCALE mit number.
+// Antwort auf eine Frage: SINGLE/MULTI eine Zeile je gewählter Option, TEXT mit text, SCALE mit number, Raster eine
+// Zeile je gewähltem Feld (rowId = Zeile, optionId = Spalte).
 model SurveyAnswer {
   id         String         @id @default(cuid())
   responseId String
@@ -713,7 +721,9 @@ model SurveyAnswer {
   questionId String
   question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
   optionId   String?
-  option     SurveyOption?  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  option     SurveyOption?  @relation("SurveyAnswerOption", fields: [optionId], references: [id], onDelete: Cascade)
+  rowId      String?
+  row        SurveyOption?  @relation("SurveyAnswerRow", fields: [rowId], references: [id], onDelete: Cascade)
   text       String?
   number     Int?
 

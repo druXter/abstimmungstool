@@ -606,6 +606,13 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   | `MULTI` Mehrfachauswahl | Checkboxen, optional höchstens n | wie oben (Summe der Anteile kann über 100 % liegen) |
   | `TEXT` Freitext | einzeilig (300 Zeichen) oder mehrzeilig (2000) | Liste, neueste zuerst |
   | `SCALE` Lineare Skala | ein Wert von 0/1 bis 2-10, Beschriftung der Enden | Verteilung, Durchschnitt, Median |
+  | `GRID_SINGLE` Raster, eine pro Zeile | 1-20 Zeilen (Aussagen) × 2-10 Spalten, je Zeile eine Spalte | Tabelle je Feld: Anzahl und Anteil der Antwortenden der Zeile |
+  | `GRID_MULTI` Raster, mehrere pro Zeile | wie oben, je Zeile beliebig viele Spalten | wie oben |
+
+  Raster: Zeilen und Spalten sind beide `SurveyOption` (`isRow`), eine Antwort trägt `rowId` (Zeile) und `optionId`
+  (Spalte), das Formularfeld heißt `q_<Frage>_<Zeile>`. Pflicht heißt: jede Zeile beantworten. **Mobil** (unter `sm`)
+  wird jede Zeile ein eigener Block mit den Spalten als großen Knöpfen, ab `sm` eine Tabelle mit Spaltenköpfen
+  (`grid-input.tsx`) - jedes Feld gibt es nur einmal, die Ansicht wechselt allein per CSS, auch ohne JavaScript.
 * **Wer darf antworten** (`Survey.identity`, gesperrt nach der ersten Antwort): `ANONYMOUS` (Standard) - jede Abgabe ist
   eine neue Antwort, nichts im Browser gespeichert, funktioniert auch eingebettet überall; `COOKIE` - eine Antwort pro
   Gerät (`voter_token` wie bei Abstimmungen, `voterKey` `cookie:…`), änderbar bis zum Ende, vorausgefüllt.
@@ -811,7 +818,7 @@ Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Üb
 (`live.spec.ts`: Leinwand und mehrere Handys als eigene Browser-Kontexte im Gleichtakt, Punkte,
 Zeitablauf, Entfernen, Berechtigungen; `live-extras.spec.ts`: Mehrfachauswahl, Schätzfrage, Wortwolke,
 Teilen, CSV-Export, Bilder), die Fragebögen (`survey.spec.ts`: Anlegen, anonym und einmal pro Gerät ausfüllen,
-Pflicht und Höchstzahl, Auswertung und CSV, Sperre der Fragen, Header und Einbetten in andere Websites - die
+Pflicht und Höchstzahl, Raster am Handy und am Desktop, Auswertung und CSV, Sperre der Fragen, Header und Einbetten in andere Websites - die
 einbettenden Seiten liefern kleine Server auf `localhost:3697-3699` aus) und die Oberfläche der Verwaltung (`admin-ui.spec.ts`: Vorlagen beim Anlegen, Übersicht,
 Reiter samt Token bei Alt-Abstimmungen, Einstellungen, Freigaben, Konto-Menü). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
