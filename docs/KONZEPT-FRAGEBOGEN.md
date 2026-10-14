@@ -96,7 +96,8 @@ Skripten schwer zu machen und Angriffe sichtbar und aufräumbar zu machen:
 | Angriff | Gegenmaßnahme |
 | --- | --- |
 | Formular per Skript tausendfach abschicken | Einmal-Token (signiert, einmal verwendbar, Mindest-Ausfüllzeit), Lockfeld |
-| Drosselung mit wechselnden IPv6-Adressen umgehen | Zählung je /64-Netz |
+| Drosselung mit wechselnden IPv6-Adressen umgehen | zusätzliche Zählung je /64-Netz (zweistufig, damit ein Hörsaal im gemeinsamen /64 nicht gemeinsam gesperrt wird) |
+| Grenze trifft echte Teilnehmende (volles Uni-WLAN) | Grenze je Fragebogen einstellbar (Standard 200/h), abgelehnte Abgaben werden gezählt und gemeldet |
 | `X-Forwarded-For` fälschen | nur der letzte Eintrag zählt (vom Tunnel gesetzt), Container nur auf localhost |
 | Riesige Anfragen | 512 KB Grenze vor der Verarbeitung |
 | Fremde Options-IDs, Werte außerhalb der Skala, überlange Texte | serverseitig verworfen bzw. gekürzt |

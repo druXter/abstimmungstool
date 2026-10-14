@@ -15,6 +15,9 @@ export const MAX_OPTIONS = 20
 export const MAX_GRID_ROWS = 20
 export const MAX_GRID_COLUMNS = 10
 export const MAX_TITLE_LENGTH = 200
+/** Einstellbare Grenze "Abgaben pro Stunde und Netz" (Survey.submitLimit). */
+export const MIN_SUBMIT_LIMIT = 10
+export const MAX_SUBMIT_LIMIT = 5000
 export const MAX_DESCRIPTION_LENGTH = 2000
 export const MAX_THANKS_LENGTH = 1000
 export const MAX_QUESTION_LENGTH = 300

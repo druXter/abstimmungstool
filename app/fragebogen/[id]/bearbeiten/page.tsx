@@ -2,7 +2,7 @@ import { notFound, redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { toInputValue } from '../../../lib/date-options'
-import { DEFAULT_SCALE, getSurveyLevel, KIND_LABELS } from '../../../lib/survey'
+import { DEFAULT_SCALE, getSurveyLevel, KIND_LABELS, MAX_SUBMIT_LIMIT, MIN_SUBMIT_LIMIT } from '../../../lib/survey'
 import { updateSurvey } from '../../../survey-actions'
 import SubmitButton from '../../../ui/submit-button'
 import Notice from '../../../ui/notice'
@@ -77,6 +77,15 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
             </p>
           </div>
           <IdentityFields value={survey.identity} locked={answered} />
+          <div>
+            <label htmlFor="survey-submit-limit" className={labelClass}>Höchstens Abgaben pro Stunde und Netzwerk</label>
+            <input id="survey-submit-limit" type="number" name="submitLimit" min={MIN_SUBMIT_LIMIT} max={MAX_SUBMIT_LIMIT} defaultValue={survey.submitLimit} className={inputClass.replace('w-full', 'w-32')} />
+            <p className={hintClass}>
+              Schutz gegen Skripte. Ein Netzwerk ist eine IPv4-Adresse (z.B. ein ganzes Uni-WLAN hinter einem NAT) bzw. ein IPv6-Netz
+              (/64); ein einzelnes Gerät mit eigener IPv6-Adresse höchstens 30. Lehnt die Drosselung Abgaben ab, steht das in der
+              Übersicht - vor einer großen Veranstaltung im selben WLAN hier hochsetzen.
+            </p>
+          </div>
           {/* Gesperrte Radiobuttons werden nicht mitgeschickt - updateSurvey lässt die Einstellung dann unverändert. */}
         </Card>
 

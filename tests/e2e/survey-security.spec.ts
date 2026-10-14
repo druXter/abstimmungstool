@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
 import { BASE_URL, createAccount, login, prisma, unique, uniqueIp } from './helpers'
+import { IP_LIMITS } from '../../app/lib/throttle-limits'
 
 // Angriffe auf Fragebögen (docs/KONZEPT-FRAGEBOGEN.md, "Schutz vor Manipulation"): Abgaben per Skript ohne Browser,
 // Replay, gefälschte Tokens, Lockfeld, Riesen-Anfragen, gefälschte Header, IPv6-Adresswechsel, manipulierte Felder,
@@ -148,22 +149,65 @@ test('Riesen-Anfrage (über 512 KB) wird abgewiesen, bevor sie verarbeitet wird'
   await request.dispose()
 })
 
-test('Drosselung: IPv6-Adressen eines /64-Netzes zählen gemeinsam, gefälschte vordere X-Forwarded-For-Einträge nie', async ({ playwright }) => {
+test('Drosselung zweistufig: IPv6 je Adresse und je /64, gefälschte vordere X-Forwarded-For-Einträge nie', async ({ playwright }) => {
   const owner = await createAccount()
   const survey = await createTarget(owner.id)
-  const prefix = `2001:db8:${(Date.now() % 65536).toString(16)}:${Math.floor(Math.random() * 65536).toString(16)}`
-  const key = (ip: string) => createHash('sha256').update(`survey:ip\u0000${survey.id}\u0000${ip}`).digest('hex')
-  // Drei verschiedene Adressen desselben /64 (ausgeschrieben, mit '::' gekürzt, groß geschrieben), davor jeweils ein
-  // gefälschter Eintrag - gezählt wird nur der letzte (vom Proxy gesetzte) und nur als Netz.
-  for (const address of [`${prefix}:0:0:0:1`, `${prefix}::dead:beef`, `${prefix}:FFFF:FFFF:FFFF:FFFF`.toUpperCase()]) {
+  const prefix = `2001:db8:${(Date.now() % 65536).toString(16)}:${Math.floor(Math.random() * 65535 + 1).toString(16)}`
+  const key = (scope: string, ip: string) => createHash('sha256').update(`${scope}\u0000${survey.id}\u0000${ip}`).digest('hex')
+  const count = async (scope: string, ip: string) => (await prisma.loginThrottle.findUnique({ where: { key: key(scope, ip) } }))?.count ?? 0
+  const submitFrom = async (address: string) => {
     const request = await playwright.request.newContext({ baseURL: BASE_URL, extraHTTPHeaders: { 'x-forwarded-for': `203.0.113.66, ${address}` } })
     const res = await scriptedSubmit(request, survey, { [`q_${survey.questions[1].id}`]: 'v6' })
-    expect(res.location).toContain('danke=1')
     await request.dispose()
+    return res.location
   }
-  const bucket = `${prefix.split(':').map(g => g.replace(/^0+(?=.)/, '')).join(':')}::/64`
-  expect((await prisma.loginThrottle.findUnique({ where: { key: key(bucket) } }))?.count).toBe(3)
-  expect(await prisma.loginThrottle.findUnique({ where: { key: key('203.0.113.66') } })).toBeNull()
+
+  // Drei Schreibweisen von Adressen desselben /64: je Adresse ein Zähler, alle zusammen im Netz-Zähler.
+  for (const address of [`${prefix}:0:0:0:1`, `${prefix}::dead:beef`, `${prefix}:FFFF:FFFF:FFFF:FFFF`]) expect(await submitFrom(address)).toContain('danke=1')
+  const network = `${prefix}::/64`
+  expect(await count('survey:ip:net', network)).toBe(3)
+  expect(await count('survey:ip', `${prefix}:0:0:0:1`)).toBe(1)
+  expect(await count('survey:ip', `${prefix}:0:0:dead:beef`)).toBe(1)
+  expect(await count('survey:ip', `${prefix}:ffff:ffff:ffff:ffff`)).toBe(1)
+  expect(await count('survey:ip', '203.0.113.66')).toBe(0)
+
+  // Ein einzelnes Gerät am Adress-Limit: gesperrt - ein anderes Gerät im selben /64 (Hörsaal) nicht.
+  await prisma.loginThrottle.update({ where: { key: key('survey:ip', `${prefix}:0:0:0:1`) }, data: { count: IP_LIMITS.survey.address } })
+  expect(await submitFrom(`${prefix}::1`)).toContain('hinweis=gedrosselt')
+  expect(await submitFrom(`${prefix}::2`)).toContain('danke=1')
+  // Das ganze /64 an der Netz-Grenze (z.B. Adressen durchgewechselt): auch neue Adressen darin gesperrt.
+  await prisma.loginThrottle.update({ where: { key: key('survey:ip:net', network) }, data: { count: IP_LIMITS.survey.network } })
+  expect(await submitFrom(`${prefix}::3`)).toContain('hinweis=gedrosselt')
+  // Ein anderes /64 ist unberührt.
+  expect(await submitFrom(`2001:db8:ffff:${Math.floor(Math.random() * 65535 + 1).toString(16)}::1`)).toContain('danke=1')
+  expect((await prisma.survey.findUniqueOrThrow({ where: { id: survey.id } })).throttledCount).toBe(2)
+})
+
+test('Grenze je Fragebogen einstellbar: abgelehnte Abgaben werden gezählt und in der Übersicht gemeldet', async ({ page, playwright }) => {
+  const owner = await createAccount()
+  const survey = await createTarget(owner.id)
+  await prisma.survey.update({ where: { id: survey.id }, data: { submitLimit: 10 } })
+  const ip = uniqueIp()
+  const key = createHash('sha256').update(`survey:ip\u0000${survey.id}\u0000${ip}`).digest('hex')
+  await prisma.loginThrottle.create({ data: { key, count: 10, windowStart: new Date() } })
+  const request = await playwright.request.newContext({ baseURL: BASE_URL, extraHTTPHeaders: { 'x-forwarded-for': ip } })
+  expect((await scriptedSubmit(request, survey, { [`q_${survey.questions[1].id}`]: 'zu viel' })).location).toContain('hinweis=gedrosselt')
+
+  await login(page, owner.email)
+  await page.goto(`/fragebogen/${survey.id}/verwalten`)
+  await expect(page.getByText('Die Drosselung hat bisher 1 Abgabe abgelehnt (mehr als 10 pro Stunde')).toBeVisible()
+  await page.goto(`/fragebogen/${survey.id}/bearbeiten`)
+  await expect(page.getByLabel('Höchstens Abgaben pro Stunde und Netzwerk')).toHaveValue('10')
+  await page.getByLabel('Höchstens Abgaben pro Stunde und Netzwerk').fill('500')
+  await page.getByRole('button', { name: 'Speichern' }).click()
+  await expect(page.getByText('Gespeichert.', { exact: true })).toBeVisible()
+  expect((await prisma.survey.findUniqueOrThrow({ where: { id: survey.id } })).submitLimit).toBe(500)
+  // Mit der höheren Grenze kommt dasselbe Netz wieder durch. (Speichern ohne Antworten legt die Fragen neu an - neu laden.)
+  const saved = await prisma.survey.findUniqueOrThrow({
+    where: { id: survey.id }, include: { questions: { orderBy: { position: 'asc' }, include: { options: { orderBy: { position: 'asc' } } } } }
+  })
+  expect((await scriptedSubmit(request, saved, { [`q_${saved.questions[1].id}`]: 'jetzt ok' })).location).toContain('danke=1')
+  await request.dispose()
 })
 
 test('XSS und CSV-Injection: Texte erscheinen in der Verwaltung als Text, Formeln im CSV entschärft', async ({ page, playwright }) => {

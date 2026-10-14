@@ -41,7 +41,7 @@ export async function loginUser(formData: FormData) {
   const nextParam = `&next=${encodeURIComponent(next)}`
 
   const rules = loginRules(await clientIp(), email)
-  if (!(await reserve([rules.ip, rules.email]))) {
+  if (!(await reserve([...rules.ip, rules.email]))) {
     redirect(`/anmelden?error=locked${nextParam}`)
   }
 

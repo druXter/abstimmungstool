@@ -87,6 +87,14 @@ export default async function ManageSurveyPage({
         {entfernt && /^\d+$/.test(entfernt) && <Notice tone="success">{entfernt === '1' ? '1 Antwort' : `${entfernt} Antworten`} gelöscht.</Notice>}
         {geteilt === '1' && <Notice tone="success">Freigabe hinzugefügt.</Notice>}
         {teilenFehler && Object.hasOwn(SHARE_ERRORS, teilenFehler) && <Notice tone="error">{SHARE_ERRORS[teilenFehler]}</Notice>}
+        {survey.throttledCount > 0 && (
+          <Notice tone="warning">
+            Die Drosselung hat bisher {survey.throttledCount === 1 ? '1 Abgabe' : `${survey.throttledCount} Abgaben`} abgelehnt (mehr als{' '}
+            {survey.submitLimit} pro Stunde aus einem Netzwerk). Waren das echte Teilnehmende, z.B. viele im selben WLAN, die Grenze unter{' '}
+            <a href={`/fragebogen/${id}/bearbeiten`} className="underline">Bearbeiten</a> hochsetzen; sonst war es vermutlich ein Skript -
+            dann unten bei den einzelnen Antworten aufräumen.
+          </Notice>
+        )}
         {fehler === 'beantwortet' && <Notice tone="warning">Es wurde schon geantwortet - die Fragen lassen sich nicht mehr ändern.</Notice>}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">

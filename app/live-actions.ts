@@ -7,7 +7,7 @@ import { prisma } from './lib/prisma'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
-import { clientIp, liveJoinRule, livePinRule, refund, reserve } from './lib/throttle'
+import { clientIp, liveJoinRules, livePinRules, refund, reserve } from './lib/throttle'
 import { currentPlayer, issuePlayerToken } from './lib/live-player'
 import { deleteUnusedImages, readImage } from './lib/live-images'
 import {
@@ -286,19 +286,19 @@ export async function joinLive(formData: FormData) {
   }
 
   const ip = await clientIp()
-  const pinRule = livePinRule(ip)
-  if (!(await reserve([pinRule]))) redirect(back('gesperrt'))
+  const pinRules = livePinRules(ip)
+  if (!(await reserve(pinRules))) redirect(back('gesperrt'))
 
   const session = pin.length === 6 ? await prisma.liveSession.findUnique({ where: { pin } }) : null
   if (!session || session.phase === 'FINISHED') redirect(back('pin'))
-  await refund(pinRule)
+  await refund(pinRules)
 
   if (await currentPlayer(session.id)) redirect(`/live/${session.id}`)
   if (session.joinLocked) redirect(back('zu'))
 
   const nickname = cleanNickname(rawName)
   if (!nickname) redirect(back('name'))
-  if (ip !== 'unknown' && !(await reserve([liveJoinRule(ip, session.id)]))) redirect(back('viele'))
+  if (ip !== 'unknown' && !(await reserve(liveJoinRules(ip, session.id)))) redirect(back('viele'))
   if ((await prisma.livePlayer.count({ where: { sessionId: session.id } })) >= MAX_PLAYERS) redirect(back('voll'))
 
   let created = false

@@ -638,6 +638,10 @@ model Survey {
   thanksText  String?
   // Fragen nummerieren (questionNumbers in app/lib/survey.ts). Aus = gar keine Nummern, auch nicht in der Auswertung.
   numbered    Boolean          @default(true)
+  // Höchstens so viele Abgaben pro Stunde je Netz (IPv4-Adresse bzw. IPv6-/64, surveyRules in app/lib/throttle.ts).
+  submitLimit Int              @default(200)
+  // Wie viele Abgaben die Drosselung abgelehnt hat - zeigt der Verwaltung, ob die Grenze echte Teilnehmende trifft.
+  throttledCount Int           @default(0)
   ownerId     String
   owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // Gesperrt, sobald jemand geantwortet hat (wie Poll.voterIdentity).

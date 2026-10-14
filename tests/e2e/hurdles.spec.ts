@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { expect, test, type Page } from '@playwright/test'
 import { createAccount, createPoll, pageAlert, prisma, uniqueIp } from './helpers'
+import { IP_LIMITS } from '../../app/lib/throttle-limits'
 
 // Hürden ohne starke Identität (TODO.md A4/A5): Pflichtname, Höchstzahl, Drosselung neuer
 // Cookie-Identitäten und Zugangscode.
@@ -70,10 +71,10 @@ test('Drosselung: zu viele neue Identitäten von einer IP werden abgewiesen, Än
   await vote(early, 'Pizza')
   await expect(early.getByText('Pizza ✓')).toBeVisible()
 
-  // Zähler auf das Limit (30 neue Identitäten pro Stunde) setzen, statt 30 Browser zu starten.
+  // Zähler auf das Limit (neue Identitäten pro Stunde und IPv4-Adresse) setzen, statt so viele Browser zu starten.
   await prisma.loginThrottle.update({
     where: { key: throttleKey('vote:new:ip', `${poll.id}\u0000${ip}`) },
-    data: { count: 30 }
+    data: { count: IP_LIMITS.newVoter.network }
   })
 
   const late = await (await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': ip } })).newPage()
@@ -150,13 +151,32 @@ test.describe('Zugangscode', () => {
     await expect(page.getByRole('heading', { name: poll.title })).toBeVisible()
   })
 
+  test('Richtige Codes zählen nicht: ein voller Raum hinter einer Adresse sperrt sich nicht gegenseitig aus', async ({ browser }) => {
+    const ip = uniqueIp()
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { accessCode: 'Sommerfest' })
+    const key = throttleKey('poll:code:ip', `${poll.id}\u0000${ip}`)
+    // Kurz vor der Grenze (z.B. nach einigen Tippfehlern im Raum) kommen trotzdem alle mit dem richtigen Code rein.
+    await prisma.loginThrottle.create({ data: { key, count: IP_LIMITS.accessCode.network - 1, windowStart: new Date() } })
+    for (let i = 0; i < 3; i++) {
+      const context = await browser.newContext({ extraHTTPHeaders: { 'x-forwarded-for': ip } })
+      const page = await context.newPage()
+      await page.goto(`/${poll.id}`)
+      await page.getByLabel('Zugangscode').fill('sommerfest')
+      await page.getByRole('button', { name: 'Weiter' }).click()
+      await expect(page.getByRole('heading', { name: poll.title })).toBeVisible()
+      await context.close()
+    }
+    expect((await prisma.loginThrottle.findUniqueOrThrow({ where: { key } })).count).toBe(IP_LIMITS.accessCode.network - 1)
+  })
+
   test('Durchprobieren wird gedrosselt - auch der richtige Code hilft dann nicht', async ({ page }) => {
     const ip = uniqueIp()
     await page.setExtraHTTPHeaders({ 'x-forwarded-for': ip })
     const owner = await createAccount()
     const poll = await createPoll(owner.id, { accessCode: 'Sommerfest' })
     await prisma.loginThrottle.create({
-      data: { key: throttleKey('poll:code:ip', `${poll.id}\u0000${ip}`), count: 10, windowStart: new Date() }
+      data: { key: throttleKey('poll:code:ip', `${poll.id}\u0000${ip}`), count: IP_LIMITS.accessCode.network, windowStart: new Date() }
     })
 
     await page.goto(`/${poll.id}`)

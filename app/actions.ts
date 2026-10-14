@@ -9,7 +9,7 @@ import { randomUUID } from 'node:crypto'
 import { prisma } from './lib/prisma'
 import { parseVoterIdentity, resolveVoter, type Voter } from './lib/voter-identity'
 import { accessCodeMatches, grantPollAccess, hasPollAccess, MAX_ACCESS_CODE_LENGTH } from './lib/access-code'
-import { accessCodeRule, clientIp, newVoterRule, reserve, suggestionRule, voteEmailRules } from './lib/throttle'
+import { accessCodeRules, clientIp, newVoterRules, refund, reserve, suggestionRules, voteEmailRules } from './lib/throttle'
 import { confirmEmailVoter, CONFIRM_LINK_HOURS, createEmailConfirmation, findPendingConfirmation, forgetConfirmedEmail, isEmailAllowed, normalizeAllowedEmails } from './lib/email-voters'
 import { isMailConfigured, sendVoteConfirmationEmail } from './lib/mail'
 import { isPushConfigured } from './lib/push'
@@ -315,7 +315,7 @@ export async function castVote(formData: FormData): Promise<void> {
     // Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt - sonst teilten sich alle
     // Besucher EINEN Zähler. Wer den Proxy umgehen kann, könnte den Header ohnehin selbst setzen.
     const ip = await clientIp()
-    if (ip !== 'unknown' && !(await reserve([newVoterRule(ip, pollId)]))) {
+    if (ip !== 'unknown' && !(await reserve(newVoterRules(ip, pollId)))) {
       redirect(pollUrl(pollId, identity, 'gedrosselt'))
     }
   }
@@ -356,7 +356,7 @@ export async function suggestOption(formData: FormData): Promise<void> {
   if (!option) redirect(pollUrl(pollId, identity, 'vorschlag-ungueltig'))
   if (poll.options.some(o => o.label === option.label)) redirect(pollUrl(pollId, identity, 'vorschlag-doppelt'))
   if (poll.options.length >= MAX_OPTIONS) redirect(pollUrl(pollId, identity, 'vorschlag-voll'))
-  if (!(await reserve([suggestionRule(await clientIp(), pollId)]))) redirect(pollUrl(pollId, identity, 'vorschlag-gedrosselt'))
+  if (!(await reserve(suggestionRules(await clientIp(), pollId)))) redirect(pollUrl(pollId, identity, 'vorschlag-gedrosselt'))
 
   await prisma.pollOption.create({
     data: { pollId, ...option, position: poll.options.length, approved: !poll.voterOptionsNeedApproval }
@@ -459,10 +459,13 @@ export async function unlockPoll(formData: FormData): Promise<void> {
   const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, accessCode: true } })
   if (!poll) return
 
-  if (!(await reserve([accessCodeRule(await clientIp(), poll.id)]))) redirect(pollUrl(poll.id, identity, 'code-gesperrt'))
+  const rules = accessCodeRules(await clientIp(), poll.id)
+  if (!(await reserve(rules))) redirect(pollUrl(poll.id, identity, 'code-gesperrt'))
   if (!accessCodeMatches(poll, formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH))) {
     redirect(pollUrl(poll.id, identity, 'code-falsch'))
   }
+  // Richtiger Code: Versuch zurückgeben - es zählen nur Fehlversuche, sonst sperrten sich in einem vollen Raum alle aus.
+  await refund(rules)
 
   await grantPollAccess(poll)
   redirect(pollUrl(poll.id, identity))

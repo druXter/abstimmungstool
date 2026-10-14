@@ -7,12 +7,12 @@ import { prisma } from './lib/prisma'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
-import { clientIp, reserve, surveyRule } from './lib/throttle'
+import { clientIp, reserve, surveyRules } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
 import { surveyLang, withLang } from './lib/survey-i18n'
 import { checkFormToken, consumeFormToken, HONEYPOT_FIELD } from './lib/survey-token'
 import {
-  DEFAULT_SCALE, getSurveyLevel, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
+  DEFAULT_SCALE, getSurveyLevel, MAX_SUBMIT_LIMIT, MIN_SUBMIT_LIMIT, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
   SCALE_MINS, SURVEY_IDENTITIES, SURVEY_QUESTION_KINDS, surveyVoterKey, type SurveyLevel
 } from './lib/survey'
@@ -138,6 +138,12 @@ async function writeQuestions(tx: Prisma.TransactionClient, surveyId: string, qu
   }
 }
 
+/** Abgaben pro Stunde und Netz: 10 bis 5000, sonst bleibt der bisherige Wert. */
+function parseSubmitLimit(formData: FormData, current: number): number {
+  const value = Number.parseInt(formString(formData, 'submitLimit', 6), 10)
+  return Number.isInteger(value) && value >= MIN_SUBMIT_LIMIT && value <= MAX_SUBMIT_LIMIT ? value : current
+}
+
 function parseIdentity(formData: FormData) {
   return SURVEY_IDENTITIES.find(i => i === formData.get('identity')) ?? 'ANONYMOUS'
 }
@@ -202,6 +208,7 @@ export async function updateSurvey(formData: FormData) {
         description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null,
         thanksText: formString(formData, 'thanksText', MAX_THANKS_LENGTH) || null,
         numbered: formData.get('numbered') === 'on',
+        submitLimit: parseSubmitLimit(formData, survey.submitLimit),
         closesAt: parseClosesAt(formData),
         ...(answered ? {} : { identity: parseIdentity(formData) })
       }
@@ -251,7 +258,12 @@ export async function submitSurvey(formData: FormData): Promise<void> {
 
   // Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt - sonst teilten sich alle einen Zähler.
   const ip = await clientIp()
-  const throttled = async () => ip !== 'unknown' && !(await reserve([surveyRule(ip, survey.id)]))
+  const throttled = async () => {
+    if (ip === 'unknown' || (await reserve(surveyRules(ip, survey.id, survey.submitLimit)))) return false
+    // Mitzählen, damit die Verwaltung sieht, wenn die Grenze echte Teilnehmende trifft (z.B. ein voller Hörsaal).
+    await prisma.survey.update({ where: { id: survey.id }, data: { throttledCount: { increment: 1 } } })
+    return true
+  }
 
   if (survey.identity === 'ANONYMOUS') {
     if (await throttled()) redirect(to('hinweis=gedrosselt'))

@@ -668,10 +668,16 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
     einmal verwendbar (Nonce als Hash in `LoginThrottle`, 24 h). Ein Skript muss für jede Abgabe die Seite laden und
     warten, statt ein Formular beliebig oft abzuschicken. Dazu ein unsichtbares Lockfeld (`website`): ausgefüllt sieht
     es für den Bot nach Erfolg aus, gespeichert wird nichts.
-  * **Drosselung** je IP und Fragebogen (200 pro Stunde), bei IPv6 je /64-Netz (`ipBucket` in `app/lib/throttle.ts`,
-    gilt für alle Drosseln des Tools) - sonst ließe sich mit wechselnden Adressen aus dem eigenen /64 jede Grenze
-    umgehen. Gefälschte vordere `X-Forwarded-For`-Einträge zählen nicht (live geprüft, `TRUST_PROXY_HOPS=1` hinter dem
-    Cloudflare-Tunnel); deshalb lauscht der Container nur auf `127.0.0.1:3006`.
+  * **Drosselung** je Netz und Fragebogen: `Survey.submitLimit` Abgaben pro Stunde (Standard 200, unter "Bearbeiten"
+    einstellbar, 10-5000). Abgelehnte Abgaben zählt `Survey.throttledCount`, die Übersicht meldet sie - so fällt auf,
+    wenn die Grenze echte Teilnehmende trifft (viele im selben WLAN), statt still Antworten zu verlieren.
+  * **Zweistufige IP-Zählung** (`ipRules` in `app/lib/throttle.ts`, gilt für alle Drosseln des Tools, Grenzen in
+    `app/lib/throttle-limits.ts`): IPv4 je Adresse mit einer NAT-tauglichen Netz-Grenze (ein Uni-WLAN hinter einem NAT ist
+    eine Adresse); IPv6 je /64-Netz mit derselben Netz-Grenze UND je einzelner Adresse mit einer kleineren. Je Adresse
+    allein ließe sich jede Grenze mit wechselnden Adressen aus dem eigenen /64 umgehen, je /64 allein würde ein Hörsaal im
+    gemeinsamen /64 eines Uni-WLANs gemeinsam gesperrt. Beim Zugangscode zählen (wie bei Login und Live-PIN) nur
+    Fehlversuche. Gefälschte vordere `X-Forwarded-For`-Einträge zählen nicht (live geprüft, `TRUST_PROXY_HOPS=1` hinter
+    dem Cloudflare-Tunnel); deshalb lauscht der Container nur auf `127.0.0.1:3006`.
   * **Größe:** Abgaben an die öffentlichen Fragebogen-Seiten höchstens 512 KB (`proxy.ts`), statt der globalen 16 MB.
   * **Aufräumen:** Die Übersicht listet einzelne Abgaben, gruppiert identische ("12× identisch", typisch für Skripte)
     und zeigt die Abgaben der letzten Stunde; Owner können einzelne oder alle identischen löschen.

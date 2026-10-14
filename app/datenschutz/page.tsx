@@ -225,7 +225,7 @@ export default function DatenschutzPage() {
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
             Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes, erste Stimmabgaben in
             offenen Abstimmungen, eingegebene PINs und Beitritte bei Live-Runden sowie abgegebene Fragebögen. Dazu wird
-            deine <strong>IP-Adresse</strong> (bei IPv6 nur ihr Netzanteil, das /64-Präfix) ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
+            deine <strong>IP-Adresse</strong> (bei IPv6 zusätzlich ihr Netzanteil, das /64-Präfix) ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
             (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
             deiner Stimme wird die IP-Adresse nicht verknüpft. Rechtsgrundlage ist unser
