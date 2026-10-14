@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Badge, type Tone } from '../ui/kit'
 
 export type RowData = {
-  kind: 'poll' | 'live'
+  kind: 'poll' | 'live' | 'survey'
   id: string
   href: string
   title: string
@@ -20,20 +20,24 @@ export type RowData = {
 }
 
 /**
- * Eine Abstimmung oder Live-Runde in der Übersicht (docs/KONZEPT-OBERFLAECHE.md, wie die Event-Zeile in rsvp-app):
- * Zahl der Teilnehmenden, Titel, Stand, Merkmale - als Ganzes ein Link zur Verwaltung. Live-Runden tragen die
- * lila Themenmarke. `muted` für Beendetes.
+ * Eine Abstimmung, Live-Runde oder ein Fragebogen in der Übersicht (docs/KONZEPT-OBERFLAECHE.md, wie die Event-Zeile in
+ * rsvp-app): Zahl der Teilnehmenden, Titel, Stand, Merkmale - als Ganzes ein Link zur Verwaltung. Live-Runden tragen die
+ * lila Themenmarke, Fragebögen die indigo. `muted` für Beendetes.
  */
 export default function PollRow({ row, muted = false }: { row: RowData; muted?: boolean }) {
-  const live = row.kind === 'live'
+  const box = row.kind === 'live'
+    ? { bg: 'bg-purple-50 dark:bg-purple-950/50', text: 'text-purple-800 dark:text-purple-200' }
+    : row.kind === 'survey'
+      ? { bg: 'bg-indigo-50 dark:bg-indigo-950/50', text: 'text-indigo-800 dark:text-indigo-200' }
+      : { bg: 'bg-gray-50 dark:bg-gray-900', text: 'text-gray-900 dark:text-gray-100' }
   return (
     <Link
       href={row.href}
       className={`group flex gap-4 rounded-xl border bg-white p-4 shadow-sm transition hover:border-blue-300 hover:shadow dark:bg-gray-800 dark:hover:border-blue-700 ${row.attention ? 'border-amber-300 dark:border-amber-800' : 'border-gray-200 dark:border-gray-700'} ${muted ? 'opacity-75' : ''}`}
       data-testid="poll-row"
     >
-      <div className={`flex w-14 shrink-0 flex-col items-center justify-center rounded-lg py-2 text-center ${live ? 'bg-purple-50 dark:bg-purple-950/50' : 'bg-gray-50 dark:bg-gray-900'}`}>
-        <span className={`text-xl font-semibold leading-tight ${live ? 'text-purple-800 dark:text-purple-200' : 'text-gray-900 dark:text-gray-100'}`}>{row.count}</span>
+      <div className={`flex w-14 shrink-0 flex-col items-center justify-center rounded-lg py-2 text-center ${box.bg}`}>
+        <span className={`text-xl font-semibold leading-tight ${box.text}`}>{row.count}</span>
         <span className="text-[10px] font-medium uppercase text-gray-500 dark:text-gray-400">{row.countLabel}</span>
       </div>
       <div className="min-w-0 flex-1">

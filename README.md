@@ -78,6 +78,9 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Live-Runden wie bei Kahoot** - siehe "Live-Runden" unten: mehrere Fragen, die die Verwaltung
   Frage für Frage auf einer Leinwand vorführt; alle antworten gleichzeitig auf dem Handy (PIN +
   Spitzname, kein Konto), optional als Quiz mit Punkten, Rangliste und Siegertreppchen.
+* **Fragebögen** - siehe "Fragebögen" unten: mehrere Fragen mit Einfach-/Mehrfachauswahl, Freitext und
+  linearer Skala zum Ausfüllen ohne Konto, anonym oder einmal pro Gerät, per Link oder **eingebettet per
+  iFrame** in andere Apps (z.B. Feedback in der Campus-App).
 * **Komfort in der Verwaltung:** CSV-Export, QR-Code zum Abstimmungslink,
   Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
   optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
@@ -383,7 +386,9 @@ Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
 * **Berechtigungen** werden serverseitig in jeder Server Action geprüft, nie nur in der
   Oberfläche. Server Actions prüfen zusätzlich den Origin (CSRF, Next.js-Standard).
 * **Header:** `X-Frame-Options`/`frame-ancestors 'none'` (kein Einbetten), `nosniff`,
-  `Referrer-Policy`, HSTS (siehe `next.config.ts`).
+  `Referrer-Policy`, HSTS (siehe `next.config.ts`). Einzige Ausnahme vom Einbett-Verbot ist
+  `/fragebogen/<id>/einbetten`: dort `frame-ancestors 'self'` plus `EMBED_ALLOWED_ORIGINS` (`proxy.ts`,
+  siehe "Fragebögen").
 
 ### Konten-Verbund mit anderen Tools (optional)
 
@@ -586,6 +591,47 @@ Die Verwaltung zeigt die Fragen im Raum auf einer Leinwand, alle antworten gleic
 * **Grenze:** Wer sein Cookie löscht, kann mit neuem Spitznamen erneut beitreten (für ein Spiel im Raum
   akzeptiert, die Leinwand sieht es).
 
+## Fragebögen
+
+Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`SurveyOption`, Abgaben
+`SurveyResponse` mit `SurveyAnswer`; Logik in `app/lib/survey.ts`, Aktionen in `app/survey-actions.ts`, Konzept in
+`docs/KONZEPT-FRAGEBOGEN.md`): mehrere Fragen ohne Gewinner, z.B. Feedback nach einem Event.
+
+* **Anlegen** (`/fragebogen/neu`, Creator/Admin, auch über "Abstimmungen"): Titel, Beschreibung, wer antworten darf,
+  bis 50 Fragen. Pro Frage Text, optionaler Hinweis, Pflicht ja/nein und die Art:
+
+  | Art | Eingabe | Auswertung |
+  | --- | --- | --- |
+  | `SINGLE` Einfachauswahl | Radiobuttons, 2-20 Optionen | Anzahl und Anteil der Antwortenden der Frage |
+  | `MULTI` Mehrfachauswahl | Checkboxen, optional höchstens n | wie oben (Summe der Anteile kann über 100 % liegen) |
+  | `TEXT` Freitext | einzeilig (300 Zeichen) oder mehrzeilig (2000) | Liste, neueste zuerst |
+  | `SCALE` Lineare Skala | ein Wert von 0/1 bis 2-10, Beschriftung der Enden | Verteilung, Durchschnitt, Median |
+* **Wer darf antworten** (`Survey.identity`, gesperrt nach der ersten Antwort): `ANONYMOUS` (Standard) - jede Abgabe ist
+  eine neue Antwort, nichts im Browser gespeichert, funktioniert auch eingebettet überall; `COOKIE` - eine Antwort pro
+  Gerät (`voter_token` wie bei Abstimmungen, `voterKey` `cookie:…`), änderbar bis zum Ende, vorausgefüllt.
+* **Ausfüllen** auf `/fragebogen/<id>`, ohne JavaScript bedienbar: Pflicht über die eingebaute Formularprüfung,
+  Mehrfachauswahl mit Grenze zusätzlich im Browser (`multi-choice.tsx`); `submitSurvey` prüft alles noch einmal
+  (`parseSurveyAnswers`). Gedrosselt pro IP und Fragebogen (200 pro Stunde, anonym jede Abgabe, sonst die erste).
+  Danach ein Danke-Text (einstellbar). Ergebnisse sieht nur die Verwaltung.
+* **Einbetten** (`/fragebogen/<id>/einbetten`): ohne Kopf- und Fußzeile (`[data-embed]` in `globals.css`), durchsichtig,
+  meldet seine Höhe per `postMessage({ type: 'abstimmungstool:hoehe', id, height })`. Die Verwaltung zeigt den
+  fertigen Schnipsel (iFrame plus Listener für die Höhe). Voraussetzungen:
+  * Die einbettende Seite steht in `EMBED_ALLOWED_ORIGINS` (`.env`, durch Leerzeichen getrennt, Platzhalter nur als
+    erste Subdomain, z.B. `https://campus-koblenz.app https://*.ramonroeser.de`). `proxy.ts` setzt daraus zur Laufzeit
+    `frame-ancestors`; ungültige Einträge fallen weg. Alle anderen Seiten bleiben uneinbettbar (`next.config.ts`
+    nimmt nur diesen Pfad von `X-Frame-Options: DENY`/`frame-ancestors 'none'` aus).
+  * Die einbettende Seite erlaubt das Tool in ihrer eigenen CSP (`frame-src https://vote.…`).
+  * `COOKIE` funktioniert eingebettet nur in Apps unter derselben Domain (`*.ramonroeser.de`); in anderen (Campus-App)
+    blockieren Browser das Cookie als Drittanbieter-Cookie. Die Seite prüft das im Browser und zeigt dann statt des
+    Formulars einen Knopf, der den Fragebogen in einem neuen Tab öffnet. Für solche Apps `ANONYMOUS` wählen.
+  * Kein Service Worker im iFrame (`pwa-register.tsx`).
+* **Verwaltung** (`/fragebogen/<id>/verwalten`, Rahmen wie bei Live-Runden, indigo Themenmarke): Kennzahlen, Link,
+  QR-Code, Einbetten, Auswertung je Frage, CSV-Export (Auswertung und jede Abgabe als Zeile), Schließen/Wieder öffnen,
+  gemeinsam verwalten (`SurveyAccess`: alles außer Antworten löschen, Löschen, Teilen). **Bearbeiten**: Grunddaten,
+  Danke-Text und Enddatum jederzeit, Fragen und "wer darf antworten" nur ohne Antworten - nach einem Probedurchlauf
+  "Alle Antworten löschen" (nur Owner).
+* **Grenze:** Anonym lässt sich mehrfaches Ausfüllen nicht verhindern, nur bremsen. Oberfläche nur auf Deutsch.
+
 ## Ergebnis-Meldung an rsvp-app
 
 Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
@@ -712,10 +758,12 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
   Abstimmung ohne Frist zählt ab Anlage).
 * **Konten:** 2 Jahre ohne Anmeldung (`User.lastLoginAt`, wird bei jedem Login gesetzt, auch
   über ein verbundenes Tool). **Konten mit Admin-Rolle sind ausgenommen**, ebenso Konten, denen noch
-  eine Abstimmung oder Live-Runde gehört.
+  eine Abstimmung, Live-Runde oder ein Fragebogen gehört.
 * **Teilnehmendenkonten aus dem Verbund** (`Participant`): 2 Jahre ohne Anmeldung, Stimmen bleiben ohne Namen.
 * **Live-Runden** samt Teilnehmenden und Antworten: 18 Monate nach dem Beenden (sonst nach der letzten
   Änderung). PINs von Runden, an denen sich 24 Stunden nichts getan hat, werden freigegeben.
+* **Fragebögen** samt Fragen und Antworten: 18 Monate nach dem Ende (geschlossen, sonst Schließdatum, sonst die
+  letzte Änderung am Fragebogen).
 * Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
   bestätigte E-Mail-Anfragen (Modus `EMAIL`) nach Ablauf ihres Links.
 
@@ -762,7 +810,9 @@ Auto-Schließen und Quorum (`comfort.spec.ts`) und die Terminabstimmung samt Üb
 (`final-date.spec.ts`; rsvp-app spielt dort `tests/e2e/rsvp-server.ts`, Port 2642) und die Live-Runden
 (`live.spec.ts`: Leinwand und mehrere Handys als eigene Browser-Kontexte im Gleichtakt, Punkte,
 Zeitablauf, Entfernen, Berechtigungen; `live-extras.spec.ts`: Mehrfachauswahl, Schätzfrage, Wortwolke,
-Teilen, CSV-Export, Bilder) und die Oberfläche der Verwaltung (`admin-ui.spec.ts`: Vorlagen beim Anlegen, Übersicht,
+Teilen, CSV-Export, Bilder), die Fragebögen (`survey.spec.ts`: Anlegen, anonym und einmal pro Gerät ausfüllen,
+Pflicht und Höchstzahl, Auswertung und CSV, Sperre der Fragen, Header und Einbetten in andere Websites - die
+einbettenden Seiten liefern kleine Server auf `localhost:3697-3699` aus) und die Oberfläche der Verwaltung (`admin-ui.spec.ts`: Vorlagen beim Anlegen, Übersicht,
 Reiter samt Token bei Alt-Abstimmungen, Einstellungen, Freigaben, Konto-Menü). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst

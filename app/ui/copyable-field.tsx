@@ -6,26 +6,38 @@ import { useId, useState } from 'react'
 /**
  * Read-only Eingabefeld, das seinen Inhalt beim Anklicken markiert, mit einem Kopieren-Knopf daneben. Muss eine
  * Client-Komponente sein - Next.js 16 lässt keine Event-Handler mehr an Elemente in Server Components (siehe
- * AGENTS.md). Ohne Zwischenablage (unsicherer Kontext, altes Gerät) bleibt das Markieren.
+ * AGENTS.md). Ohne Zwischenablage (unsicherer Kontext, altes Gerät) bleibt das Markieren. `rows` macht daraus ein
+ * mehrzeiliges Feld (z.B. Code zum Einbetten).
  */
-export default function CopyableField({ label, value }: { label: string; value: string }) {
+export default function CopyableField({ label, value, rows }: { label: string; value: string; rows?: number }) {
   const id = useId()
   const [copied, setCopied] = useState(false)
   return (
     <div>
       <label htmlFor={id} className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">{label}</label>
-      <div className="flex gap-2">
-        <input
-          id={id}
-          type="text"
-          readOnly
-          value={value}
-          className="min-w-0 flex-1 cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
-          onClick={(e) => e.currentTarget.select()}
-        />
+      <div className={`flex gap-2 ${rows ? 'items-start' : ''}`}>
+        {rows ? (
+          <textarea
+            id={id}
+            readOnly
+            rows={rows}
+            value={value}
+            className="min-w-0 flex-1 cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 font-mono text-xs text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+            onClick={(e) => e.currentTarget.select()}
+          />
+        ) : (
+          <input
+            id={id}
+            type="text"
+            readOnly
+            value={value}
+            className="min-w-0 flex-1 cursor-pointer rounded-lg border border-gray-200 bg-gray-50 p-2 text-sm text-gray-700 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300"
+            onClick={(e) => e.currentTarget.select()}
+          />
+        )}
         <button
           type="button"
-          className="shrink-0 rounded-lg border border-gray-300 bg-white px-3 text-sm font-medium text-gray-800 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700"
+          className={`shrink-0 rounded-lg border border-gray-300 bg-white px-3 ${rows ? 'py-2' : ''} text-sm font-medium text-gray-800 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:hover:bg-gray-700`}
           onClick={async () => {
             try {
               await navigator.clipboard.writeText(value)

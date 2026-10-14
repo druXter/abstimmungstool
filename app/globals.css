@@ -19,3 +19,13 @@
     }
   }
 }
+
+/* Eingebetteter Fragebogen (/fragebogen/<id>/einbetten): ohne Kopf- und Fußzeile, durchsichtig und nur so hoch wie
+   der Inhalt - die einbettende Seite bekommt die Höhe per postMessage (app/fragebogen/[id]/embed-helpers.tsx). */
+body:has([data-embed]) {
+  min-height: 0;
+  background: transparent;
+}
+body:has([data-embed]) [data-chrome] {
+  display: none;
+}

@@ -52,6 +52,8 @@ model User {
   pollAccess        PollAccess[]
   liveSessions      LiveSession[]
   liveAccess        LiveAccess[]
+  surveys           Survey[]
+  surveyAccess      SurveyAccess[]
 }
 
 // Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
@@ -598,4 +600,123 @@ model ParticipantSession {
   createdAt     DateTime    @default(now())
 
   @@index([participantId])
+}
+
+// ---------------------------------------------------------------------------
+// Fragebogen (docs/KONZEPT-FRAGEBOGEN.md): mehrere Fragen verschiedener Art, ohne Gewinner -
+// deshalb ein eigenes Modell neben Poll und LiveSession. Ausfüllen ohne Konto, auch eingebettet
+// in andere Apps (/fragebogen/<id>/einbetten, siehe proxy.ts).
+// ---------------------------------------------------------------------------
+
+// Wer antworten darf. ANONYMOUS: jede Abgabe ist eine neue Antwort, im Browser wird nichts
+// gespeichert (funktioniert auch eingebettet in fremden Websites). COOKIE: eine Antwort pro Gerät
+// (voter_token wie bei Abstimmungen), änderbar bis zum Ende - eingebettet nur unter derselben Domain.
+enum SurveyIdentity {
+  ANONYMOUS
+  COOKIE
+}
+
+enum SurveyQuestionKind {
+  SINGLE
+  MULTI
+  TEXT
+  SCALE
+}
+
+model Survey {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  // Text nach dem Absenden, null = Standardtext.
+  thanksText  String?
+  ownerId     String
+  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Gesperrt, sobald jemand geantwortet hat (wie Poll.voterIdentity).
+  identity    SurveyIdentity   @default(ANONYMOUS)
+  closesAt    DateTime?
+  closedAt    DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  questions   SurveyQuestion[]
+  responses   SurveyResponse[]
+  access      SurveyAccess[]
+
+  @@index([ownerId])
+}
+
+// Gemeinsam verwalten (wie LiveAccess): alles außer löschen und weiter teilen.
+model SurveyAccess {
+  id        String   @id @default(cuid())
+  surveyId  String
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([surveyId, userId])
+  @@index([userId])
+}
+
+model SurveyQuestion {
+  id         String             @id @default(cuid())
+  surveyId   String
+  survey     Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  position   Int
+  text       String
+  // Kleiner Hinweis unter der Frage (optional).
+  hint       String?
+  kind       SurveyQuestionKind
+  required   Boolean            @default(false)
+  // Nur MULTI: höchstens so viele Optionen, null = beliebig viele.
+  maxChoices Int?
+  // Nur TEXT: mehrzeiliges Feld (längere Antworten).
+  multiline  Boolean            @default(false)
+  // Nur SCALE: Werte von scaleMin (0 oder 1) bis scaleMax (2-10), Beschriftung der Enden optional.
+  scaleMin   Int?
+  scaleMax   Int?
+  minLabel   String?
+  maxLabel   String?
+  options    SurveyOption[]
+  answers    SurveyAnswer[]
+
+  @@unique([surveyId, position])
+}
+
+model SurveyOption {
+  id         String         @id @default(cuid())
+  questionId String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  position   Int
+  label      String
+  answers    SurveyAnswer[]
+}
+
+// Ein ausgefüllter Fragebogen. voterKey ("cookie:<token>") nur im Modus COOKIE - eindeutig pro
+// Fragebogen; bei ANONYMOUS null (SQLite erlaubt mehrere NULL in einem Unique-Index).
+model SurveyResponse {
+  id        String         @id @default(cuid())
+  surveyId  String
+  survey    Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  voterKey  String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+  answers   SurveyAnswer[]
+
+  @@unique([surveyId, voterKey])
+}
+
+// Antwort auf eine Frage: SINGLE/MULTI eine Zeile je gewählter Option, TEXT mit text, SCALE mit number.
+model SurveyAnswer {
+  id         String         @id @default(cuid())
+  responseId String
+  response   SurveyResponse @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  questionId String
+  question   SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionId   String?
+  option     SurveyOption?  @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  text       String?
+  number     Int?
+
+  @@index([questionId])
+  @@index([responseId])
 }

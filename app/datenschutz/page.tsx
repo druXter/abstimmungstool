@@ -2,7 +2,7 @@
 import Link from 'next/link'
 
 // ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
-// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP und Live-Runden, 2026-10-04). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, Live-Runden und Fragebögen auch eingebettet, 2026-10-14). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -48,10 +48,11 @@ export default function DatenschutzPage() {
           <h2 className="font-semibold text-lg">2. Worum es geht</h2>
           <p className="mt-2">
             Mit dieser Anwendung lassen sich Abstimmungen in einer Gruppe durchführen (z.B. &quot;Wohin gehen wir am
-            Mittwoch?&quot;) und Live-Runden im Raum (Quiz oder Umfrage Frage für Frage). <strong>Zum Abstimmen und
-            Mitspielen brauchst du in der Regel kein Konto.</strong> Ausnahme sind Abstimmungen &quot;nur mit
+            Mittwoch?&quot;), Live-Runden im Raum (Quiz oder Umfrage Frage für Frage) und Fragebögen (z.B. Feedback nach
+            einem Event), die auch in andere Apps eingebettet sein können. <strong>Zum Abstimmen, Mitspielen und
+            Ausfüllen brauchst du in der Regel kein Konto.</strong> Ausnahme sind Abstimmungen &quot;nur mit
             Konto&quot; - dort genügt auch dein Teilnehmendenkonto aus rsvp-app (Punkt 4). Ein Konto hier
-            (Verwaltungskonto) brauchen nur Personen, die Abstimmungen oder Live-Runden anlegen oder verwalten. Wir
+            (Verwaltungskonto) brauchen nur Personen, die Abstimmungen, Live-Runden oder Fragebögen anlegen oder verwalten. Wir
             verarbeiten nur, was dafür nötig ist (Art. 6 Abs. 1 lit. b und f
             DSGVO - Durchführung der Abstimmung bzw. Betrieb und Sicherheit der Anwendung), und nur dann, wenn die
             jeweilige Funktion genutzt wird.
@@ -59,7 +60,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-lg">3. Abstimmen und Live-Runden (ohne Konto)</h2>
+          <h2 className="font-semibold text-lg">3. Abstimmen, Live-Runden und Fragebögen (ohne Konto)</h2>
           <p className="mt-2">
             Beim Abstimmen speichern wir deine Auswahl und einen Zeitstempel. Damit du deine Auswahl später ändern
             kannst und nicht mehrfach im selben Browser abstimmst, legen wir in deinem Browser eine zufällige Kennung
@@ -89,6 +90,23 @@ export default function DatenschutzPage() {
             Wähle daher am besten keinen vollen Namen. Ein Konto brauchst du nicht. Bei einer Wortwolke erscheint dein
             Begriff, bei einer Freitext-Frage nach der Auflösung deine Antwort ohne Namen auf der Leinwand; die
             Verwaltung kann einzelne Begriffe und Antworten ausblenden.
+          </p>
+          <p className="mt-2">
+            <strong>Fragebögen:</strong> Füllst du einen Fragebogen aus, speichern wir deine Antworten (gewählte
+            Optionen, Skalenwerte, eingegebene Texte) und wann du sie abgegeben bzw. zuletzt geändert hast - ohne Namen,
+            ohne E-Mail-Adresse und ohne IP-Adresse. Ist der Fragebogen <em>anonym</em>, legen wir in deinem Browser
+            nichts ab; deine Abgabe lässt sich keinem Gerät zuordnen und auch nicht nachträglich ändern. Gilt
+            &quot;einmal pro Gerät&quot;, merkt sich dein Browser die zufällige Kennung <code>voter_token</code> (wie
+            oben beim Abstimmen), damit du deine Antworten später ändern kannst. Die Antworten sieht nur, wer den
+            Fragebogen verwaltet (auch als CSV-Export), einschließlich der Konten, mit denen er geteilt ist. Schreib in
+            Freitextfelder daher nichts, woran man dich erkennen soll, wenn du anonym bleiben möchtest.
+          </p>
+          <p className="mt-2">
+            <strong>Eingebettet in anderen Apps:</strong> Ein Fragebogen kann als eingebetteter Rahmen (iFrame) in einer
+            anderen App oder Website erscheinen. Er wird auch dann direkt von dieser Anwendung geladen, und die Antworten
+            gehen nur an uns, nicht an die einbettende App. Die einbettende App erfährt von dieser Anwendung lediglich die
+            Höhe des Fragebogens (damit sie den Rahmen passend groß darstellen kann). Für die Datenverarbeitung der
+            einbettenden App selbst gilt deren eigene Datenschutzerklärung.
           </p>
         </div>
 
@@ -155,7 +173,7 @@ export default function DatenschutzPage() {
         </div>
 
         <div>
-          <h2 className="font-semibold text-lg">5. Verwaltungskonto (Anlegen und Verwalten von Abstimmungen und Live-Runden)</h2>
+          <h2 className="font-semibold text-lg">5. Verwaltungskonto (Anlegen und Verwalten von Abstimmungen, Live-Runden und Fragebögen)</h2>
           <p className="mt-2">Für ein Konto speichern wir:</p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
             <li>E-Mail-Adresse, optional einen Namen, deine Rolle und den Zeitpunkt der Anlage,</li>
@@ -167,7 +185,7 @@ export default function DatenschutzPage() {
               deine Anmelde-Sitzungen (nur ein Hash des Sitzungs-Tokens und das Ablaufdatum, 30 Tage) sowie
               Einmal-Links für Einladung und Passwort-Reset (ebenfalls nur als Hash, befristet),
             </li>
-            <li>die Zuordnung deiner Abstimmungen und Live-Runden zu deinem Konto und Freigaben, die du erteilt hast oder erhalten hast.</li>
+            <li>die Zuordnung deiner Abstimmungen, Live-Runden und Fragebögen zu deinem Konto und Freigaben, die du erteilt hast oder erhalten hast.</li>
             <li>
               Bilder, die du zu Fragen einer Live-Runde hochlädst. Dein Browser verkleinert sie vorher und entfernt
               dabei Metadaten wie den Aufnahmeort; gespeichert werden sie zusammen mit der Runde und nur denen
@@ -204,7 +222,7 @@ export default function DatenschutzPage() {
             Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
             Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes, erste Stimmabgaben in
-            offenen Abstimmungen sowie eingegebene PINs und Beitritte bei Live-Runden. Dazu wird
+            offenen Abstimmungen, eingegebene PINs und Beitritte bei Live-Runden sowie abgegebene Fragebögen. Dazu wird
             deine <strong>IP-Adresse</strong> ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
             (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
@@ -233,7 +251,7 @@ export default function DatenschutzPage() {
             Marketing-Cookies.
           </p>
           <ul className="list-disc list-inside mt-2 space-y-1 text-sm">
-            <li><code>voter_token</code> - zufällige Kennung für deine Stimme (1 Jahr)</li>
+            <li><code>voter_token</code> - zufällige Kennung für deine Stimme bzw. deine Antworten auf einen Fragebogen mit &quot;einmal pro Gerät&quot; (1 Jahr)</li>
             <li><code>poll_email_…</code> - nur bei Abstimmungen mit E-Mail-Bestätigung: merkt sich deine bestätigte Adresse (30 Tage, nur für diese Abstimmung)</li>
             <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
             <li><code>live_…</code> - nur bei Live-Runden: deine zufällige Kennung in dieser Runde (12 Stunden)</li>
@@ -297,12 +315,15 @@ export default function DatenschutzPage() {
             Namen gezählt. Live-Runden samt Spitznamen, Antworten, Punkten und Bildern werden ebenfalls spätestens <strong>18 Monate nach
             ihrem Ende</strong> (ohne Ende: nach der letzten Änderung) gelöscht. Wer die Runde verwaltet, kann sie
             jederzeit früher löschen oder &quot;neu starten&quot; - dann sind Spitznamen und Antworten sofort weg.
+            Fragebögen samt allen Antworten werden spätestens <strong>18 Monate nach ihrem Ende</strong> gelöscht
+            (maßgeblich ist das Schließen, sonst das Enddatum, sonst die letzte Änderung am Fragebogen); wer ihn
+            verwaltet, kann Antworten oder den ganzen Fragebogen jederzeit früher löschen.
           </p>
           <p className="mt-2">
             Ein Konto wird automatisch gelöscht, wenn du dich <strong>2 Jahre</strong> lang nicht mehr angemeldet
-            hast und dir keine Abstimmung oder Live-Runde mehr gehört - inklusive Sitzungen, Verknüpfungen zu anderen Tools und
+            hast und dir keine Abstimmung, Live-Runde oder kein Fragebogen mehr gehört - inklusive Sitzungen, Verknüpfungen zu anderen Tools und
             Freigaben. Konten mit Admin-Rolle sind von dieser automatischen Löschung ausgenommen. Unabhängig davon kannst
-            du jederzeit unter der oben genannten Adresse um frühere Löschung deines Kontos bitten; seine Abstimmungen und Live-Runden
+            du jederzeit unter der oben genannten Adresse um frühere Löschung deines Kontos bitten; seine Abstimmungen, Live-Runden und Fragebögen
             gehen dann an einen Administrator über, damit die Stimmen anderer Personen nicht stillschweigend ohne
             Besitzer bleiben.
           </p>

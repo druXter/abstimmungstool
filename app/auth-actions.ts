@@ -266,7 +266,7 @@ export async function updateUserRole(formData: FormData) {
 
 /**
  * Löscht ein Konto samt Sitzungen, Verknüpfungen und Freigaben. Nur Admins, und nie ein
- * Admin-Konto. Abstimmungen und Live-Runden des Kontos gehen NICHT verloren, sondern an den löschenden
+ * Admin-Konto. Abstimmungen, Live-Runden und Fragebögen des Kontos gehen NICHT verloren, sondern an den löschenden
  * Admin über - Stimmen anderer Leute sollen nicht stillschweigend mit einem Konto verschwinden.
  */
 export async function deleteUser(formData: FormData) {
@@ -279,6 +279,7 @@ export async function deleteUser(formData: FormData) {
   await prisma.$transaction([
     prisma.poll.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
     prisma.liveSession.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
+    prisma.survey.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
     // Stimmen im Modus ACCOUNT bleiben gezählt (sonst änderten sich Ergebnisse rückwirkend),
     // verlieren aber den Namen - übrig bleibt nur die ID eines Kontos, das es nicht mehr gibt.
     prisma.vote.updateMany({ where: { voterKey: voterKey('ACCOUNT', target.id) }, data: { voterName: null } }),

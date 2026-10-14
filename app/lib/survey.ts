@@ -1,0 +1,201 @@
+import type { SurveyIdentity, SurveyQuestionKind } from '@prisma/client'
+import { prisma } from './prisma'
+import type { CurrentUser } from './auth'
+import { formString } from './form'
+
+/**
+ * Fragebogen (docs/KONZEPT-FRAGEBOGEN.md, schema.prisma Survey): Berechtigung, Grenzen, Einlesen
+ * einer Abgabe und Auswertung. Die Seiten und app/survey-actions.ts gehen alle hierüber.
+ */
+
+export const MAX_QUESTIONS = 50
+export const MIN_OPTIONS = 2
+export const MAX_OPTIONS = 20
+export const MAX_TITLE_LENGTH = 200
+export const MAX_DESCRIPTION_LENGTH = 2000
+export const MAX_THANKS_LENGTH = 1000
+export const MAX_QUESTION_LENGTH = 300
+export const MAX_HINT_LENGTH = 300
+export const MAX_OPTION_LENGTH = 150
+export const MAX_SCALE_LABEL_LENGTH = 40
+/** Freitext: einzeilig bzw. mehrzeilig. */
+export const MAX_SHORT_TEXT = 300
+export const MAX_LONG_TEXT = 2000
+/** Lineare Skala: Anfang 0 oder 1, Ende 2 bis 10 (wie bei Google Forms). */
+export const SCALE_MINS = [0, 1] as const
+export const SCALE_MAX_MIN = 2
+export const SCALE_MAX_MAX = 10
+export const DEFAULT_SCALE = { min: 1, max: 5 }
+
+export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE']
+export const SURVEY_IDENTITIES: readonly SurveyIdentity[] = ['ANONYMOUS', 'COOKIE']
+
+export const KIND_LABELS: Record<SurveyQuestionKind, string> = {
+  SINGLE: 'Einfachauswahl',
+  MULTI: 'Mehrfachauswahl',
+  TEXT: 'Freitext',
+  SCALE: 'Lineare Skala'
+}
+
+export const IDENTITY_LABELS: Record<SurveyIdentity, { title: string; short: string; hint: string }> = {
+  ANONYMOUS: {
+    title: 'Anonym',
+    short: 'anonym',
+    hint: 'Jede Abgabe zählt als neue Antwort, im Browser wird nichts gespeichert. Funktioniert auch eingebettet in jeder App. Mehrfaches Ausfüllen lässt sich nicht verhindern, nur bremsen.'
+  },
+  COOKIE: {
+    title: 'Einmal pro Gerät',
+    short: 'einmal pro Gerät',
+    hint: 'Eine Antwort pro Browser (Cookie wie bei Abstimmungen), änderbar bis zum Ende. Eingebettet nur in Apps unter derselben Domain - in anderen Apps (z.B. der Campus-App) blockieren Browser das Cookie, dort öffnet sich der Fragebogen dann in einem neuen Tab.'
+  }
+}
+
+/**
+ * owner:     alles (bearbeiten, schließen, exportieren, Antworten löschen, löschen, teilen)
+ * moderator: per SurveyAccess geteilt - alles außer löschen und weiter teilen (wie bei Live-Runden)
+ */
+export type SurveyLevel = 'owner' | 'moderator'
+
+/** DIE Berechtigungsprüfung für Fragebögen - jede Verwaltungsseite und jede Action geht hierüber. */
+export async function getSurveyLevel(user: CurrentUser | null, survey: { id: string; ownerId: string }): Promise<SurveyLevel | null> {
+  if (!user) return null
+  if (user.role === 'ADMIN' || user.id === survey.ownerId) return 'owner'
+  const access = await prisma.surveyAccess.findUnique({ where: { surveyId_userId: { surveyId: survey.id, userId: user.id } }, select: { id: true } })
+  return access ? 'moderator' : null
+}
+
+export function isSurveyOpen(survey: { closedAt: Date | null; closesAt: Date | null }, now = new Date()): boolean {
+  return !survey.closedAt && (survey.closesAt === null || survey.closesAt > now)
+}
+
+/** Ein Fragebogen ist "zu Ende" am Schließzeitpunkt, sonst am Schließdatum, falls das schon vorbei ist. */
+export function surveyEndedAt(survey: { closedAt: Date | null; closesAt: Date | null }, now = new Date()): Date | null {
+  return survey.closedAt ?? (survey.closesAt && survey.closesAt <= now ? survey.closesAt : null)
+}
+
+export function surveyVoterKey(token: string): string {
+  return `cookie:${token}`
+}
+
+/** Das Feld einer Frage im Formular zum Ausfüllen. */
+export function answerField(questionId: string): string {
+  return `q_${questionId}`
+}
+
+export type QuestionForForm = {
+  id: string
+  kind: SurveyQuestionKind
+  required: boolean
+  maxChoices: number | null
+  multiline: boolean
+  scaleMin: number | null
+  scaleMax: number | null
+  options: { id: string }[]
+}
+
+export function scaleRange(q: Pick<QuestionForForm, 'scaleMin' | 'scaleMax'>): { min: number; max: number } {
+  return { min: q.scaleMin ?? DEFAULT_SCALE.min, max: q.scaleMax ?? DEFAULT_SCALE.max }
+}
+
+export type AnswerRow = { questionId: string; optionId: string | null; text: string | null; number: number | null }
+
+/** Fehler beim Einlesen, als ?hinweis= an die Seite (feste Texte dort). */
+export type SubmitError = 'pflicht' | 'auswahl'
+
+/**
+ * Liest eine Abgabe (Felder q_<Frage-ID>, siehe survey-form.tsx). Nur Optionen der jeweiligen Frage,
+ * Einfachauswahl und Skala genau ein Wert, Texte gekürzt. Pflichtfragen ohne Antwort und zu viele
+ * Kreuze bei Mehrfachauswahl lehnen ab - die Seite prüft das schon im Browser, ohne JavaScript
+ * landet es hier.
+ */
+export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormData): { ok: true; rows: AnswerRow[] } | { ok: false; error: SubmitError } {
+  const rows: AnswerRow[] = []
+  for (const q of questions) {
+    const name = answerField(q.id)
+    const given: AnswerRow[] = []
+    if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
+      const ids = new Set(q.options.map(o => o.id))
+      const chosen = [...new Set(formData.getAll(name).filter((v): v is string => typeof v === 'string' && ids.has(v)))]
+      if (q.kind === 'SINGLE' && chosen.length > 1) return { ok: false, error: 'auswahl' }
+      if (q.kind === 'MULTI' && q.maxChoices !== null && chosen.length > q.maxChoices) return { ok: false, error: 'auswahl' }
+      for (const optionId of chosen) given.push({ questionId: q.id, optionId, text: null, number: null })
+    } else if (q.kind === 'TEXT') {
+      const text = formString(formData, name, q.multiline ? MAX_LONG_TEXT : MAX_SHORT_TEXT)
+      if (text) given.push({ questionId: q.id, optionId: null, text, number: null })
+    } else {
+      const raw = formString(formData, name, 5)
+      const value = Number.parseInt(raw, 10)
+      const { min, max } = scaleRange(q)
+      if (raw !== '') {
+        if (!/^\d+$/.test(raw) || value < min || value > max) return { ok: false, error: 'auswahl' }
+        given.push({ questionId: q.id, optionId: null, text: null, number: value })
+      }
+    }
+    if (q.required && given.length === 0) return { ok: false, error: 'pflicht' }
+    rows.push(...given)
+  }
+  return { ok: true, rows }
+}
+
+export type ScaleStats = { count: number; mean: number; median: number; distribution: { value: number; count: number }[] }
+
+export function scaleStats(values: number[], min: number, max: number): ScaleStats | null {
+  if (values.length === 0) return null
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = Math.floor(sorted.length / 2)
+  const median = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
+  const distribution = Array.from({ length: max - min + 1 }, (_, i) => ({ value: min + i, count: sorted.filter(v => v === min + i).length }))
+  return { count: values.length, mean: sorted.reduce((s, v) => s + v, 0) / sorted.length, median, distribution }
+}
+
+export function formatDecimal(value: number): string {
+  return value.toLocaleString('de-DE', { maximumFractionDigits: 1 })
+}
+
+/**
+ * Alles für Übersicht und CSV-Export: Fragen mit Auswertung (answered = Zahl der Antwortenden
+ * dieser Frage, Auswahl als Anteil davon) und die einzelnen Abgaben.
+ */
+export async function loadSurveyResults(surveyId: string) {
+  const [questions, responses] = await Promise.all([
+    prisma.surveyQuestion.findMany({
+      where: { surveyId },
+      orderBy: { position: 'asc' },
+      include: { options: { orderBy: { position: 'asc' } } }
+    }),
+    prisma.surveyResponse.findMany({
+      where: { surveyId },
+      orderBy: { createdAt: 'asc' },
+      include: { answers: { select: { questionId: true, optionId: true, text: true, number: true } } }
+    })
+  ])
+
+  const results = questions.map(q => {
+    const answers = responses.flatMap(r => r.answers.filter(a => a.questionId === q.id).map(a => ({ ...a, at: r.updatedAt })))
+    const answered = new Set(responses.filter(r => r.answers.some(a => a.questionId === q.id)).map(r => r.id)).size
+    const counts = new Map<string, number>()
+    for (const a of answers) if (a.optionId) counts.set(a.optionId, (counts.get(a.optionId) ?? 0) + 1)
+    const { min, max } = scaleRange(q)
+    return {
+      ...q,
+      answered,
+      counts,
+      scale: q.kind === 'SCALE' ? scaleStats(answers.flatMap(a => (a.number !== null ? [a.number] : [])), min, max) : null,
+      // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
+      texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ text: a.text, at: a.at }] : [])).reverse() : []
+    }
+  })
+  return { questions: results, responses }
+}
+
+export type SurveyResults = Awaited<ReturnType<typeof loadSurveyResults>>
+
+/** Antwort einer Abgabe auf eine Frage als Text (CSV, eine Zelle je Frage). */
+export function describeAnswer(q: SurveyResults['questions'][number], answers: AnswerRow[]): string {
+  const mine = answers.filter(a => a.questionId === q.id)
+  if (q.kind === 'SINGLE' || q.kind === 'MULTI') {
+    return q.options.filter(o => mine.some(a => a.optionId === o.id)).map(o => o.label).join(', ')
+  }
+  if (q.kind === 'TEXT') return mine[0]?.text ?? ''
+  return mine[0]?.number !== undefined && mine[0]?.number !== null ? String(mine[0].number) : ''
+}

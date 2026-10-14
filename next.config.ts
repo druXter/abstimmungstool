@@ -10,8 +10,12 @@ const nextConfig: NextConfig = {
   // Sicherheits-Header für alle Seiten. Bewusst KEINE Einbettung in fremde Seiten
   // (frame-ancestors 'none'): Login, Verwaltung und Konto-Seiten dürfen nicht in einem
   // unsichtbaren iFrame auftauchen (Clickjacking). Die Verzahnung mit rsvp-app läuft über
-  // normale Links, nicht über Einbettung. Gibt es später doch einen Einbettungs-Fall,
-  // gehört hier gezielt NUR die betroffene Domain hin statt einer generellen Freigabe.
+  // normale Links, nicht über Einbettung.
+  //
+  // Einzige Ausnahme: der eingebettete Fragebogen (/fragebogen/<id>/einbetten, docs/KONZEPT-FRAGEBOGEN.md).
+  // Die Regel mit X-Frame-Options und frame-ancestors 'none' nimmt diesen Pfad aus; frame-ancestors mit den
+  // erlaubten Domains setzt dort proxy.ts - zur Laufzeit, weil EMBED_ALLOWED_ORIGINS in der .env steht, die
+  // beim Bauen des Images nicht vorliegt (diese Header stehen nach dem Build fest).
   //
   // Nicht gesetzt: eine vollständige Content-Security-Policy. Sie würde für Next.js
   // Nonces pro Anfrage brauchen (siehe node_modules/next/dist/docs/01-app/02-guides/
@@ -23,13 +27,20 @@ const nextConfig: NextConfig = {
         source: "/:path*",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           // Nur für diesen Host (ohne includeSubDomains), damit andere Subdomains der
           // Suite davon unberührt bleiben. Wirkt nur über HTTPS.
           { key: "Strict-Transport-Security", value: "max-age=31536000" },
+        ],
+      },
+      {
+        // Alles außer dem eingebetteten Fragebogen (siehe oben). Der Pfad ist "/<anything>" ohne die Form
+        // "fragebogen/<id>/einbetten" - auch mit angehängtem Schrägstrich, den Next.js sonst umleitet.
+        source: "/:path((?!fragebogen/[^/]+/einbetten/?$).*)",
+        headers: [
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
         ],
       },
       {

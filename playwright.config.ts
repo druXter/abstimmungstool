@@ -26,6 +26,13 @@ process.env.BASE_URL = BASE_URL
 export const TEST_RSVP_SECRET = 'nur-fuer-e2e-tests-kein-echtes-secret'
 process.env.RSVP_VERIFICATION_SECRET = TEST_RSVP_SECRET
 export const TEST_CRON_SECRET = 'nur-fuer-e2e-tests-cron'
+// Websites, die die Tests per page.route selbst ausliefern (ohne Server dahinter): eine darf Fragebögen einbetten,
+// eine nicht. localhost ist für den Browser eine andere Website als 127.0.0.1 (wie die Campus-App gegenüber diesem
+// Tool); eine ausgedachte öffentliche Domain ginge nicht, Chromium sperrt deren iFrames auf lokale Adressen.
+export const EMBED_HOST = 'http://localhost:3698'
+export const FOREIGN_HOST = 'http://localhost:3699'
+// Dieselbe Website wie dieses Tool (Ports zählen nicht) - wie eine App unter *.ramonroeser.de.
+export const SAME_SITE_HOST = 'http://127.0.0.1:3697'
 // Feste VAPID-Schlüssel für Push (app/lib/push.ts) - aus einem Namen abgeleitet, damit Server
 // und Testprozesse (die diese Datei jeweils selbst laden) dieselben haben. Nur für Tests.
 const vapid = createECDH('prime256v1')
@@ -62,6 +69,9 @@ const SERVER_ENV: Record<string, string> = {
   VAPID_SUBJECT: 'mailto:test@example.test',
   // Cron-Endpunkte (Auto-Schließen) rufen die Tests selbst auf.
   CRON_SECRET: TEST_CRON_SECRET,
+  // Eingebettete Fragebögen (tests/e2e/survey.spec.ts): EMBED_HOST darf einbetten, die ungültigen Einträge
+  // müssen wegfallen, ohne die CSP zu verändern.
+  EMBED_ALLOWED_ORIGINS: `${EMBED_HOST}, ${SAME_SITE_HOST} https://*.ramonroeser.de javascript:alert(1) https://x.test;script-src *`,
   TZ: 'Europe/Berlin'
 }
 

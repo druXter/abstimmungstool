@@ -170,3 +170,12 @@ export function livePinRule(ip: string): ThrottleRule {
 export function liveJoinRule(ip: string, sessionId: string): ThrottleRule {
   return { scope: 'live:join:ip', identifier: `${sessionId}\u0000${ip}`, limit: 200, windowMs: 60 * MINUTE }
 }
+
+/**
+ * Regel für Fragebögen: zählt pro IP und Fragebogen jede anonyme Abgabe bzw. im Modus COOKIE die
+ * erste Abgabe eines Geräts (Änderungen nicht). Sehr großzügig, weil ein ganzer Hörsaal oder ein
+ * Uni-WLAN oft hinter einer Adresse sitzt - das bremst Skripte, keine Erstsemesterwoche.
+ */
+export function surveyRule(ip: string, surveyId: string): ThrottleRule {
+  return { scope: 'survey:ip', identifier: `${surveyId}\u0000${ip}`, limit: 200, windowMs: 60 * MINUTE }
+}

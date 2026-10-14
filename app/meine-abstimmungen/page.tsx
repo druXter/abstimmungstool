@@ -4,6 +4,7 @@ import { requireUser } from '../lib/auth'
 import { canCreatePolls } from '../lib/permissions'
 import { POLL_TYPE_LABELS } from '../lib/poll-types'
 import { IDENTITY_SHORT, pollStatus } from '../lib/poll-status'
+import { IDENTITY_LABELS, isSurveyOpen } from '../lib/survey'
 import { ButtonLink, EmptyState, Main, PageHeader, sectionTitleClass } from '../ui/kit'
 import PollRow, { type RowData } from './poll-row'
 
@@ -12,17 +13,17 @@ export const dynamic = 'force-dynamic'
 const LIVE_PHASE = { LOBBY: 'Lobby', QUESTION: 'läuft', REVEAL: 'läuft', LEADERBOARD: 'läuft', FINISHED: 'beendet' } as const
 
 /**
- * Übersicht der Verwaltung (docs/KONZEPT-OBERFLAECHE.md, wie die Event-Übersicht in rsvp-app): Abstimmungen und
- * Live-Runden als kompakte Liste - "Aktuell" (was zu tun ist zuerst) und eingeklappt "Beendet". Admins sehen alle
+ * Übersicht der Verwaltung (docs/KONZEPT-OBERFLAECHE.md, wie die Event-Übersicht in rsvp-app): Abstimmungen,
+ * Live-Runden und Fragebögen als kompakte Liste - "Aktuell" (was zu tun ist zuerst) und eingeklappt "Beendet". Admins sehen alle
  * Konten (inkl. Alt-Abstimmungen ohne Konto), alle anderen nur eigene und ihnen freigegebene - dieselbe Regel wie
- * getPollLevel/getLiveLevel, hier nur als Abfrage.
+ * getPollLevel/getLiveLevel/getSurveyLevel, hier nur als Abfrage.
  */
 export default async function MeineAbstimmungenPage() {
   const user = await requireUser('/meine-abstimmungen')
   const isAdmin = user.role === 'ADMIN'
   const visible = isAdmin ? {} : { OR: [{ ownerId: user.id }, { access: { some: { userId: user.id } } }] }
 
-  const [polls, liveSessions] = await Promise.all([
+  const [polls, liveSessions, surveys] = await Promise.all([
     prisma.poll.findMany({
       where: visible,
       orderBy: { createdAt: 'desc' },
@@ -40,6 +41,15 @@ export default async function MeineAbstimmungenPage() {
       select: {
         id: true, title: true, createdAt: true, phase: true, ownerId: true, owner: { select: { email: true } },
         _count: { select: { players: true, questions: true } }
+      }
+    }),
+    // Fragebögen (app/lib/survey.ts): eigene und geteilte (SurveyAccess), Admins sehen alle.
+    prisma.survey.findMany({
+      where: visible,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, title: true, createdAt: true, closedAt: true, closesAt: true, identity: true, ownerId: true, owner: { select: { email: true } },
+        _count: { select: { responses: true, questions: true } }
       }
     })
   ])
@@ -98,7 +108,26 @@ export default async function MeineAbstimmungenPage() {
         line: [`Live-Runde mit ${live._count.questions} Frage${live._count.questions === 1 ? '' : 'n'}`, `angelegt am ${live.createdAt.toLocaleDateString('de-DE')}`, owner(live.ownerId, live.owner.email)].filter(Boolean).join(' · '),
         attention: false, sortDate: live.createdAt
       }
-    }))
+    })),
+    ...surveys.map(survey => {
+      const open = isSurveyOpen(survey)
+      return {
+        ended: !open,
+        row: {
+          kind: 'survey' as const, id: survey.id, href: `/fragebogen/${survey.id}/verwalten`, title: survey.title,
+          count: survey._count.responses, countLabel: survey._count.responses === 1 ? 'Antwort' : 'Antw.',
+          status: { label: `Fragebogen · ${open ? 'offen' : 'beendet'}`, tone: open ? 'indigo' as const : 'gray' as const },
+          badges: shared(survey.ownerId, survey.owner.email),
+          line: [
+            `${survey._count.questions} Frage${survey._count.questions === 1 ? '' : 'n'}`,
+            IDENTITY_LABELS[survey.identity].short,
+            open && survey.closesAt ? `endet am ${survey.closesAt.toLocaleDateString('de-DE')}` : `angelegt am ${survey.createdAt.toLocaleDateString('de-DE')}`,
+            owner(survey.ownerId, survey.owner.email)
+          ].filter(Boolean).join(' · '),
+          attention: false, sortDate: survey.createdAt
+        }
+      }
+    })
   ]
   const byDate = (a: RowData, b: RowData) => b.sortDate.getTime() - a.sortDate.getTime()
   const current = rows.filter(r => !r.ended).map(r => r.row).sort((a, b) => Number(b.attention) - Number(a.attention) || byDate(a, b))
@@ -109,9 +138,10 @@ export default async function MeineAbstimmungenPage() {
     <Main>
       <PageHeader
         title="Abstimmungen"
-        subtitle={isAdmin ? 'Alle Abstimmungen und Live-Runden aller Konten' : !mayCreate ? 'Für dich freigegebene Abstimmungen und Live-Runden' : undefined}
+        subtitle={isAdmin ? 'Alle Abstimmungen, Live-Runden und Fragebögen aller Konten' : !mayCreate ? 'Für dich freigegebene Abstimmungen, Live-Runden und Fragebögen' : undefined}
         actions={mayCreate && (
           <>
+            <ButtonLink href="/fragebogen/neu">+ Neuer Fragebogen</ButtonLink>
             <ButtonLink href="/live/neu">+ Neue Live-Runde</ButtonLink>
             <ButtonLink href="/erstellen" variant="primary">+ Neue Abstimmung</ButtonLink>
           </>

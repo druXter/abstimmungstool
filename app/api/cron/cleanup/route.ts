@@ -31,6 +31,8 @@ const LIVE_PIN_IDLE_HOURS = 24
  * 4. Live-Runden (samt Teilnehmenden und Antworten) mit derselben Frist wie Abstimmungen - "zu Ende"
  *    ist dort das Beenden, sonst die letzte Änderung. PINs von Runden, an denen sich seit
  *    LIVE_PIN_IDLE_HOURS nichts getan hat, werden freigegeben (beim Öffnen der Leinwand gibt es eine neue).
+ * 5. Fragebögen (samt Fragen und Antworten) mit derselben Frist - "zu Ende" wie bei Abstimmungen: geschlossen,
+ *    sonst das Schließdatum, sonst die letzte Änderung (eine neue Antwort zählt nicht als Änderung).
  */
 export async function GET(request: Request) {
   const secret = new URL(request.url).searchParams.get('secret')
@@ -82,11 +84,22 @@ export async function GET(request: Request) {
     data: { pin: null }
   })
 
+  // Fragen und Antworten verschwinden per Cascade mit dem Fragebogen.
+  const { count: deletedSurveys } = await prisma.survey.deleteMany({
+    where: {
+      OR: [
+        { closedAt: { lt: pollCutoff } },
+        { closedAt: null, closesAt: { lt: pollCutoff } },
+        { closedAt: null, closesAt: null, updatedAt: { lt: pollCutoff } }
+      ]
+    }
+  })
+
   const inactivityCutoff = new Date(now)
   inactivityCutoff.setFullYear(inactivityCutoff.getFullYear() - ACCOUNT_INACTIVITY_YEARS)
 
   const inactiveUsers = await prisma.user.findMany({
-    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} }, liveSessions: { none: {} } },
+    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} }, liveSessions: { none: {} }, surveys: { none: {} } },
     select: { id: true }
   })
   // Sitzungen, Verknüpfungen und Freigaben verschwinden per Cascade mit dem Konto. Stimmen im
@@ -121,6 +134,7 @@ export async function GET(request: Request) {
     success: true,
     deletedPolls: pollIds.length,
     deletedLiveSessions,
+    deletedSurveys,
     deletedInactiveUsers: inactiveUsers.length,
     deletedInactiveParticipants: inactiveParticipants.length
   })
