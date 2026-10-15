@@ -188,6 +188,13 @@ export default function DatenschutzPage() {
             (Art. 6 Abs. 1 lit. b DSGVO bzw. die Satzung, Art. 6 Abs. 1 lit. f DSGVO).
           </p>
           <p className="mt-2">
+            Geben die Veranstalter*innen es beim Termin in rsvp-app frei, übermitteln wir rsvp-app auf Anfrage die
+            Ergebnisse der geschlossenen Abstimmungen der Sitzung für das Protokoll im Rückblick der Zeitplan-Anwendung
+            (Titel, Zeitpunkt, Stimmen je Option, Zahl der Abstimmenden und Anwesenden, beschlussfähig) - bei
+            namentlichen Abstimmungen mit den Namen, bei geheimen ohne. Der Zeitplan zeigt sie nur an und speichert sie
+            nicht.
+          </p>
+          <p className="mt-2">
             Schließt sich eine solche Abstimmung, melden wir das Ergebnis (Titel der Abstimmung, Gewinner-Optionen,
             Stimmenzahl) an rsvp-app zurück. Personenbezogene Daten sind darin nicht enthalten.
           </p>

@@ -753,6 +753,13 @@ Option, Stimmen, Abgestimmt, Anwesend, Beschlussfähig, bei namentlichen die Nam
 (schließt offene Abstimmungen mit); gemeinsam leiten (`AssemblyAccess`); löschen. Die Übersicht „Abstimmungen“ zeigt
 Sitzungen statt ihrer einzelnen Abstimmungen.
 
+**Protokoll im Zeitplan-Rückblick:** Gibt der verknüpfte Termin in rsvp-app die Beschlüsse frei, fragt rsvp-app sie
+beim Öffnen des Rückblicks im Zeitplan hier ab (`POST /api/assembly/decisions`, Nachricht `assembly-decisions`, Antwort
+`assembly-decisions-result`, beides signiert) - beantwortet nur für den Termin, mit dem die Sitzung verknüpft ist. Es
+gehen nur geschlossene Abstimmungen heraus: Titel, geheim oder namentlich, Zeitpunkt von Start und Schließen,
+Abstimmende, Anwesende, beschlussfähig und die Stimmen je Option, Namen nur bei namentlichen Abstimmungen (wie in den
+Ergebnissen der Sitzung). Der Zeitplan zeigt jeden Beschluss beim Tagesordnungspunkt, in dem er geschlossen wurde.
+
 ## Ergebnis-Meldung an rsvp-app
 
 Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem

@@ -66,6 +66,8 @@ rsvp-app beantwortet die Anwesenheit nur für einen Termin, der genau diese Sitz
 | `assembly-link` | rsvp-app → `POST /api/rsvp-assembly` | `assemblyId, eventId, eventTitle, exp` | ≤ 5 min |
 | `assembly-roster` | Abstimmungstool → `POST <rsvp-app>/api/assembly/roster` | `assemblyId, eventId, exp` | ≤ 5 min |
 | `assembly-roster-result` | Antwort darauf | `assemblyId, eventId, checkin, members, present: sub[], exp` | ≤ 5 min |
+| `assembly-decisions` | rsvp-app → `POST /api/assembly/decisions` | `assemblyId, eventId, exp` | ≤ 5 min |
+| `assembly-decisions-result` | Antwort darauf | `assemblyId, eventId, decisions: [{ title, secret, openedAt, closedAt, voters, present, quorumMet, options: [{ label, votes, names? }] }], exp` | ≤ 5 min |
 
 ### Abstimmen
 
@@ -101,11 +103,17 @@ schließt ab. Nur wer abstimmen dürfte, kann sich melden (mit „Nur Anwesende�
 - rsvp-app: Anwesenheit (Reiter, CSV) - wer wann kam und ging.
 - Abstimmungstool: Beschlüsse der Sitzung als CSV (Zeit, Titel, Ergebnis, anwesend, beschlussfähig, bei namentlich die
   Namen).
-- Zeitplan: Rückblick mit Ist-Zeiten und Protokollnotizen je Tagesordnungspunkt (L24). Die Zusammenführung (Kommen,
-  Gehen und Beschlüsse an der Stelle der Tagesordnung, an der sie passiert sind) ist der letzte Schritt.
+- Zeitplan: Rückblick mit Ist-Zeiten und Protokollnotizen je Tagesordnungspunkt (L24). **Zusammenführung:** Gibt der
+  Termin in rsvp-app es frei (zwei einzelne Häkchen: Kommen und Gehen, Beschlüsse), fragt der Rückblick beim Öffnen
+  rsvp-app (`protocol-request` an `/api/timeline/protocol`, Secret der Zeitplan-Anbindung); rsvp-app holt die Beschlüsse
+  hier ab (`assembly-decisions`). Der Rückblick zeigt Kommen, Gehen und Beschlüsse beim Tagesordnungspunkt, der zu der
+  Zeit lief (Beschlüsse zum Zeitpunkt des Schließens), den Rest unter „Außerhalb der Punkte“, und nimmt beides in die
+  CSV auf. Der Zeitplan speichert davon nichts. Die Termin-id in rsvp-app lässt sich im Zeitplan auch ohne den Zugang
+  „nur mit Zusage“ eintragen.
 
 ## Datenschutz
 
 rsvp-app gibt nur Pseudonym und Namen der Zusage weiter, keine E-Mail. Das Abstimmungstool speichert Mitglieder mit
-Namen, solange es die Sitzung gibt; geheime Stimmen lassen sich keinem Mitglied zuordnen. Beide Datenschutzerklärungen
-beschreiben das.
+Namen, solange es die Sitzung gibt; geheime Stimmen lassen sich keinem Mitglied zuordnen. Fürs Protokoll gehen Namen
+nur bei namentlichen Abstimmungen und nur mit Freigabe des Termins an den Zeitplan, der sie nur anzeigt. Alle drei
+Datenschutzerklärungen beschreiben das.

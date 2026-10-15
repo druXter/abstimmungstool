@@ -84,3 +84,29 @@ function parseRoster(token: string, assemblyId: string, eventId: string): Roster
 export function forgetRoster(assemblyId: string) {
   for (const key of cache.keys()) if (key.startsWith(`${assemblyId}:`)) cache.delete(key)
 }
+
+/** Anfrage von rsvp-app nach den Beschlüssen fürs Protokoll (`assembly-decisions`, POST /api/assembly/decisions). */
+export function verifyDecisionsRequest(token: string | undefined | null): { assemblyId: string; eventId: string } | null {
+  const payload = verifyTypedRsvpMessage(token, 'assembly-decisions', 5 * 60)
+  if (!payload) return null
+  const { assemblyId, eventId } = payload
+  if (typeof assemblyId !== 'string' || !ID.test(assemblyId) || typeof eventId !== 'string' || !ID.test(eventId)) return null
+  return { assemblyId, eventId }
+}
+
+export type Decision = {
+  title: string
+  secret: boolean
+  openedAt: string
+  closedAt: string
+  voters: number
+  present: number | null
+  quorumMet: boolean | null
+  /** Namen nur bei namentlichen Abstimmungen - wie in den Ergebnissen der Sitzung. */
+  options: { label: string; votes: number; names?: string[] }[]
+}
+
+/** Antwort: die geschlossenen Abstimmungen der Sitzung mit Ergebnis, signiert, 5 Minuten gültig. null ohne Secret. */
+export function signDecisions(assemblyId: string, eventId: string, decisions: Decision[]): string | null {
+  return signTypedRsvpMessage({ typ: 'assembly-decisions-result', assemblyId, eventId, decisions }, 5 * 60)
+}
