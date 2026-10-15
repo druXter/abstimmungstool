@@ -2,19 +2,20 @@
 
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
-import { Prisma, type SurveyQuestionKind } from '@prisma/client'
+import { Prisma, type SurveyIdentity, type SurveyQuestionKind } from '@prisma/client'
 import { prisma } from './lib/prisma'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
 import { clientIp, reserve, surveyRules } from './lib/throttle'
 import { getOrCreateVoterToken } from './lib/voter'
+import { verifyRsvpSurveyToken } from './lib/rsvp-verification'
 import { surveyLang, withLang } from './lib/survey-i18n'
 import { checkFormToken, consumeFormToken, HONEYPOT_FIELD } from './lib/survey-token'
 import {
   DEFAULT_SCALE, getSurveyLevel, MAX_SUBMIT_LIMIT, MIN_SUBMIT_LIMIT, isGrid, isQuestion, isSurveyOpen, MAX_INFO_TEXT_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_GRID_COLUMNS, MAX_GRID_ROWS, MAX_HINT_LENGTH, MAX_OPTION_LENGTH, MAX_OPTIONS, MAX_QUESTION_LENGTH,
   MAX_QUESTIONS, MAX_SCALE_LABEL_LENGTH, MAX_THANKS_LENGTH, MAX_TITLE_LENGTH, MIN_OPTIONS, parseSurveyAnswers, SCALE_MAX_MAX, SCALE_MAX_MIN,
-  SCALE_MINS, SURVEY_IDENTITIES, SURVEY_QUESTION_KINDS, surveyVoterKey, type SurveyLevel
+  SCALE_MINS, offeredSurveyIdentities, SURVEY_QUESTION_KINDS, surveyRsvpVoterKey, surveyVoterKey, type SurveyLevel
 } from './lib/survey'
 
 type QuestionInput = {
@@ -144,8 +145,8 @@ function parseSubmitLimit(formData: FormData, current: number): number {
   return Number.isInteger(value) && value >= MIN_SUBMIT_LIMIT && value <= MAX_SUBMIT_LIMIT ? value : current
 }
 
-function parseIdentity(formData: FormData) {
-  return SURVEY_IDENTITIES.find(i => i === formData.get('identity')) ?? 'ANONYMOUS'
+function parseIdentity(formData: FormData, current?: SurveyIdentity) {
+  return offeredSurveyIdentities(current).find(i => i === formData.get('identity')) ?? 'ANONYMOUS'
 }
 
 function parseClosesAt(formData: FormData): Date | null {
@@ -210,7 +211,7 @@ export async function updateSurvey(formData: FormData) {
         numbered: formData.get('numbered') === 'on',
         submitLimit: parseSubmitLimit(formData, survey.submitLimit),
         closesAt: parseClosesAt(formData),
-        ...(answered ? {} : { identity: parseIdentity(formData) })
+        ...(answered ? {} : { identity: parseIdentity(formData, survey.identity) })
       }
     })
     if (withQuestions) {
@@ -225,19 +226,26 @@ export async function updateSurvey(formData: FormData) {
  * Eine Abgabe (Seite /fragebogen/<id> oder eingebettet /fragebogen/<id>/einbetten, Feld `embed`). Braucht ein gültiges
  * Einmal-Token aus der Seite (formToken, app/lib/survey-token.ts); ein ausgefülltes Lockfeld wird still verworfen.
  * ANONYMOUS: immer eine neue Antwort, jede gedrosselt. COOKIE: eine Antwort pro Gerät
- * (voter_token), eine erneute Abgabe ersetzt die bisherige; gedrosselt wird nur die erste.
+ * (voter_token), eine erneute Abgabe ersetzt die bisherige; gedrosselt wird nur die erste. RSVP: wie COOKIE, aber
+ * eine Antwort pro Zusage aus rsvp-app - der Link-Nachweis (Feld `verify`) muss noch gültig sein.
  */
 export async function submitSurvey(formData: FormData): Promise<void> {
   const surveyId = formString(formData, 'surveyId', 50)
   const page = `/fragebogen/${surveyId}${formData.get('embed') === '1' ? '/einbetten' : ''}`
   // Rückmeldungen hängen ?hinweis=/?danke= an; ?lang=en bleibt dabei erhalten (Englisch aus der Campus-App).
   const lang = surveyLang(formData.get('lang'))
-  const to = (query: string) => withLang(page, lang, query)
   const survey = await prisma.survey.findUnique({
     where: { id: surveyId },
     include: { questions: { orderBy: { position: 'asc' }, include: { options: { select: { id: true, isRow: true, allowText: true } } } } }
   })
   if (!survey) return
+  // Modus RSVP: Nur der Modus entscheidet, ein mitgeschicktes `verify` ist sonst bedeutungslos. Ein abgelaufener
+  // Nachweis speichert nichts - die Seite bittet dann, den Link aus rsvp-app noch einmal zu öffnen.
+  const verify = survey.identity === 'RSVP' ? formString(formData, 'verify', 2000) : ''
+  const rsvp = survey.identity === 'RSVP' ? verifyRsvpSurveyToken(verify, survey.id) : null
+  if (survey.identity === 'RSVP' && !rsvp) redirect(withLang(page, lang, 'hinweis=rsvp'))
+  // Jede weitere Rückmeldung trägt den Nachweis weiter, sonst stünde die Seite danach ohne Identität da.
+  const to = (query: string) => withLang(page, lang, rsvp ? `${query}&verify=${encodeURIComponent(verify)}` : query)
   if (!isSurveyOpen(survey)) redirect(to('hinweis=geschlossen'))
 
   // Schutz vor Skripten (app/lib/survey-token.ts): gültiges, frisches Einmal-Token aus der Seite, Mindest-Ausfüllzeit.
@@ -269,7 +277,7 @@ export async function submitSurvey(formData: FormData): Promise<void> {
     if (await throttled()) redirect(to('hinweis=gedrosselt'))
     await prisma.surveyResponse.create({ data: { surveyId: survey.id, answers: { create: parsed.rows } } })
   } else {
-    const voterKey = surveyVoterKey(await getOrCreateVoterToken())
+    const voterKey = rsvp ? surveyRsvpVoterKey(rsvp.sub) : surveyVoterKey(await getOrCreateVoterToken())
     const existing = await prisma.surveyResponse.findUnique({ where: { surveyId_voterKey: { surveyId: survey.id, voterKey } }, select: { id: true } })
     if (!existing && (await throttled())) redirect(to('hinweis=gedrosselt'))
     await prisma.$transaction(async tx => {

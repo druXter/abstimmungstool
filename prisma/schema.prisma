@@ -611,9 +611,13 @@ model ParticipantSession {
 // Wer antworten darf. ANONYMOUS: jede Abgabe ist eine neue Antwort, im Browser wird nichts
 // gespeichert (funktioniert auch eingebettet in fremden Websites). COOKIE: eine Antwort pro Gerät
 // (voter_token wie bei Abstimmungen), änderbar bis zum Ende - eingebettet nur unter derselben Domain.
+// RSVP: nur über den Link, den rsvp-app nach dem Event an die Gäste schickt (Idee L8 Teil 2,
+// verifyRsvpSurveyToken in app/lib/rsvp-verification.ts) - eine Antwort pro Zusage, änderbar bis zum
+// Ende. rsvp-app schickt nur ein Pseudonym der Zusage, keinen Namen und keine E-Mail.
 enum SurveyIdentity {
   ANONYMOUS
   COOKIE
+  RSVP
 }
 
 // GRID_SINGLE/GRID_MULTI: Raster - Zeilen (Aussagen) mal Spalten (Antwortmöglichkeiten), je Zeile eine bzw.
@@ -717,8 +721,9 @@ model SurveyOption {
   rowAnswers SurveyAnswer[] @relation("SurveyAnswerRow")
 }
 
-// Ein ausgefüllter Fragebogen. voterKey ("cookie:<token>") nur im Modus COOKIE - eindeutig pro
-// Fragebogen; bei ANONYMOUS null (SQLite erlaubt mehrere NULL in einem Unique-Index).
+// Ein ausgefüllter Fragebogen. voterKey ("cookie:<token>" bzw. "rsvp:<Pseudonym>") nur in den Modi
+// COOKIE und RSVP - eindeutig pro Fragebogen; bei ANONYMOUS null (SQLite erlaubt mehrere NULL in einem
+// Unique-Index).
 model SurveyResponse {
   id        String         @id @default(cuid())
   surveyId  String

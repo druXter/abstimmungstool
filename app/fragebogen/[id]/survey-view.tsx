@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
-import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, otherTextField, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyVoterKey } from '../../lib/survey'
+import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, otherTextField, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyRsvpVoterKey, surveyVoterKey } from '../../lib/survey'
+import { verifyRsvpSurveyToken } from '../../lib/rsvp-verification'
 import { surveyTexts, withLang, type SurveyLang } from '../../lib/survey-i18n'
 import { HONEYPOT_FIELD, issueFormToken } from '../../lib/survey-token'
 import { submitSurvey } from '../../survey-actions'
@@ -16,7 +17,7 @@ import { CookieGate, OtherText } from './embed-helpers'
 // an. Kommt eine Abgabe nach dem Ende (?hinweis=geschlossen), zeigt die Seite ohnehin "beendet".
 const NOTICE_TONES: Record<string, 'warning' | 'error'> = { pflicht: 'error', auswahl: 'error', leer: 'error', gedrosselt: 'warning', ungueltig: 'warning', 'zu-schnell': 'warning' }
 
-export type SurveySearch = { hinweis?: string; danke?: string; lang?: string }
+export type SurveySearch = { hinweis?: string; danke?: string; lang?: string; verify?: string }
 
 /** Lädt einen Fragebogen samt Fragen zum Ausfüllen, null wenn es ihn nicht gibt. */
 export async function loadSurveyForView(id: string) {
@@ -32,7 +33,8 @@ type ViewSurvey = NonNullable<Awaited<ReturnType<typeof loadSurveyForView>>>
  * Fragebogen zum Ausfüllen - dieselbe Ansicht auf /fragebogen/<id> und eingebettet
  * (/fragebogen/<id>/einbetten, `embed`). Ohne JavaScript bedienbar: Pflichtfragen über die
  * eingebaute Formularprüfung, Mehrfachauswahl zusätzlich im Browser (multi-choice.tsx), und
- * submitSurvey prüft alles noch einmal. Im Modus COOKIE mit den bisherigen Antworten vorausgefüllt. Feste Texte
+ * submitSurvey prüft alles noch einmal. In den Modi COOKIE und RSVP mit den bisherigen Antworten vorausgefüllt; RSVP
+ * zeigt das Formular nur mit gültigem Link-Nachweis aus rsvp-app (?verify=, weitergereicht als Feld). Feste Texte
  * je nach `lang` (?lang=en) auf Deutsch oder Englisch, die Fragen selbst so, wie die Verwaltung sie geschrieben hat.
  */
 export default async function SurveyView({ survey, search, embed, lang }: { survey: ViewSurvey; search: SurveySearch; embed: boolean; lang: SurveyLang }) {
@@ -42,9 +44,13 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
   const base = `/fragebogen/${survey.id}${embed ? '/einbetten' : ''}`
 
   const token = survey.identity === 'COOKIE' ? await getVoterToken() : null
-  const mine = token
+  // Modus RSVP: Identität nur aus dem Link-Nachweis von rsvp-app, nie aus einem Cookie.
+  const verify = survey.identity === 'RSVP' && typeof search.verify === 'string' ? search.verify.slice(0, 2000) : ''
+  const rsvp = verify ? verifyRsvpSurveyToken(verify, survey.id) : null
+  const voterKey = token ? surveyVoterKey(token) : rsvp ? surveyRsvpVoterKey(rsvp.sub) : null
+  const mine = voterKey
     ? await prisma.surveyResponse.findUnique({
-        where: { surveyId_voterKey: { surveyId: survey.id, voterKey: surveyVoterKey(token) } },
+        where: { surveyId_voterKey: { surveyId: survey.id, voterKey } },
         select: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true, optOut: true } } }
       })
     : null
@@ -65,8 +71,8 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
           <p className="font-medium">{t.thanks}</p>
           <p className="mt-1 whitespace-pre-line text-sm">{survey.thanksText || t.thanksDefault}</p>
         </div>
-        {survey.identity === 'COOKIE' && open && (
-          <Link href={withLang(base, lang)} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">{t.viewOrChange}</Link>
+        {(survey.identity === 'COOKIE' || rsvp) && open && (
+          <Link href={withLang(base, lang, rsvp ? `verify=${encodeURIComponent(verify)}` : '')} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">{t.viewOrChange}</Link>
         )}
       </Card>
     )
@@ -81,12 +87,23 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
     )
   }
 
+  // Ohne gültigen Link aus rsvp-app kein Formular - auch kein Cookie-Ersatz, sonst wäre "eine Antwort pro Gast" wertlos.
+  if (survey.identity === 'RSVP' && !rsvp) {
+    return (
+      <Card className="space-y-3">
+        {header}
+        <Notice tone={search.hinweis === 'rsvp' || verify ? 'warning' : 'info'}>{search.hinweis === 'rsvp' || verify ? t.rsvpExpired : t.rsvpMissing}</Notice>
+      </Card>
+    )
+  }
+
   const numbers = questionNumbers(survey.questions, survey.numbered).shown
   const form = (
     <form action={submitSurvey} className="space-y-4">
       <input type="hidden" name="surveyId" value={survey.id} />
       {embed && <input type="hidden" name="embed" value="1" />}
       {lang === 'en' && <input type="hidden" name="lang" value="en" />}
+      {rsvp && <input type="hidden" name="verify" value={verify} />}
       {/* Einmal-Token gegen Skripte und ein Lockfeld für Bots (app/lib/survey-token.ts): für Menschen unsichtbar, für
           Screenreader verborgen und nicht per Tab erreichbar. */}
       <input type="hidden" name="formToken" value={issueFormToken(survey.id)} />
@@ -184,7 +201,7 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-700">
         <p className="text-xs text-gray-500 dark:text-gray-400">
           {survey.questions.some(q => q.required) && <><span className="text-red-700 dark:text-red-300">*</span> {t.required} · </>}
-          {survey.identity === 'ANONYMOUS' ? t.anonymous : t.perDevice}{' '}
+          {survey.identity === 'ANONYMOUS' ? t.anonymous : survey.identity === 'RSVP' ? t.perGuest : t.perDevice}{' '}
           <a href="/datenschutz" target="_blank" rel="noopener" className="underline">{t.privacy}</a>
         </p>
         <SubmitButton inline>{mine ? t.saveChanges : t.submit}</SubmitButton>

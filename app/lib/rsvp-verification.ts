@@ -105,6 +105,46 @@ export function verifyRsvpWebhookPayload(token: string | undefined | null): Rsvp
   return { email: payload.email.toLowerCase(), pollId: payload.pollId, eventId: payload.eventId, attending: payload.attending }
 }
 
+/** Pseudonym einer Zusage aus rsvp-app: base64url, wie es rsvp-app bildet (HMAC-SHA256, 43 Zeichen). */
+const SURVEY_SUBJECT = /^[A-Za-z0-9_-]{16,128}$/
+/** Länger gilt ein Fragebogen-Link aus rsvp-app nie, auch wenn er es selbst behauptet. */
+const SURVEY_TOKEN_MAX_TTL_SECONDS = 24 * 60 * 60
+
+/**
+ * Link-Nachweis für einen Fragebogen im Modus RSVP (Survey.identity, Idee L8 Teil 2): rsvp-app stellt ihn bei
+ * jedem Klick auf "Feedback geben" (Mail nach dem Event, Event-Seite) frisch aus und hängt ihn als `?verify=`
+ * an. Payload `{ typ: 'survey-access', surveyId, sub, exp }` - `sub` ist ein Pseudonym der Zusage, das
+ * rsvp-app je Fragebogen bildet (keine E-Mail, kein Name). Das Pflichtfeld `typ` und `surveyId` statt
+ * `pollId` halten die Nachrichtenarten auseinander: Ein Abstimmungs-Token geht hier nie durch und dieser
+ * nie bei verifyRsvpToken. Höchstens 24 Stunden gültig. null bei jedem Problem, wie oben.
+ */
+export function verifyRsvpSurveyToken(token: string | undefined | null, expectedSurveyId: string): { sub: string } | null {
+  const secret = process.env.RSVP_VERIFICATION_SECRET
+  if (!secret || !token) return null
+
+  const parts = token.split('.')
+  if (parts.length !== 2) return null
+  const [payloadPart, signaturePart] = parts
+  if (!payloadPart || !signaturePart) return null
+  if (!verifySignature(payloadPart, signaturePart, secret)) return null
+
+  let payload: { typ?: unknown; surveyId?: unknown; sub?: unknown; exp?: unknown }
+  try {
+    payload = JSON.parse(base64urlDecode(payloadPart).toString('utf8'))
+  } catch {
+    return null
+  }
+  if (!payload || typeof payload !== 'object') return null
+
+  if (payload.typ !== 'survey-access') return null
+  if (typeof payload.surveyId !== 'string' || payload.surveyId !== expectedSurveyId) return null
+  if (typeof payload.sub !== 'string' || !SURVEY_SUBJECT.test(payload.sub)) return null
+  const now = Date.now() / 1000
+  if (typeof payload.exp !== 'number' || payload.exp < now || payload.exp > now + SURVEY_TOKEN_MAX_TTL_SECONDS) return null
+
+  return { sub: payload.sub }
+}
+
 /**
  * Signiert die Ergebnis-Meldung ans rsvp-app beim Schließen einer Abstimmung
  * (Gegenstück zu dessen `verifyResultWebhookPayload`) - siehe app/lib/rsvp-notify.ts

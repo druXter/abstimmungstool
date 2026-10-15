@@ -97,7 +97,12 @@ export default function DatenschutzPage() {
             ohne E-Mail-Adresse und ohne IP-Adresse. Ist der Fragebogen <em>anonym</em>, legen wir in deinem Browser
             nichts ab; deine Abgabe lässt sich keinem Gerät zuordnen und auch nicht nachträglich ändern. Gilt
             &quot;einmal pro Gerät&quot;, merkt sich dein Browser die zufällige Kennung <code>voter_token</code> (wie
-            oben beim Abstimmen), damit du deine Antworten später ändern kannst. Die Antworten sieht nur, wer den
+            oben beim Abstimmen), damit du deine Antworten später ändern kannst. Ist der Fragebogen für{' '}
+            <em>Gäste aus rsvp-app</em>, kommst du über &quot;Feedback geben&quot; in rsvp-app hierher: rsvp-app schickt
+            uns dabei in einem signierten, höchstens 24 Stunden gültigen Link nur ein Pseudonym deiner Anmeldung (eine
+            Zeichenfolge, aus der wir weder deinen Namen noch deine E-Mail-Adresse ableiten können). Wir speichern es
+            bei deinen Antworten, damit es eine Antwort pro Gast bleibt und du sie ändern kannst; im Browser legen wir
+            dafür nichts ab. Die Antworten sieht nur, wer den
             Fragebogen verwaltet (auch als CSV-Export), einschließlich der Konten, mit denen er geteilt ist. Schreib in
             Freitextfelder daher nichts, woran man dich erkennen soll, wenn du anonym bleiben möchtest. Zum Schutz vor
             automatisierten Massen-Abgaben enthält das Formular eine zufällige Einmal-Kennung; nach dem Absenden merken

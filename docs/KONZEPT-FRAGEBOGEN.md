@@ -59,11 +59,20 @@ benannt nach der Aussage.
 | --- | --- | --- |
 | `ANONYMOUS` (Standard) | jede Abgabe ist eine neue Antwort, nichts im Browser gespeichert; gedrosselt pro IP und Fragebogen | überall |
 | `COOKIE` | eine Antwort pro Gerät (Cookie `voter_token` wie bei Abstimmungen), änderbar bis zum Ende | nur direkt oder unter derselben Domain (`*.ramonroeser.de`) |
+| `RSVP` (L8 Teil 2, 2026-10-15) | eine Antwort pro Zusage in rsvp-app (Pseudonym aus dem signierten Link von rsvp-app), änderbar bis zum Ende | nicht vorgesehen - Gäste kommen über "Feedback geben" in rsvp-app |
 
 Hintergrund: In einem iFrame einer *anderen* Website (Campus-App) ist `voter_token` ein Drittanbieter-Cookie, das
 Browser nicht mitschicken bzw. blockieren. Die eingebettete Seite prüft im Modus `COOKIE` deshalb im Browser, ob sie
 ein Cookie setzen kann, und bietet sonst an, den Fragebogen in einem neuen Tab zu öffnen. Weitere Modi (persönliche
-Links, rsvp-app, Konto) lassen sich später über `resolveVoter` anschließen – das ist der zweite Teil von L8.
+Links, Konto) lassen sich später anschließen.
+
+**Teil 2 (2026-10-15): Gäste aus rsvp-app.** rsvp-app verweist beim Termin auf den Fragebogen, zeigt Gästen ab dem
+Ende "Feedback geben" und schickt den Link einstellbar nach dem Ende per Mail und Push (einmal je Zusage). Wer darf,
+entscheidet rsvp-app: eine Zusage, die zählt, bei Terminen mit QR-Einlass nur Eingecheckte. Der Link führt über
+rsvp-app (`/api/feedback-link/<eventId>`), das bei jedem Klick einen Nachweis `{ typ: 'survey-access', surveyId, sub,
+exp }` signiert (gemeinsames `RSVP_VERIFICATION_SECRET`, 12 h gültig). `sub` ist ein Pseudonym der Zusage je
+Fragebogen (HMAC), kein Name und keine E-Mail - hier steht nur `voterKey = rsvp:<sub>`. Ohne gültigen Nachweis kein
+Formular, auch kein Cookie-Ersatz; der Nachweis reist beim Absenden als Feld mit.
 
 ## Einbetten
 
@@ -108,5 +117,5 @@ Skripten schwer zu machen und Angriffe sichtbar und aufräumbar zu machen:
 
 ## Später
 
-* Weitere Identitäten (L8 Teil 2): rsvp-app schickt nach dem Event den Link an Eingecheckte, Identität `RSVP`.
+* Weitere Identitäten (persönliche Links, Konto).
 * Weitere Fragearten (Dropdown, Datum), bedingte Fragen, Fragen nachträglich ändern trotz Antworten.

@@ -296,6 +296,7 @@ Zwei Varianten teilen sich dieses Format (siehe `app/lib/rsvp-verification.ts`):
 
 * **Klick-Token** (`?verify=...` am Abstimmungs-Link): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools>", "attending": true, "exp": <Unix-Timestamp Sekunden> }`
 * **Webhook-Nachricht** (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): zusätzlich `"eventId": "<Event.id in rsvp-app>"` - daraus lernt dieses Tool beiläufig `Poll.rsvpEventId`, um beim Schließen zu wissen, wohin das Ergebnis gemeldet werden soll (siehe "Ergebnis-Meldung" unten).
+* **Fragebogen-Nachweis** (`?verify=...` an einem Fragebogen im Modus `RSVP`): `{ "typ": "survey-access", "surveyId": "<Survey.id>", "sub": "<Pseudonym>", "exp": ... }` - siehe "Fragebogen für Gäste aus rsvp-app".
 
 * `RSVP_VERIFICATION_SECRET` muss auf beiden Seiten identisch sein (gemeinsames
   HMAC-Secret, z.B. `openssl rand -hex 32`) - niemals das Secret selbst übertragen,
@@ -640,7 +641,9 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   (`grid-input.tsx`) - jedes Feld gibt es nur einmal, die Ansicht wechselt allein per CSS, auch ohne JavaScript.
 * **Wer darf antworten** (`Survey.identity`, gesperrt nach der ersten Antwort): `ANONYMOUS` (Standard) - jede Abgabe ist
   eine neue Antwort, nichts im Browser gespeichert, funktioniert auch eingebettet überall; `COOKIE` - eine Antwort pro
-  Gerät (`voter_token` wie bei Abstimmungen, `voterKey` `cookie:…`), änderbar bis zum Ende, vorausgefüllt.
+  Gerät (`voter_token` wie bei Abstimmungen, `voterKey` `cookie:…`), änderbar bis zum Ende, vorausgefüllt; `RSVP` -
+  Feedback nach einem Event in rsvp-app (siehe unten "Fragebogen für Gäste aus rsvp-app"), eine Antwort pro Zusage
+  (`voterKey` `rsvp:<Pseudonym>`), änderbar bis zum Ende. Nur wählbar mit `RSVP_VERIFICATION_SECRET`.
 * **Ausfüllen** auf `/fragebogen/<id>`, ohne JavaScript bedienbar: Pflicht über die eingebaute Formularprüfung,
   Mehrfachauswahl mit Grenze zusätzlich im Browser (`multi-choice.tsx`); `submitSurvey` prüft alles noch einmal
   (`parseSurveyAnswers`). Gedrosselt pro IP und Fragebogen (200 pro Stunde, anonym jede Abgabe, sonst die erste).
@@ -687,6 +690,25 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
 * **Grenze:** Anonym lässt sich mehrfaches Ausfüllen nicht verhindern, nur bremsen und im Nachhinein aufräumen: Wer viele
   IP-Adressen hat (z.B. viele Handys im Mobilfunk), kommt durch. Für verbindliche Ergebnisse persönliche Links oder
   Identität über rsvp-app nutzen (L8 Teil 2).
+
+### Fragebogen für Gäste aus rsvp-app (Modus `RSVP`)
+
+Idee L8 Teil 2: rsvp-app verweist bei einem Termin auf einen Fragebogen (Einstellungen → Verknüpfungen →
+Feedback-Fragebogen), zeigt Gästen ab dem Ende "Feedback geben" und schickt den Link auf Wunsch per Mail und Push.
+Wer darf, entscheidet rsvp-app (Zusage, die zählt; mit QR-Einlass nur Eingecheckte).
+
+* Ausfüllen geht nur mit dem Nachweis, den rsvp-app bei jedem Klick frisch ausstellt (`?verify=`, beim Absenden als
+  verstecktes Feld `verify` weitergereicht). Ohne gültigen Nachweis zeigt die Seite kein Formular, nur einen Hinweis -
+  bewusst ohne Cookie-Ersatz. Ist der Nachweis beim Absenden abgelaufen, wird nichts gespeichert (`?hinweis=rsvp`).
+* Format wie die übrigen Nachrichten mit rsvp-app (siehe "Token-Format"): `{ "typ": "survey-access", "surveyId":
+  "<Survey.id>", "sub": "<Pseudonym>", "exp": <Unix-Sekunden> }`, höchstens 24 Stunden gültig (rsvp-app: 12),
+  geprüft von `verifyRsvpSurveyToken` in `app/lib/rsvp-verification.ts`. `typ` und `surveyId` statt `pollId` halten
+  die Nachrichtenarten auseinander: Ein Abstimmungs-Token öffnet keinen Fragebogen und umgekehrt.
+* `sub` ist ein Pseudonym der Zusage (HMAC über Fragebogen und Antwort-ID in rsvp-app, base64url): kein Name, keine
+  E-Mail. Es macht "eine Antwort pro Gast, änderbar" möglich, ohne dass hier jemand erkennbar ist.
+* Die Verwaltung zeigt statt QR-Code und Einbetten den Hinweis, den Link in rsvp-app einzutragen.
+* Getestet in `tests/e2e/survey-rsvp.spec.ts` (fremde, abgelaufene, zu lange gültige, unsignierte Nachweise und
+  Abstimmungs-Tokens, jeweils mit Gegenprobe).
 
 ## Ergebnis-Meldung an rsvp-app
 

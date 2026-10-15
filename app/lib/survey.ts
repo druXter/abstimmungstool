@@ -38,7 +38,15 @@ export const SCALE_MAX_MAX = 10
 export const DEFAULT_SCALE = { min: 1, max: 5 }
 
 export const SURVEY_QUESTION_KINDS: readonly SurveyQuestionKind[] = ['SINGLE', 'MULTI', 'TEXT', 'SCALE', 'GRID_SINGLE', 'GRID_MULTI', 'SCALE_GRID', 'INFO']
-export const SURVEY_IDENTITIES: readonly SurveyIdentity[] = ['ANONYMOUS', 'COOKIE']
+export const SURVEY_IDENTITIES: readonly SurveyIdentity[] = ['ANONYMOUS', 'COOKIE', 'RSVP']
+
+/**
+ * Was man beim Anlegen/Bearbeiten wählen kann - RSVP nur mit RSVP_VERIFICATION_SECRET, sonst käme nie ein gültiger
+ * Link aus rsvp-app an und niemand könnte antworten. Der aktuelle Wert eines Fragebogens bleibt immer wählbar.
+ */
+export function offeredSurveyIdentities(current?: SurveyIdentity): readonly SurveyIdentity[] {
+  return SURVEY_IDENTITIES.filter(i => i !== 'RSVP' || !!process.env.RSVP_VERIFICATION_SECRET || i === current)
+}
 
 export const KIND_LABELS: Record<SurveyQuestionKind, string> = {
   SINGLE: 'Einfachauswahl',
@@ -78,6 +86,11 @@ export const IDENTITY_LABELS: Record<SurveyIdentity, { title: string; short: str
     title: 'Einmal pro Gerät',
     short: 'einmal pro Gerät',
     hint: 'Eine Antwort pro Browser (Cookie wie bei Abstimmungen), änderbar bis zum Ende. Eingebettet nur in Apps unter derselben Domain - in anderen Apps (z.B. der Campus-App) blockieren Browser das Cookie, dort öffnet sich der Fragebogen dann in einem neuen Tab.'
+  },
+  RSVP: {
+    title: 'Gäste aus rsvp-app',
+    short: 'Gäste aus rsvp-app',
+    hint: 'Feedback nach einem Event: rsvp-app schickt den Link nach dem Event an die Gäste (eingecheckt bzw. mit Zusage) und zeigt ihn auf der Event-Seite. Eine Antwort pro Gast, änderbar bis zum Ende. Hier kommt nur ein Pseudonym an, kein Name und keine E-Mail. Ohne den Link aus rsvp-app kann niemand antworten.'
   }
 }
 
@@ -106,6 +119,11 @@ export function surveyEndedAt(survey: { closedAt: Date | null; closesAt: Date | 
 
 export function surveyVoterKey(token: string): string {
   return `cookie:${token}`
+}
+
+/** Schlüssel einer Antwort im Modus RSVP: das Pseudonym der Zusage aus rsvp-app (verifyRsvpSurveyToken). */
+export function surveyRsvpVoterKey(sub: string): string {
+  return `rsvp:${sub}`
 }
 
 /** Das Feld einer Frage im Formular zum Ausfüllen - beim Raster eins je Zeile. */

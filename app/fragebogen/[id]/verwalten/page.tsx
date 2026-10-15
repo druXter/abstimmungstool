@@ -110,6 +110,13 @@ export default async function ManageSurveyPage({
         <Card className="space-y-4">
           <h2 className="font-semibold">Zum Ausfüllen</h2>
           <CopyableField label="Link zum Fragebogen" value={link} />
+          {survey.identity === 'RSVP' ? (
+            <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="rsvp-survey-hint">
+              Diesen Link in rsvp-app beim Termin eintragen (Einstellungen → Verknüpfungen → Feedback-Fragebogen). rsvp-app
+              schickt ihn nach dem Event an die Gäste und zeigt ihn auf der Event-Seite, jeweils mit einem persönlichen
+              Nachweis. Wer den Link nur so öffnet, kann nicht antworten.
+            </p>
+          ) : (<>
           <details className="text-sm text-gray-600 dark:text-gray-400">
             <summary className="cursor-pointer">QR-Code</summary>
             <div className="mt-2"><QrCode value={link} label="QR-Code zum Fragebogen" /></div>
@@ -137,6 +144,7 @@ export default async function ManageSurveyPage({
               </ul>
             </div>
           </details>
+          </>)}
         </Card>
 
         <Card className="space-y-6">
