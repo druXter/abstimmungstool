@@ -174,6 +174,20 @@ export default function DatenschutzPage() {
             niemand dieselbe Nachricht doppelt bekommt.
           </p>
           <p className="mt-2">
+            <strong>Sitzungen (Versammlungen, optional):</strong> Bei einer Mitgliederversammlung o. ä. trittst du über
+            deinen Termin in rsvp-app bei (&quot;Zur Sitzung&quot;). rsvp-app übermittelt uns dafür eine kurz gültige,
+            digital signierte Bestätigung mit <strong>deinem Namen und einer Kennung, die nur für diese Sitzung
+            gilt</strong> - keine E-Mail-Adresse. Wir speichern Name und Kennung als Mitglied der Sitzung, dazu die
+            Abstimmungen der Sitzung, an denen du teilgenommen hast, und deine Wortmeldungen auf der Rednerliste (für
+            alle Mitglieder sichtbar). Ist eingestellt, dass nur Anwesende abstimmen, fragen wir bei rsvp-app ab, wer
+            gerade eingecheckt ist (rsvp-app antwortet nur mit den Kennungen). Bei einer <strong>geheimen
+            Abstimmung</strong> lässt sich deine Stimme keinem Mitglied zuordnen, gespeichert wird nur, dass du
+            teilgenommen hast; bei einer <strong>namentlichen</strong> steht dein Name an der Stimme und ist nach dem
+            Schließen für die Mitglieder und im Export der Sitzungsleitung sichtbar. Dein Browser bekommt ein Cookie{' '}
+            <code>assembly_…</code> (24 Stunden, siehe Punkt 9). Rechtsgrundlage ist die Durchführung der Versammlung
+            (Art. 6 Abs. 1 lit. b DSGVO bzw. die Satzung, Art. 6 Abs. 1 lit. f DSGVO).
+          </p>
+          <p className="mt-2">
             Schließt sich eine solche Abstimmung, melden wir das Ergebnis (Titel der Abstimmung, Gewinner-Optionen,
             Stimmenzahl) an rsvp-app zurück. Personenbezogene Daten sind darin nicht enthalten.
           </p>
@@ -262,6 +276,7 @@ export default function DatenschutzPage() {
             <li><code>poll_email_…</code> - nur bei Abstimmungen mit E-Mail-Bestätigung: merkt sich deine bestätigte Adresse (30 Tage, nur für diese Abstimmung)</li>
             <li><code>poll_access_…</code> - nur bei Abstimmungen mit Zugangscode: merkt sich, dass du ihn eingegeben hast (30 Tage, nur für diese Abstimmung)</li>
             <li><code>live_…</code> - nur bei Live-Runden: deine zufällige Kennung in dieser Runde (12 Stunden)</li>
+            <li><code>assembly_…</code> - nur bei Sitzungen (Versammlungen): deine zufällige Kennung als Mitglied dieser Sitzung (24 Stunden)</li>
             <li><code>__Host-session</code> - Anmeldung an deinem Konto (30 Tage)</li>
             <li><code>__Host-participant</code> - nur bei Abstimmung mit deinem Teilnehmendenkonto aus rsvp-app: deine Anmeldung zum Abstimmen (24 Stunden)</li>
             <li><code>__Host-suite-state</code> - nur während der Anmeldung über ein anderes Tool (10 Minuten)</li>
@@ -298,7 +313,8 @@ export default function DatenschutzPage() {
           </p>
           <p className="mt-2">
             <strong>Verbundene Tools:</strong> Die in Punkt 4 und 6 beschriebene Übermittlung (in beide Richtungen, auch
-            der Empfang deines Namens und einer Kennung von rsvp-app beim Abstimmen mit Teilnehmendenkonto) erfolgt nur
+            der Empfang deines Namens und einer Kennung von rsvp-app beim Abstimmen mit Teilnehmendenkonto oder beim Beitritt
+            zu einer Sitzung) erfolgt nur
             zwischen Tools, die der Betreiber selbst betreibt und freigegeben hat.
           </p>
           <p className="mt-2">
@@ -325,6 +341,9 @@ export default function DatenschutzPage() {
             Fragebögen samt allen Antworten werden spätestens <strong>18 Monate nach ihrem Ende</strong> gelöscht
             (maßgeblich ist das Schließen, sonst das Enddatum, sonst die letzte Änderung am Fragebogen); wer ihn
             verwaltet, kann Antworten oder den ganzen Fragebogen jederzeit früher löschen.
+            Sitzungen (Versammlungen) samt Mitgliedern, Rednerliste und ihren Abstimmungen werden spätestens{' '}
+            <strong>18 Monate nach ihrem Ende</strong> (ohne Ende: nach dem Anlegen) gelöscht; löst die Sitzungsleitung die
+            Verknüpfung mit rsvp-app, sind die Mitglieder sofort weg.
           </p>
           <p className="mt-2">
             Ein Konto wird automatisch gelöscht, wenn du dich <strong>2 Jahre</strong> lang nicht mehr angemeldet

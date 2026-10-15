@@ -54,6 +54,8 @@ model User {
   liveAccess        LiveAccess[]
   surveys           Survey[]
   surveyAccess      SurveyAccess[]
+  assemblies        Assembly[]
+  assemblyAccess    AssemblyAccess[]
 }
 
 // Server-seitige Session: das Cookie trägt nur den zufälligen Token, in der Datenbank
@@ -197,6 +199,8 @@ model Poll {
   // Die Stimme hängt dann an einem Schlüssel, der sich nur aus dem Link-Token ableiten lässt
   // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
   // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
+  // Ebenso im Modus ASSEMBLY (Sitzung): Schlüssel aus dem Mitglieds-Cookie, Teilnahme in
+  // AssemblyMember.votedPolls - siehe app/lib/assembly.ts.
   secretBallot             Boolean           @default(false)
   // Nur im Modus EMAIL: wer sich bestätigen darf, eine Angabe pro Zeile - "@verein.de" für
   // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
@@ -248,8 +252,15 @@ model Poll {
   votes                    Vote[]
   voterLinks               VoterLink[]
   emailVoters              EmailVoter[]
+  // Abstimmung einer Sitzung (docs/KONZEPT-SITZUNG.md, voterIdentity ASSEMBLY). Beim Schließen festgehalten: wie viele
+  // anwesend waren und ob die Sitzung beschlussfähig war (null = nicht bekannt bzw. kein Quorum eingestellt).
+  assemblyId               String?
+  assembly                 Assembly?         @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  assemblyPresent          Int?
+  assemblyQuorumMet        Boolean?
 
   @@index([ownerId])
+  @@index([assemblyId])
 }
 
 // Persönlicher Stimmlink (Modus LINK): /[pollId]?k=<token>, eine Person pro Link. Wie bei
@@ -352,6 +363,9 @@ enum VoterIdentity {
   EMAIL
   ACCOUNT
   RSVP
+  // Nur Abstimmungen einer Sitzung (Poll.assemblyId, docs/KONZEPT-SITZUNG.md): Mitglieder der Sitzung über rsvp-app,
+  // mit "Nur Anwesende" nur, wer gerade eingecheckt ist. Nie beim Anlegen oder in den Einstellungen wählbar.
+  ASSEMBLY
 }
 
 // Eine Stimme ist EIN (Identität, Option)-Paar - bei einer Mehrfachauswahl-Abstimmung
@@ -755,4 +769,87 @@ model SurveyAnswer {
 
   @@index([questionId])
   @@index([responseId])
+}
+
+// ---------------------------------------------------------------------------
+// Sitzung (Idee L7, docs/KONZEPT-SITZUNG.md): bündelt schnelle Abstimmungen einer Versammlung (Poll.assemblyId) und
+// kennt ihre Mitglieder - die kommen nur über einen Termin in rsvp-app, der die Sitzung verlinkt. Jede Funktion ist
+// einzeln schaltbar: nur Anwesende, Beschlussfähigkeit, Rednerliste, geheim als Vorgabe.
+// ---------------------------------------------------------------------------
+model Assembly {
+  id               String            @id @default(cuid())
+  title            String
+  ownerId          String
+  owner            User              @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  // Verknüpfter Termin in rsvp-app: gesetzt von der ersten Meldung (Link gespeichert oder erster Beitritt), danach
+  // gelten nur noch Nachweise dieses Termins, bis die Verwaltung die Verknüpfung löst.
+  rsvpEventId      String?
+  rsvpEventTitle   String?
+  // Abstimmen nur, wer laut rsvp-app gerade eingecheckt ist (sonst alle Mitglieder).
+  presenceRequired Boolean           @default(true)
+  // Beschlussfähig ab so vielen Anwesenden, null = keine Anzeige.
+  quorum           Int?
+  // Rednerliste (AssemblySpeaker) an.
+  speakerList      Boolean           @default(false)
+  // Neue Abstimmungen geheim (sonst namentlich).
+  secretDefault    Boolean           @default(true)
+  // Steigt bei jeder Änderung, die Mitglieder sehen (Abstimmung geöffnet/geschlossen, Rednerliste) - die Ansichten
+  // laden daran neu (app/api/sitzung/[id]/stand).
+  version          Int               @default(0)
+  createdAt        DateTime          @default(now())
+  closedAt         DateTime?
+  polls            Poll[]
+  members          AssemblyMember[]
+  speakers         AssemblySpeaker[]
+  access           AssemblyAccess[]
+
+  @@index([ownerId])
+}
+
+// Gemeinsam leiten (wie SurveyAccess): alles außer löschen und weiter teilen.
+model AssemblyAccess {
+  id         String   @id @default(cuid())
+  assemblyId String
+  assembly   Assembly @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@unique([assemblyId, userId])
+  @@index([userId])
+}
+
+// Mitglied einer Sitzung, beigetreten über rsvp-app. sub = Pseudonym der Zusage (HMAC in rsvp-app, je Sitzung
+// verschieden), name = Name der Zusage. Cookie assembly_<id> mit zufälligem Token, hier nur der Hash - ein Beitritt
+// von einem anderen Gerät ersetzt ihn. votedPolls: IDs der Abstimmungen, an denen das Mitglied teilgenommen hat,
+// durch Leerzeichen getrennt - als Änderung dieser Zeile statt eigener Zeilen, damit sich geheime Stimmen nicht über
+// die Reihenfolge neuer Zeilen einem Mitglied zuordnen lassen.
+model AssemblyMember {
+  id         String            @id @default(cuid())
+  assemblyId String
+  assembly   Assembly          @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  sub        String
+  name       String
+  tokenHash  String?           @unique
+  votedPolls String            @default("")
+  joinedAt   DateTime          @default(now())
+  speakers   AssemblySpeaker[]
+
+  @@unique([assemblyId, sub])
+}
+
+// Rednerliste: Wortmeldung (SPEAK) oder Antrag zur Geschäftsordnung (GO, kommt zuerst). calledAt = aufgerufen
+// ("ist dran"), doneAt = erledigt oder zurückgezogen.
+model AssemblySpeaker {
+  id         String         @id @default(cuid())
+  assemblyId String
+  assembly   Assembly       @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  memberId   String
+  member     AssemblyMember @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  kind       String
+  createdAt  DateTime       @default(now())
+  calledAt   DateTime?
+  doneAt     DateTime?
+
+  @@index([assemblyId])
 }

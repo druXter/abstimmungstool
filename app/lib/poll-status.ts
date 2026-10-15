@@ -7,7 +7,8 @@ export const IDENTITY_SHORT: Record<VoterIdentity, string> = {
   LINK: 'persönliche Stimmlinks',
   EMAIL: 'mit bestätigter E-Mail-Adresse',
   ACCOUNT: 'nur mit Konto',
-  RSVP: 'nur über rsvp-app'
+  RSVP: 'nur über rsvp-app',
+  ASSEMBLY: 'Mitglieder der Sitzung'
 }
 
 export type PollStatus = { state: 'open' | 'expired' | 'closed'; badge: string; tone: Tone; text: string }

@@ -23,6 +23,7 @@ import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
 import { formString, normalizeEmail } from './lib/form'
+import { withVoted } from './lib/assembly'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
@@ -260,6 +261,11 @@ async function replaceVotes(pollId: string, voter: Voter, entries: BallotEntry[]
     if (voter.linkId) {
       await tx.voterLink.updateMany({ where: { id: voter.linkId, hasVoted: false }, data: { hasVoted: true } })
     }
+    if (voter.memberId) {
+      // Sitzung: Teilnahme als Änderung der Mitgliedszeile (siehe AssemblyMember.votedPolls)
+      const member = await tx.assemblyMember.findUnique({ where: { id: voter.memberId }, select: { votedPolls: true } })
+      if (member) await tx.assemblyMember.update({ where: { id: voter.memberId }, data: { votedPolls: withVoted(member.votedPolls, pollId) } })
+    }
     return true
   })
 }
@@ -291,17 +297,22 @@ export async function castVote(formData: FormData): Promise<void> {
   if (!(await hasPollAccess(poll))) return
 
   const identity = identityFromForm(formData)
+  // Abstimmung einer Sitzung: zurück auf die Sitzungsseite (docs/KONZEPT-SITZUNG.md), Hinweise dort an der Abstimmung
+  const back = (notice?: string) => poll.assemblyId
+    ? `/sitzung/${poll.assemblyId}${notice ? `?hinweis=${notice}&abstimmung=${pollId}` : ''}#abstimmung-${pollId}`
+    : pollUrl(pollId, identity, notice)
 
   // Stimmzettel je Art lesen (app/lib/poll-types.ts) - nur Optionen dieser Abstimmung, bei
   // Einzelauswahl auf eine gekappt, Grenzen/Rangfolge/Punktebudget geprüft. Was die Seite
   // ohne JavaScript nicht erzwingen kann, meldet sich als Hinweis.
   const ballot = parseBallot(poll, formData, choiceLimits(poll))
   if (!ballot.ok) {
-    if (ballot.notice) redirect(pollUrl(pollId, identity, ballot.notice))
+    if (ballot.notice) redirect(back(ballot.notice))
     return
   }
 
   const { voter, block } = await resolveVoter(poll, identity, { create: true })
+  if (poll.assemblyId && block) redirect(back(block))
   if (block || !voter) return
 
   if (poll.voterIdentity === 'COOKIE' && poll.requireVoterName) {
@@ -321,12 +332,13 @@ export async function castVote(formData: FormData): Promise<void> {
   }
 
   if (!(await replaceVotes(pollId, voter, ballot.entries, poll.maxVoters))) {
-    redirect(pollUrl(pollId, identity, 'voll'))
+    redirect(back('voll'))
   }
   revalidatePath(`/${pollId}`)
+  if (poll.assemblyId) revalidatePath(`/sitzung/${poll.assemblyId}`)
   // Auf die Seite ohne ?hinweis= - sonst stünde eine frühere Ablehnung (z.B. falsche Anzahl)
   // auch nach der erfolgreichen Stimme noch da. Identitäts-Parameter bleiben erhalten.
-  redirect(pollUrl(pollId, identity))
+  redirect(back())
 }
 
 /** Termine nach dem Hinzufügen neuer Optionen wieder chronologisch durchnummerieren. */

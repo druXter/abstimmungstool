@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { Badge, type Tone } from '../ui/kit'
 
 export type RowData = {
-  kind: 'poll' | 'live' | 'survey'
+  kind: 'poll' | 'live' | 'survey' | 'assembly'
   id: string
   href: string
   title: string
@@ -29,7 +29,9 @@ export default function PollRow({ row, muted = false }: { row: RowData; muted?: 
     ? { bg: 'bg-purple-50 dark:bg-purple-950/50', text: 'text-purple-800 dark:text-purple-200' }
     : row.kind === 'survey'
       ? { bg: 'bg-indigo-50 dark:bg-indigo-950/50', text: 'text-indigo-800 dark:text-indigo-200' }
-      : { bg: 'bg-gray-50 dark:bg-gray-900', text: 'text-gray-900 dark:text-gray-100' }
+      : row.kind === 'assembly'
+        ? { bg: 'bg-teal-50 dark:bg-teal-950/50', text: 'text-teal-800 dark:text-teal-200' }
+        : { bg: 'bg-gray-50 dark:bg-gray-900', text: 'text-gray-900 dark:text-gray-100' }
   return (
     <Link
       href={row.href}

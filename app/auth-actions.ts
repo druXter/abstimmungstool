@@ -280,6 +280,7 @@ export async function deleteUser(formData: FormData) {
     prisma.poll.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
     prisma.liveSession.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
     prisma.survey.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
+    prisma.assembly.updateMany({ where: { ownerId: target.id }, data: { ownerId: actor.id } }),
     // Stimmen im Modus ACCOUNT bleiben gezählt (sonst änderten sich Ergebnisse rückwirkend),
     // verlieren aber den Namen - übrig bleibt nur die ID eines Kontos, das es nicht mehr gibt.
     prisma.vote.updateMany({ where: { voterKey: voterKey('ACCOUNT', target.id) }, data: { voterName: null } }),

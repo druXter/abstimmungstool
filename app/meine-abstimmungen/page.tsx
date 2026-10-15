@@ -23,9 +23,10 @@ export default async function MeineAbstimmungenPage() {
   const isAdmin = user.role === 'ADMIN'
   const visible = isAdmin ? {} : { OR: [{ ownerId: user.id }, { access: { some: { userId: user.id } } }] }
 
-  const [polls, liveSessions, surveys] = await Promise.all([
+  const [polls, liveSessions, surveys, assemblies] = await Promise.all([
+    // Abstimmungen einer Sitzung stehen bei der Sitzung, nicht hier
     prisma.poll.findMany({
-      where: visible,
+      where: { ...visible, assemblyId: null },
       orderBy: { createdAt: 'desc' },
       select: {
         id: true, title: true, createdAt: true, closedAt: true, closesAt: true, ownerId: true, pollType: true, optionKind: true,
@@ -50,6 +51,15 @@ export default async function MeineAbstimmungenPage() {
       select: {
         id: true, title: true, createdAt: true, closedAt: true, closesAt: true, identity: true, ownerId: true, owner: { select: { email: true } },
         _count: { select: { responses: true, questions: true } }
+      }
+    }),
+    // Sitzungen (docs/KONZEPT-SITZUNG.md): eigene und geteilte (AssemblyAccess), Admins sehen alle.
+    prisma.assembly.findMany({
+      where: visible,
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true, title: true, createdAt: true, closedAt: true, ownerId: true, rsvpEventTitle: true, rsvpEventId: true, owner: { select: { email: true } },
+        _count: { select: { members: true, polls: true } }
       }
     })
   ])
@@ -109,6 +119,22 @@ export default async function MeineAbstimmungenPage() {
         attention: false, sortDate: live.createdAt
       }
     })),
+    ...assemblies.map(assembly => ({
+      ended: !!assembly.closedAt,
+      row: {
+        kind: 'assembly' as const, id: assembly.id, href: `/sitzung/${assembly.id}/verwalten`, title: assembly.title,
+        count: assembly._count.members, countLabel: assembly._count.members === 1 ? 'Mitglied' : 'Mitgl.',
+        status: { label: assembly.closedAt ? 'Sitzung · beendet' : 'Sitzung', tone: assembly.closedAt ? 'gray' as const : 'teal' as const },
+        badges: shared(assembly.ownerId, assembly.owner.email),
+        line: [
+          `${assembly._count.polls} Abstimmung${assembly._count.polls === 1 ? '' : 'en'}`,
+          assembly.rsvpEventId ? `Termin: ${assembly.rsvpEventTitle || 'verknüpft'}` : 'noch kein Termin verknüpft',
+          `angelegt am ${assembly.createdAt.toLocaleDateString('de-DE')}`,
+          owner(assembly.ownerId, assembly.owner.email)
+        ].filter(Boolean).join(' · '),
+        attention: false, sortDate: assembly.createdAt
+      }
+    })),
     ...surveys.map(survey => {
       const open = isSurveyOpen(survey)
       return {
@@ -141,6 +167,7 @@ export default async function MeineAbstimmungenPage() {
         subtitle={isAdmin ? 'Alle Abstimmungen, Live-Runden und Fragebögen aller Konten' : !mayCreate ? 'Für dich freigegebene Abstimmungen, Live-Runden und Fragebögen' : undefined}
         actions={mayCreate && (
           <>
+            <ButtonLink href="/sitzung/neu">+ Neue Sitzung</ButtonLink>
             <ButtonLink href="/fragebogen/neu">+ Neuer Fragebogen</ButtonLink>
             <ButtonLink href="/live/neu">+ Neue Live-Runde</ButtonLink>
             <ButtonLink href="/erstellen" variant="primary">+ Neue Abstimmung</ButtonLink>

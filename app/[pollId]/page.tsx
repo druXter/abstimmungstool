@@ -1,5 +1,5 @@
 // app/[pollId]/page.tsx
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
 import { prisma } from '../lib/prisma'
 import { castVote, forgetVoteEmail, requestVoteEmail, suggestOption, unlockPoll } from '../actions'
@@ -78,6 +78,8 @@ export default async function PollPage({
     include: { options: { where: { approved: true }, orderBy: { position: 'asc' }, select: { id: true, label: true } } }
   })
   if (!poll) notFound()
+  // Abstimmungen einer Sitzung: abgestimmt wird auf der Sitzungsseite (docs/KONZEPT-SITZUNG.md)
+  if (poll.assemblyId) redirect(`/sitzung/${poll.assemblyId}#abstimmung-${poll.id}`)
 
   // Zugangscode: Ohne ihn verrät die Seite nichts über die Abstimmung, nicht einmal den
   // Titel. `?code=` (Link mit Code von der Verwaltungsseite) füllt das Feld nur vor -

@@ -22,6 +22,8 @@ export async function loadManagedPoll(pollId: string, token: string | undefined,
     include: { owner: { select: { email: true, name: true } } }
   })
   if (!poll) notFound()
+  // Abstimmungen einer Sitzung verwaltet die Sitzung (docs/KONZEPT-SITZUNG.md)
+  if (poll.assemblyId) redirect(`/sitzung/${poll.assemblyId}/verwalten`)
 
   const user = await getCurrentUser()
   const level = await getPollLevel(poll, { user, token })

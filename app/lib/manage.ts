@@ -59,7 +59,9 @@ export async function loadManageablePoll(formData: FormData, required: PollLevel
     where: { id: pollId },
     include: { options: { include: { _count: { select: { votes: true } } } } }
   })
-  if (!poll) return null
+  // Abstimmungen einer Sitzung verwaltet nur die Sitzung (app/assembly-actions.ts) - Identität und Einstellungen
+  // bleiben dort festgelegt.
+  if (!poll || poll.assemblyId) return null
 
   const level = await getPollLevel(poll, { user: await getCurrentUser(), token })
   if (!isAtLeast(level, required)) return null

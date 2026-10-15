@@ -31,6 +31,11 @@ const IDENTITY_LABELS: Record<VoterIdentity, { title: string; text: string }> = 
     title: 'Nur mit Konto (1 Stimme pro Person)',
     // Der Text hängt davon ab, ob Teilnehmendenkonten aus dem Verbund angenommen werden - siehe accountText().
     text: ''
+  },
+  // Nie wählbar (offeredIdentities), nur der Vollständigkeit halber - Abstimmungen einer Sitzung legt die Sitzung an.
+  ASSEMBLY: {
+    title: 'Mitglieder der Sitzung',
+    text: 'Abstimmung einer Sitzung: Mitglieder über rsvp-app, je nach Sitzung nur Anwesende.'
   }
 }
 

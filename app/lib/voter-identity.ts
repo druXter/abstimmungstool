@@ -8,6 +8,8 @@ import { prisma } from './prisma'
 import { findVoterLink, secretBallotKey } from './voter-links'
 import { getConfirmedEmail, isEmailAllowed } from './email-voters'
 import { isMailConfigured } from './mail'
+import { hashToken } from './auth'
+import { assemblyMemberKey, assemblySecretKey, checkPresence, hasVoted, memberToken } from './assembly'
 
 /**
  * Die EINE Stelle, die aus einer Anfrage die Identität einer abstimmenden Person macht -
@@ -27,6 +29,8 @@ export type Voter = {
   secret?: boolean
   /** Nur Modus ACCOUNT mit Teilnehmendenkonto: Anzeigename des Anbieters ("über rsvp-app"). */
   via?: string
+  /** Nur Modus ASSEMBLY: das Mitglied der Sitzung (für AssemblyMember.votedPolls). */
+  memberId?: string
 }
 
 /**
@@ -40,10 +44,16 @@ export type Voter = {
  * - link-used:     geheime Wahl, mit diesem Link wurde schon abgestimmt, aber mit einem
  *                  inzwischen neu ausgestellten Token - die alte Stimme ist nicht mehr
  *                  auffindbar und darf nicht verdoppelt werden
+ * - assembly-missing:     Sitzung, dieser Browser ist (noch) nicht über rsvp-app beigetreten
+ * - assembly-absent:      Sitzung mit "Nur Anwesende", rsvp-app meldet das Mitglied nicht als anwesend
+ * - assembly-unreachable: Sitzung mit "Nur Anwesende", Anwesenheit nicht prüfbar (rsvp-app nicht erreichbar,
+ *                         Termin ohne QR-Einlass) - fail closed
+ * - assembly-voted:       geheime Abstimmung einer Sitzung, schon abgestimmt (von einem anderen Gerät, wie link-used)
  */
 export type VoterBlock =
   | 'rsvp-missing' | 'rsvp-declined' | 'account-missing' | 'link-missing' | 'link-used'
   | 'email-missing' | 'email-not-allowed'
+  | 'assembly-missing' | 'assembly-absent' | 'assembly-unreachable' | 'assembly-voted'
 
 export type VoterState = {
   /** Bereits bekannte Identität - für "deine Auswahl" und die Stimmabgabe. */
@@ -91,7 +101,7 @@ export type IdentityParams = { verifyToken?: string | null; linkToken?: string |
  * dort ist `voter` im Cookie-Modus null, solange noch nicht abgestimmt wurde.
  */
 export async function resolveVoter(
-  poll: { id: string; voterIdentity: VoterIdentity; secretBallot: boolean; allowedEmails: string | null },
+  poll: { id: string; voterIdentity: VoterIdentity; secretBallot: boolean; allowedEmails: string | null; assemblyId?: string | null },
   input: IdentityParams,
   { create }: { create: boolean }
 ): Promise<VoterState> {
@@ -131,6 +141,25 @@ export async function resolveVoter(
       const voter: Voter = { kind: 'LINK', key: secretBallotKey(input.linkToken), name: null, linkId: link.id, secret: true }
       const reissuedAfterVoting = link.hasVoted && (await prisma.vote.count({ where: { pollId: poll.id, voterKey: voter.key } })) === 0
       return { voter, block: reissuedAfterVoting ? 'link-used' : null }
+    }
+    case 'ASSEMBLY': {
+      // Sitzung (docs/KONZEPT-SITZUNG.md): Mitglied über das Cookie aus dem Beitritt via rsvp-app. Geheim: Schlüssel
+      // aus dem Cookie-Token (wie die geheime Wahl mit Stimmlinks), sonst das Mitglied mit Namen. Die Anwesenheit
+      // prüft beim Abstimmen (create) eine frische Abfrage bei rsvp-app.
+      const assembly = poll.assemblyId ? await prisma.assembly.findUnique({ where: { id: poll.assemblyId } }) : null
+      const token = assembly ? await memberToken(assembly.id) : null
+      const member = assembly && token ? await prisma.assemblyMember.findFirst({ where: { tokenHash: hashToken(token), assemblyId: assembly.id } }) : null
+      if (!assembly || !token || !member) return { voter: null, block: 'assembly-missing' }
+      const voter: Voter = poll.secretBallot
+        ? { kind: 'ASSEMBLY', key: assemblySecretKey(token, poll.id), name: null, secret: true, memberId: member.id }
+        : { kind: 'ASSEMBLY', key: assemblyMemberKey(member.id), name: member.name, memberId: member.id }
+      if (poll.secretBallot && hasVoted(member, poll.id) && (await prisma.vote.count({ where: { pollId: poll.id, voterKey: voter.key } })) === 0) {
+        return { voter, block: 'assembly-voted' }
+      }
+      const presence = await checkPresence(assembly, member, { fresh: create })
+      if (presence === 'absent') return { voter, block: 'assembly-absent' }
+      if (presence !== 'ok') return { voter, block: 'assembly-unreachable' }
+      return { voter, block: null }
     }
     case 'EMAIL': {
       const email = await getConfirmedEmail(poll.id)

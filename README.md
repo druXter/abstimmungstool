@@ -81,6 +81,9 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Fragebögen** - siehe "Fragebögen" unten: mehrere Fragen mit Einfach-/Mehrfachauswahl, Freitext und
   linearer Skala zum Ausfüllen ohne Konto, anonym oder einmal pro Gerät, per Link oder **eingebettet per
   iFrame** in andere Apps (z.B. Feedback in der Campus-App).
+* **Sitzungen (Versammlungen)** - siehe "Sitzungen" unten: viele kurze Abstimmungen hintereinander für
+  Mitgliederversammlung, Fachschaft oder StuPa, Mitglieder über einen Termin in rsvp-app, auf Wunsch nur
+  Anwesende (Check-in), geheim oder namentlich, Beschlussfähigkeit live und Rednerliste - jede Funktion einzeln.
 * **Komfort in der Verwaltung:** CSV-Export, QR-Code zum Abstimmungslink,
   Duplizieren als Vorlage für wiederkehrende Runden, Ergebnis-Mail beim Schließen und eine
   optionale Mindestbeteiligung (Quorum) - siehe "Verwaltung & Komfort" unten.
@@ -710,6 +713,46 @@ Wer darf, entscheidet rsvp-app (Zusage, die zählt; mit QR-Einlass nur Eingechec
 * Getestet in `tests/e2e/survey-rsvp.spec.ts` (fremde, abgelaufene, zu lange gültige, unsignierte Nachweise und
   Abstimmungs-Tokens, jeweils mit Gegenprobe).
 
+## Sitzungen (Versammlungen)
+
+Idee L7 der Suite, Konzept: [docs/KONZEPT-SITZUNG.md](docs/KONZEPT-SITZUNG.md). Eine Sitzung (`Assembly`,
+`/sitzung/neu`) bündelt schnelle Abstimmungen einer Versammlung. **Jede Funktion ist einzeln schaltbar**, es gibt
+keinen Gesamtschalter:
+
+* **Nur Anwesende stimmen ab** (`presenceRequired`, Standard an): Bei jeder Stimme fragt das Tool rsvp-app frisch,
+  wer gerade eingecheckt ist (`POST <RSVP_APP_BASE_URL>/api/assembly/roster`, signiert, Antwort ebenfalls signiert,
+  5 Sekunden zwischengespeichert für die Anzeige). Nicht erreichbar oder Termin ohne QR-Einlass = niemand darf
+  (fail closed). Mit „Kommen und Gehen“ in rsvp-app verliert, wer geht, sofort das Stimmrecht und bekommt es beim
+  erneuten Einchecken zurück. Aus: alle Mitglieder.
+* **Beschlussfähig ab N Anwesenden** (`quorum`, leer = keine Anzeige): live in Verwaltung und Mitgliederansicht,
+  beim Schließen jeder Abstimmung festgehalten (`Poll.assemblyPresent`, `assemblyQuorumMet`).
+* **Rednerliste** (`speakerList`): Wortmeldung oder GO-Antrag (kommt zuerst) vom Handy, zurückziehen; die Leitung
+  ruft auf und hakt ab. Nur wer abstimmen dürfte, kann sich melden.
+* **Neue Abstimmungen geheim** (`secretDefault`): Vorauswahl, pro Abstimmung änderbar.
+
+**Mitglieder** kommen nur über rsvp-app: Der Termin trägt den Link der Sitzung (`Event.assemblyUrl`); beim Speichern
+meldet rsvp-app die Verknüpfung (`POST /api/rsvp-assembly`, Nachricht `assembly-link`). Die erste Meldung verknüpft,
+danach nimmt die Sitzung nur noch diesen Termin an (andere: 409), bis der Owner die Verknüpfung löst (Mitglieder
+werden dabei entfernt). Gäste mit Zusage öffnen „🗳️ Zur Sitzung“ und landen mit einem 15 Minuten gültigen Nachweis
+(`assembly-access`: Pseudonym und Name, keine E-Mail) auf `/sitzung/<id>/beitreten`, das ein Cookie `assembly_<id>`
+setzt (24 Stunden, nur der Hash in `AssemblyMember.tokenHash`). Ein Beitritt von einem anderen Gerät meldet das alte ab.
+
+**Abstimmen** (`Poll.assemblyId`, Identität `ASSEMBLY`, nie in den normalen Einstellungen wählbar): „Neue Abstimmung“
+in der Verwaltung mit Titel und Art (Ja/Nein/Enthaltung oder Wahl mit eigenen Optionen, wahlweise mehrere), sofort
+offen, Ergebnis nach dem Schließen. Mitglieder stimmen direkt auf `/sitzung/<id>` ab, die Seite aktualisiert sich
+selbst (`Assembly.version`, `/api/sitzung/<id>/stand`). **Geheim:** Schlüssel aus Cookie-Token und Abstimmung (wie
+die geheime Wahl mit Stimmlinks), keine Zeitstempel; die Teilnahme steht in `AssemblyMember.votedPolls` (eine
+Änderung der Zeile, keine neue Zeile - so verrät die Reihenfolge nichts). Wer danach von einem anderen Gerät
+beitritt, kann weder ändern noch noch einmal abstimmen. **Namentlich:** Schlüssel ist das Mitglied, Name an der
+Stimme. Die normale Abstimmungsseite und -verwaltung leiten auf die Sitzung um, die Abstimmungs-Actions lehnen
+Sitzungs-Abstimmungen ab (`loadManageablePoll`).
+
+**Verwaltung** `/sitzung/<id>/verwalten`: Anwesend, beschlussfähig, beigetreten; Verknüpfung; Neue Abstimmung; offene
+mit Zahl der Stimmen und „Schließen“; Rednerliste; Ergebnisse mit **CSV der Beschlüsse** (Zeit, Abstimmung, Art,
+Option, Stimmen, Abgestimmt, Anwesend, Beschlussfähig, bei namentlichen die Namen); Einstellungen; Sitzung beenden
+(schließt offene Abstimmungen mit); gemeinsam leiten (`AssemblyAccess`); löschen. Die Übersicht „Abstimmungen“ zeigt
+Sitzungen statt ihrer einzelnen Abstimmungen.
+
 ## Ergebnis-Meldung an rsvp-app
 
 Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
@@ -842,6 +885,8 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
   Änderung). PINs von Runden, an denen sich 24 Stunden nichts getan hat, werden freigegeben.
 * **Fragebögen** samt Fragen und Antworten: 18 Monate nach dem Ende (geschlossen, sonst Schließdatum, sonst die
   letzte Änderung am Fragebogen).
+* **Sitzungen (Versammlungen)** samt Mitgliedern, Rednerliste und allen ihren Abstimmungen: 18 Monate nach dem
+  Beenden (sonst nach dem Anlegen). Konten, denen noch eine Sitzung gehört, bleiben.
 * Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
   bestätigte E-Mail-Anfragen (Modus `EMAIL`) nach Ablauf ihres Links.
 

@@ -59,7 +59,13 @@ export async function GET(request: Request) {
     },
     select: { id: true }
   })
-  const pollIds = oldPolls.map(p => p.id)
+  // Sitzungen (docs/KONZEPT-SITZUNG.md): gleiche Frist ab dem Ende (sonst ab dem Anlegen), mit allen ihren Abstimmungen.
+  // Mitglieder und Rednerliste verschwinden per Cascade mit der Sitzung.
+  const oldAssemblies = await prisma.assembly.findMany({
+    where: { OR: [{ closedAt: { lt: pollCutoff } }, { closedAt: null, createdAt: { lt: pollCutoff } }] },
+    select: { id: true, polls: { select: { id: true } } }
+  })
+  const pollIds = [...new Set([...oldPolls.map(p => p.id), ...oldAssemblies.flatMap(a => a.polls.map(p => p.id))])]
 
   await prisma.$transaction([
     prisma.vote.deleteMany({ where: { pollId: { in: pollIds } } }),
@@ -67,7 +73,8 @@ export async function GET(request: Request) {
     prisma.pollAccess.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.voterLink.deleteMany({ where: { pollId: { in: pollIds } } }),
     prisma.emailVoter.deleteMany({ where: { pollId: { in: pollIds } } }),
-    prisma.poll.deleteMany({ where: { id: { in: pollIds } } })
+    prisma.poll.deleteMany({ where: { id: { in: pollIds } } }),
+    prisma.assembly.deleteMany({ where: { id: { in: oldAssemblies.map(a => a.id) } } })
   ])
 
   // Teilnehmende, Fragen und Antworten verschwinden per Cascade mit der Runde.
@@ -99,7 +106,7 @@ export async function GET(request: Request) {
   inactivityCutoff.setFullYear(inactivityCutoff.getFullYear() - ACCOUNT_INACTIVITY_YEARS)
 
   const inactiveUsers = await prisma.user.findMany({
-    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} }, liveSessions: { none: {} }, surveys: { none: {} } },
+    where: { role: { not: 'ADMIN' }, lastLoginAt: { lt: inactivityCutoff }, ownedPolls: { none: {} }, liveSessions: { none: {} }, surveys: { none: {} }, assemblies: { none: {} } },
     select: { id: true }
   })
   // Sitzungen, Verknüpfungen und Freigaben verschwinden per Cascade mit dem Konto. Stimmen im

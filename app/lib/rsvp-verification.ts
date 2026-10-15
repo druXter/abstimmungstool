@@ -177,3 +177,35 @@ export function signPollDateMessage(payload: { typ: 'poll-date-status' | 'poll-d
   if (!secret) return null
   return sign({ ...payload, exp: Math.floor(Date.now() / 1000) + 300 }, secret)
 }
+
+/**
+ * Nachrichten mit Pflichtfeld `typ` (Sitzungen, docs/KONZEPT-SITZUNG.md): Signatur, `typ` und Ablauf prüfen und die
+ * rohe Payload zurückgeben - die Felder prüft der Aufrufer (app/lib/assembly-coupling.ts). Höchstens `maxTtlSeconds`
+ * in die Zukunft gültig, damit ein abgefangenes Exemplar nicht lange wiederverwendbar bleibt. null bei jedem Problem.
+ */
+export function verifyTypedRsvpMessage(token: string | undefined | null, typ: string, maxTtlSeconds: number): Record<string, unknown> | null {
+  const secret = process.env.RSVP_VERIFICATION_SECRET
+  if (!secret || !token) return null
+  const parts = token.split('.')
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null
+  if (!verifySignature(parts[0], parts[1], secret)) return null
+  let payload: unknown
+  try {
+    payload = JSON.parse(base64urlDecode(parts[0]).toString('utf8'))
+  } catch {
+    return null
+  }
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+  const record = payload as Record<string, unknown>
+  const now = Date.now() / 1000
+  if (record.typ !== typ) return null
+  if (typeof record.exp !== 'number' || record.exp < now || record.exp > now + maxTtlSeconds) return null
+  return record
+}
+
+/** Gegenstück: signiert eine Nachricht mit `typ` an rsvp-app, `ttlSeconds` gültig. null ohne Secret. */
+export function signTypedRsvpMessage(payload: { typ: string } & Record<string, unknown>, ttlSeconds: number): string | null {
+  const secret = process.env.RSVP_VERIFICATION_SECRET
+  if (!secret) return null
+  return sign({ ...payload, exp: Math.floor(Date.now() / 1000) + ttlSeconds }, secret)
+}
