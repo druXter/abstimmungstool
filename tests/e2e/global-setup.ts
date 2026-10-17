@@ -3,6 +3,7 @@ import { startSuiteServers } from './suite-server'
 import { startMailServer } from './mail-server'
 import { startPushServer } from './push-server'
 import { startRsvpServer } from './rsvp-server'
+import { startZeitplanServer } from './zeitplan-server'
 import { rmSync } from 'node:fs'
 import { BASE_URL } from '../../playwright.config'
 
@@ -19,13 +20,15 @@ export default async function globalSetup() {
   rmSync('.e2e/push.jsonl', { force: true })
   rmSync('.e2e/rsvp.jsonl', { force: true })
   rmSync('.e2e/rsvp-scenario.json', { force: true })
+  rmSync('.e2e/zeitplan-views.json', { force: true })
   const mailServer = await startMailServer()
   const pushServer = await startPushServer()
   const rsvpServer = await startRsvpServer()
+  const zeitplanServer = await startZeitplanServer()
   await prisma.user.deleteMany()
   await prisma.loginThrottle.deleteMany()
   await prisma.$disconnect()
   return async () => {
-    for (const server of [...suiteServers, mailServer, pushServer, rsvpServer]) await new Promise<void>(resolve => server.close(() => resolve()))
+    for (const server of [...suiteServers, mailServer, pushServer, rsvpServer, zeitplanServer]) await new Promise<void>(resolve => server.close(() => resolve()))
   }
 }

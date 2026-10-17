@@ -729,6 +729,10 @@ keinen Gesamtschalter:
 * **Rednerliste** (`speakerList`): Wortmeldung oder GO-Antrag (kommt zuerst) vom Handy, zurückziehen; die Leitung
   ruft auf und hakt ab. Nur wer abstimmen dürfte, kann sich melden.
 * **Neue Abstimmungen geheim** (`secretDefault`): Vorauswahl, pro Abstimmung änderbar.
+* **Mitglieder checken sich selbst ein und aus** (`selfCheckin`, Standard aus): Knopf „Einchecken“ bzw. „Ich gehe“ in
+  der Mitgliederansicht (`POST <RSVP_APP_BASE_URL>/api/assembly/presence`, Nachricht `assembly-presence` mit dem
+  Pseudonym des eigenen Mitglieds). Für Sitzungen ohne Einlass oder mit Online-Teilnahme - wer sich selbst eincheckt,
+  darf auch ohne Scan abstimmen.
 
 **Mitglieder** kommen nur über rsvp-app: Der Termin trägt den Link der Sitzung (`Event.assemblyUrl`); beim Speichern
 meldet rsvp-app die Verknüpfung (`POST /api/rsvp-assembly`, Nachricht `assembly-link`). Die erste Meldung verknüpft,
@@ -747,11 +751,28 @@ beitritt, kann weder ändern noch noch einmal abstimmen. **Namentlich:** Schlüs
 Stimme. Die normale Abstimmungsseite und -verwaltung leiten auf die Sitzung um, die Abstimmungs-Actions lehnen
 Sitzungs-Abstimmungen ab (`loadManageablePoll`).
 
-**Verwaltung** `/sitzung/<id>/verwalten`: Anwesend, beschlussfähig, beigetreten; Verknüpfung; Neue Abstimmung; offene
-mit Zahl der Stimmen und „Schließen“; Rednerliste; Ergebnisse mit **CSV der Beschlüsse** (Zeit, Abstimmung, Art,
-Option, Stimmen, Abgestimmt, Anwesend, Beschlussfähig, bei namentlichen die Namen); Einstellungen; Sitzung beenden
-(schließt offene Abstimmungen mit); gemeinsam leiten (`AssemblyAccess`); löschen. Die Übersicht „Abstimmungen“ zeigt
-Sitzungen statt ihrer einzelnen Abstimmungen.
+**Sitzungsleitung** `/sitzung/<id>/verwalten` - ein Tab für Leitung, Protokoll und Beisitz (diese bekommen die Sitzung
+über „Gemeinsam leiten“, `AssemblyAccess`): oben Anwesend, beschlussfähig, beigetreten. Links die **Tagesordnung**
+(Live-Steuerung des Zeitplans eingebettet, siehe unten) und die **Anwesenheit**: alle Zusagen aus rsvp-app mit Namen,
+Suche und Filter, je ein Knopf zum Ein- und Auschecken ohne Scan (`POST <RSVP_APP_BASE_URL>/api/assembly/attendance`
+bzw. `/api/assembly/presence`, signiert; die Liste wird nur angezeigt, nie gespeichert). Rechts Neue Abstimmung,
+offene mit Zahl der Stimmen und „Schließen“, Rednerliste, Ergebnisse mit **CSV der Beschlüsse** (Zeit, Abstimmung,
+Art, Option, Stimmen, Abgestimmt, Anwesend, Beschlussfähig, bei namentlichen die Namen). Darunter eingeklappt die
+Einrichtung: Verknüpfung, Zeitplan, Tafel, Einstellungen, gemeinsam leiten, Sitzung beenden (schließt offene
+Abstimmungen mit), löschen. Die Übersicht „Abstimmungen“ zeigt Sitzungen statt ihrer einzelnen Abstimmungen.
+
+**Tafel** `/sitzung/<id>/tafel?k=…` für Beamer, Gästemonitor und Gäste ohne Stimmrecht, ohne Anmeldung: Tagesordnung,
+Durchsage, Beschlussfähigkeit, laufende Abstimmungen mit der Zahl der Stimmen (kein Zwischenstand), das letzte Ergebnis
+mit Balken und - bei namentlichen Abstimmungen - Namen, frühere Ergebnisse kurz, Rednerliste. Den Link
+(`Assembly.boardKey`, zufällig) erzeugt die Sitzungsleitung unter „Einrichtung → Tafel“; neu erzeugen macht den alten
+ungültig, abschalten entfernt ihn. Kein Referer, kein Cache, kein Index.
+
+**Zeitplan** (braucht `ZEITPLAN_BASE_URL`, sonst fehlt der Abschnitt): Die Sitzung kennt den Link der Gästeansicht bzw.
+Tafel eines Ablaufs (Tagesordnung für Mitgliederansicht, Tafel und Sitzungsleitung, gelesen über den öffentlichen
+Polling-Endpunkt `<Zeitplan>/api/view/<slug>?k=…`, 5 Sekunden zwischengespeichert, nichts gespeichert) und den Link der
+Live-Steuerung (`<Zeitplan>/admin/events/<id>/live`), die in der Sitzungsleitung als iFrame erscheint. Dafür muss der
+Zeitplan die Adresse dieses Tools in seinem `LIVE_EMBED_ORIGINS` erlauben; bedienen kann sie, wer im Zeitplan
+angemeldet ist und das Event steuern darf (klappt eingebettet, weil alle Tools unter derselben Website laufen).
 
 **Protokoll im Zeitplan-Rückblick:** Gibt der verknüpfte Termin in rsvp-app die Beschlüsse frei, fragt rsvp-app sie
 beim Öffnen des Rückblicks im Zeitplan hier ab (`POST /api/assembly/decisions`, Nachricht `assembly-decisions`, Antwort

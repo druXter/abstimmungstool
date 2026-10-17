@@ -1,6 +1,6 @@
 # Konzept: Sitzungsmodus (Idee L7)
 
-Stand: 2026-10-15. Idee L7 aus `suite-kit/docs/IDEEN.md`: Mitgliederversammlung, Fachschaftsrat, StuPa. Die Bausteine
+Stand: 2026-10-17 (Abschnitte 6 bis 8 nach einer Probesitzung ergänzt). Idee L7 aus `suite-kit/docs/IDEEN.md`: Mitgliederversammlung, Fachschaftsrat, StuPa. Die Bausteine
 der Suite werden verbunden: Tagesordnung (Zeitplan), Anwesenheit über den Check-in (rsvp-app), Abstimmungen nur für
 Anwesende (hier), viele kurze Abstimmungen hintereinander, Beschlussfähigkeit live, Rednerliste, Protokoll.
 
@@ -15,6 +15,10 @@ sich frei kombinieren lassen:
 | Geheim oder namentlich | Abstimmungstool | pro Abstimmung, Vorgabe pro Sitzung |
 | Beschlussfähigkeit live | Abstimmungstool | Sitzung: „Beschlussfähig ab N Anwesenden“ (leer = keine Anzeige) |
 | Rednerliste | Abstimmungstool | Sitzung: „Rednerliste“ |
+| Selbst ein- und auschecken | Abstimmungstool (über rsvp-app) | Sitzung: „Mitglieder checken sich selbst ein und aus“ |
+| Andere ein- und auschecken ohne Scan | Abstimmungstool (über rsvp-app) | immer in der Sitzungsleitung, sobald ein Termin mit QR-Einlass verknüpft ist |
+| Tafel für Beamer und Gäste | Abstimmungstool | Sitzung: Tafel-Link erzeugen (sonst keine Tafel) |
+| Tagesordnung und Live-Steuerung | Zeitplan, eingebettet hier | Sitzung: Links aus dem Zeitplan; Zeitplan: `LIVE_EMBED_ORIGINS` |
 | Protokoll (Anwesenheit, Beschlüsse, Tagesordnung) | Zeitplan, rsvp-app, hier | je eigene Exporte; Zusammenführung im Zeitplan-Rückblick optional |
 
 ## 1. Anwesenheit (rsvp-app, umgesetzt)
@@ -67,6 +71,9 @@ rsvp-app beantwortet die Anwesenheit nur für einen Termin, der genau diese Sitz
 | `assembly-roster` | Abstimmungstool → `POST <rsvp-app>/api/assembly/roster` | `assemblyId, eventId, exp` | ≤ 5 min |
 | `assembly-roster-result` | Antwort darauf | `assemblyId, eventId, checkin, members, present: sub[], exp` | ≤ 5 min |
 | `assembly-decisions` | rsvp-app → `POST /api/assembly/decisions` | `assemblyId, eventId, exp` | ≤ 5 min |
+| `assembly-attendance` | Abstimmungstool → `POST <rsvp-app>/api/assembly/attendance` | `assemblyId, eventId, exp` | ≤ 5 min |
+| `assembly-attendance-result` | Antwort darauf | `assemblyId, eventId, checkin, trackPresence, people: [{ sub, name, present, left }], exp` | ≤ 5 min |
+| `assembly-presence` | Abstimmungstool → `POST <rsvp-app>/api/assembly/presence` | `assemblyId, eventId, sub, present, exp` (Antwort 200/404/409, unsigniert) | ≤ 5 min |
 | `assembly-decisions-result` | Antwort darauf | `assemblyId, eventId, decisions: [{ title, secret, openedAt, closedAt, voters, present, quorumMet, options: [{ label, votes, names? }] }], exp` | ≤ 5 min |
 
 ### Abstimmen
@@ -111,9 +118,67 @@ schließt ab. Nur wer abstimmen dürfte, kann sich melden (mit „Nur Anwesende�
   CSV auf. Der Zeitplan speichert davon nichts. Die Termin-id in rsvp-app lässt sich im Zeitplan auch ohne den Zugang
   „nur mit Zusage“ eintragen.
 
+## 6. Sitzungsleitung: ein Tab für Leitung, Protokoll und Beisitz
+
+Nach einer Probesitzung (2026-10-17): Wer leitet oder Protokoll führt, braucht alles an einer Stelle. Die Verwaltung
+`/sitzung/<id>/verwalten` ist deshalb als Arbeitsfläche aufgebaut:
+
+- **Links:** die Tagesordnung - mit Link der Live-Steuerung als eingebetteter Zeitplan (Abschnitt 8), sonst die
+  Tagesordnung zum Lesen - und darunter die **Anwesenheit**: alle Zusagen aus rsvp-app mit Namen, Suche und Filter
+  (alle, da, nicht da), je ein Knopf „Einchecken“, „Geht“ (mit Kommen und Gehen, sonst „Austragen“) bzw. „Kommt
+  wieder“. Kein Scan nötig. „📱 beigetreten“ zeigt, wer der Sitzung auf dem Handy beigetreten ist.
+- **Rechts:** Neue Abstimmung, offene Abstimmungen mit Schließen, Rednerliste, Ergebnisse mit CSV.
+- **Darunter eingeklappt:** die Einrichtung (rsvp-app, Zeitplan, Tafel, Einstellungen, gemeinsam leiten, beenden).
+
+Protokoll und Beisitz bekommen die Sitzung über „Gemeinsam leiten“ freigegeben (alles außer löschen und weiter
+teilen). Die Anwesenheitsliste holt die Seite bei jedem Laden frisch aus rsvp-app (`assembly-attendance`) und speichert
+sie nicht. Ein- und Auschecken geht als `assembly-presence` mit dem Zielzustand (`present: true/false`, nie
+„umschalten“, ein doppelter Klick ändert nichts) und wirkt in rsvp-app wie der Knopf in der Gästeliste: alle
+zusagenden Personen der Antwort, mit Eintrag im Verlauf „Kommen und Gehen“. rsvp-app nimmt das nur für einen Termin mit
+QR-Einlass an, der genau diese Sitzung verlinkt, und nur für Zusagen, die zählen. Ist rsvp-app nicht erreichbar,
+ändert sich nichts und die Seite sagt das.
+
+**Selbst ein- und auschecken** (Schalter, Vorgabe aus): In der Mitgliederansicht, bei Abstimmungen und Rednerliste,
+erscheint „Einchecken“ bzw. „Ich gehe (auschecken)“. Das Abstimmungstool schickt dabei immer das Pseudonym des
+eigenen Mitglieds, nie eines aus dem Formular. Achtung: Mit dem Schalter kann jede Person mit Zusage auch von
+unterwegs abstimmen, „nur Anwesende“ heißt dann „nur, wer sich eingecheckt hat“. Gedacht für Sitzungen ohne Einlass
+oder mit Online-Teilnahme.
+
+## 7. Tafel
+
+`/sitzung/<id>/tafel?k=<Schlüssel>` für Beamer, Gästemonitor und Gäste ohne Stimmrecht - ohne Anmeldung, nur mit dem
+Link. Der Schlüssel (`Assembly.boardKey`, zufällig) entsteht erst auf Klick, lässt sich neu erzeugen (der alte gilt
+sofort nicht mehr) und abschalten. Header: kein Referer, kein Cache, kein Index.
+
+Die Tafel zeigt nur, was auch Mitglieder sehen: Tagesordnung (laufender Punkt und die nächsten), Durchsage aus dem
+Zeitplan, Anwesende und Beschlussfähigkeit, laufende Abstimmungen mit der Zahl der Stimmen (kein Zwischenstand, die
+Ergebnisse sind erst nach dem Schließen öffentlich), das letzte Ergebnis groß mit Balken - bei namentlichen
+Abstimmungen mit Namen je Option -, drei frühere Ergebnisse kurz und die Rednerliste. Sie aktualisiert sich selbst
+(wie die Mitgliederansicht) und scrollt auf dem Handy.
+
+## 8. Zeitplan: Tagesordnung und Live-Steuerung
+
+Die Tagesordnung bleibt im Zeitplan-Tool; die Sitzung kennt zwei Links, beide nur auf `ZEITPLAN_BASE_URL`:
+
+- **Gästeansicht oder Tafel-Link** (`<Zeitplan>/<slug>` bzw. `…/<slug>/tafel?k=…`, gespeichert als `<slug>?k=…`): Das
+  Abstimmungstool liest daraus den öffentlichen Polling-Endpunkt des Zeitplans (`/api/view/<slug>?k=…`) - dieselben
+  Daten, die jede*r mit dem Link sieht, kein Secret, nichts gespeichert, 5 Sekunden zwischengespeichert. Nur Titel,
+  Zeitzone, Durchsage und je Punkt Titel, Status, Uhrzeit und Verspätung werden übernommen und geprüft. Ist der Zeitplan
+  nicht erreichbar, fehlt die Tagesordnung einfach.
+- **Live-Steuerung** (`<Zeitplan>/admin/events/<id>/live`): erscheint in der Sitzungsleitung als iFrame. Der Zeitplan
+  erlaubt das nur für Seiten aus seinem `LIVE_EMBED_ORIGINS` (proxy.ts dort, ohne Eintrag wie bisher nicht
+  einbettbar) und blendet im iFrame Kopf- und Fußzeile aus. Bedienen kann die Steuerung nur, wer im Zeitplan angemeldet
+  ist und das Event steuern darf - das klappt eingebettet, weil alle Tools unter derselben Website laufen (Subdomains,
+  Cookies `SameSite=Lax`). Ohne Anmeldung bleibt der Rahmen leer; der Link „Im Zeitplan öffnen“ hilft.
+
+**Bewusst nicht:** eine eigene Steuer-Schnittstelle Abstimmungstool → Zeitplan. Sie bräuchte ein weiteres Secret und
+eine zweite Rechteprüfung; der iFrame nutzt die vorhandene Live-Steuerung mit ihren Rechten unverändert.
+
 ## Datenschutz
 
-rsvp-app gibt nur Pseudonym und Namen der Zusage weiter, keine E-Mail. Das Abstimmungstool speichert Mitglieder mit
+rsvp-app gibt nur Pseudonym und Namen der Zusage weiter, keine E-Mail. Die Anwesenheitsliste mit den Namen aller
+Zusagen bekommt nur die Sitzungsleitung angezeigt; das Abstimmungstool speichert sie nicht. Die Tafel zeigt Namen nur
+bei namentlichen Abstimmungen (wie die Mitgliederansicht) und in der Rednerliste. Das Abstimmungstool speichert Mitglieder mit
 Namen, solange es die Sitzung gibt; geheime Stimmen lassen sich keinem Mitglied zuordnen. Fürs Protokoll gehen Namen
 nur bei namentlichen Abstimmungen und nur mit Freigabe des Termins an den Zeitplan, der sie nur anzeigt. Alle drei
 Datenschutzerklärungen beschreiben das.

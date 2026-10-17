@@ -62,6 +62,16 @@ const nextConfig: NextConfig = {
         source: "/api/suite/:path*",
         headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
       },
+      {
+        // Tafel einer Sitzung (/sitzung/<id>/tafel?k=...): Der Schlüssel steht in der URL - kein Referer, kein Cache,
+        // kein Index. Steht nach der allgemeinen Regel und überschreibt deren Referrer-Policy.
+        source: "/sitzung/:id/tafel",
+        headers: [
+          { key: "Referrer-Policy", value: "no-referrer" },
+          { key: "Cache-Control", value: "no-store" },
+          { key: "X-Robots-Tag", value: "noindex, nofollow" },
+        ],
+      },
     ];
   },
 };

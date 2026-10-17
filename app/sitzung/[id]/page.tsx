@@ -2,17 +2,19 @@
 import { notFound } from 'next/navigation'
 import { prisma } from '../../lib/prisma'
 import { castVote } from '../../actions'
-import { requestToSpeak, withdrawSpeak } from '../../assembly-actions'
+import { requestToSpeak, selfPresence, withdrawSpeak } from '../../assembly-actions'
 import { resolveVoter } from '../../lib/voter-identity'
 import { loadResult, loadVoterNames } from '../../lib/results'
 import { fetchRoster } from '../../lib/assembly-coupling'
 import { currentMember, quorumState, SPEAKER_KIND_LABEL, speakerOrder } from '../../lib/assembly'
+import { fetchAgenda } from '../../lib/timeline'
 import BallotInputs from '../../[pollId]/ballot-inputs'
 import SubmitButton from '../../ui/submit-button'
 import Notice from '../../ui/notice'
 import { Badge, buttonClass, Main } from '../../ui/kit'
 import LiveRefresh from '../live-refresh'
 import QuorumLine from '../quorum-line'
+import AgendaList, { currentAgendaItem } from '../agenda'
 
 export const dynamic = 'force-dynamic'
 
@@ -22,12 +24,18 @@ const BLOCK_TEXT: Record<string, string> = {
   'assembly-unreachable': 'Die Anwesenheit lässt sich gerade nicht prüfen. Bitte versuch es gleich noch einmal oder wende dich an die Sitzungsleitung.',
   'assembly-voted': 'Du hast bei dieser geheimen Abstimmung schon abgestimmt (auf einem anderen Gerät). Die Stimme lässt sich nicht mehr ändern.'
 }
+/** Mit "Selbst einchecken" zeigt der Hinweis auf den Knopf oben statt auf den Einlass. */
+const ABSENT_SELF = 'Abstimmen und Wortmeldungen nur für Anwesende - du bist gerade nicht eingecheckt. Checke dich oben unter „Anwesenheit“ ein.'
 const NOTICES: Record<string, string> = {
   ...BLOCK_TEXT,
   'beitritt-ungueltig': 'Der Link zum Beitreten ist ungültig oder abgelaufen. Öffne die Sitzung noch einmal über deinen Termin in rsvp-app.',
   'anderer-termin': 'Diese Sitzung gehört zu einem anderen Termin. Bitte wende dich an die Sitzungsleitung.',
   auswahl: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Stimme wurde nicht gespeichert.',
-  voll: 'Die Abstimmung nimmt keine weiteren Stimmen an.'
+  voll: 'Die Abstimmung nimmt keine weiteren Stimmen an.',
+  'presence-no-checkin': 'Der Termin hat keinen QR-Einlass - Einchecken geht hier nicht.',
+  'presence-unknown': 'Deine Zusage ist in rsvp-app nicht (mehr) gültig.',
+  'presence-unreachable': 'Die Anwesenheit lässt sich gerade nicht ändern. Bitte versuch es gleich noch einmal.',
+  'presence-off': 'Diese Sitzung ist mit keinem Termin verknüpft.'
 }
 
 /**
@@ -61,7 +69,10 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
     )
   }
 
-  const roster = await fetchRoster(assembly)
+  const [roster, agenda] = await Promise.all([fetchRoster(assembly), fetchAgenda(assembly.timelineUrl)])
+  const current = currentAgendaItem(agenda)
+  const canSelfCheckin = assembly.selfCheckin && !assembly.closedAt && roster.state === 'ok' && roster.checkin
+  const blockText = (block: string) => (block === 'assembly-absent' && canSelfCheckin ? ABSENT_SELF : BLOCK_TEXT[block])
   const quorum = quorumState(assembly, roster)
   const present = roster.state === 'ok' && roster.present.has(member.sub)
   const open = assembly.polls.filter(p => !p.closedAt)
@@ -90,11 +101,29 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
           )}
         </p>
         <QuorumLine state={quorum} />
+        {current && (
+          <p className="text-sm text-gray-700 dark:text-gray-300" data-testid="agenda-current">
+            {current.now ? 'Jetzt: ' : 'Als Nächstes: '}<strong>{current.title}</strong>
+          </p>
+        )}
       </div>
 
       <div className="mt-6 space-y-6">
-        {notice && !abstimmung && <Notice tone="warning">{notice}</Notice>}
+        {notice && !abstimmung && <Notice tone="warning">{hinweis === 'assembly-absent' && canSelfCheckin ? ABSENT_SELF : notice}</Notice>}
         {assembly.closedAt && <Notice>Die Sitzung ist beendet.</Notice>}
+
+        {canSelfCheckin && (
+          <section id="anwesenheit" className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800" aria-label="Anwesenheit">
+            <p className="text-sm">
+              {present ? <>Du bist <strong className="text-green-700 dark:text-green-400">eingecheckt</strong>.</> : <>Du bist <strong>nicht eingecheckt</strong>.</>}
+            </p>
+            <form action={selfPresence}>
+              <input type="hidden" name="assemblyId" value={assembly.id} />
+              <input type="hidden" name="present" value={present ? '0' : '1'} />
+              <button type="submit" className={buttonClass(present ? 'secondary' : 'primary', 'sm')}>{present ? 'Ich gehe (auschecken)' : 'Einchecken'}</button>
+            </form>
+          </section>
+        )}
 
         {ballots.length > 0 && (
           <section className="space-y-4" aria-labelledby="offen">
@@ -111,7 +140,7 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
                   {block === 'assembly-voted'
                     ? <p className="mt-3 text-sm text-green-700 dark:text-green-400">✓ Du hast abgestimmt (auf einem anderen Gerät).</p>
                     : block
-                      ? <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{voted ? '✓ Deine Stimme ist abgegeben. ' : ''}{BLOCK_TEXT[block] ?? 'Du kannst hier gerade nicht abstimmen.'}</p>
+                      ? <p className="mt-3 text-sm text-amber-700 dark:text-amber-300">{voted ? '✓ Deine Stimme ist abgegeben. ' : ''}{blockText(block) ?? 'Du kannst hier gerade nicht abstimmen.'}</p>
                       : (
                         <form action={castVote} className="mt-3 space-y-3">
                           <input type="hidden" name="pollId" value={poll.id} />
@@ -165,6 +194,13 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
               </div>
             )}
           </section>
+        )}
+
+        {agenda && (
+          <details className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-800" open>
+            <summary className="cursor-pointer font-semibold text-gray-900 dark:text-gray-100">Tagesordnung</summary>
+            <div className="mt-3"><AgendaList agenda={agenda} /></div>
+          </details>
         )}
 
         {results.length > 0 && (

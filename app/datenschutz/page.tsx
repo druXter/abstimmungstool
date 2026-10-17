@@ -188,6 +188,21 @@ export default function DatenschutzPage() {
             (Art. 6 Abs. 1 lit. b DSGVO bzw. die Satzung, Art. 6 Abs. 1 lit. f DSGVO).
           </p>
           <p className="mt-2">
+            <strong>Anwesenheit in der Sitzung:</strong> Die Sitzungsleitung (und wen sie dafür freigibt, etwa das
+            Protokoll) sieht eine Anwesenheitsliste aus rsvp-app mit den <strong>Namen aller Zusagen</strong> und ob die
+            Person gerade da ist, und kann dort ein- und auschecken. Ist es für die Sitzung eingeschaltet, kannst du
+            dich auch selbst ein- und auschecken. Dabei schicken wir rsvp-app nur die Kennung und ob du kommst oder
+            gehst; rsvp-app hält das wie beim Einlass-Scan mit Uhrzeit fest. Die Liste mit den Namen speichern wir
+            nicht, sie wird bei jedem Aufruf frisch abgefragt.
+          </p>
+          <p className="mt-2">
+            <strong>Tafel und Tagesordnung:</strong> Für Beamer und Gäste ohne Stimmrecht kann die Sitzungsleitung einen
+            Link zu einer Tafel erzeugen. Sie zeigt ohne Anmeldung, was auch die Mitglieder sehen: Tagesordnung,
+            Anwesende und Beschlussfähigkeit, laufende Abstimmungen (nur die Zahl der Stimmen), Ergebnisse nach dem
+            Schließen - bei namentlichen Abstimmungen mit Namen - und die Rednerliste mit Namen. Die Tagesordnung holen
+            wir aus der Zeitplan-Anwendung über deren öffentliche Ansicht; dabei werden keine Daten über dich übermittelt.
+          </p>
+          <p className="mt-2">
             Geben die Veranstalter*innen es beim Termin in rsvp-app frei, übermitteln wir rsvp-app auf Anfrage die
             Ergebnisse der geschlossenen Abstimmungen der Sitzung für das Protokoll im Rückblick der Zeitplan-Anwendung
             (Titel, Zeitpunkt, Stimmen je Option, Zahl der Abstimmenden und Anwesenden, beschlussfähig) - bei

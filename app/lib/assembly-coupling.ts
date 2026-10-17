@@ -1,9 +1,10 @@
 // app/lib/assembly-coupling.ts
 //
-// Kopplung der Sitzungen mit rsvp-app (docs/KONZEPT-SITZUNG.md, Gegenstück dort: app/lib/assembly.ts). Drei
-// Nachrichten: Beitritt (`assembly-access`, Link aus rsvp-app), Verknüpfung (`assembly-link`, beim Speichern des
-// Links in rsvp-app) und die Anwesenheit (`assembly-roster`, hier angefragt, signiert beantwortet). Gleiches
-// Format und Secret wie die übrige Kopplung (app/lib/rsvp-verification.ts).
+// Kopplung der Sitzungen mit rsvp-app (docs/KONZEPT-SITZUNG.md, Gegenstück dort: app/lib/assembly.ts). Nachrichten:
+// Beitritt (`assembly-access`, Link aus rsvp-app), Verknüpfung (`assembly-link`, beim Speichern des Links in
+// rsvp-app), die Anwesenheit (`assembly-roster`, hier angefragt, signiert beantwortet), die Anwesenheitsliste mit
+// Namen für die Sitzungsleitung (`assembly-attendance`) und Ein-/Auschecken (`assembly-presence`). Gleiches Format und
+// Secret wie die übrige Kopplung (app/lib/rsvp-verification.ts).
 import { rsvpAppBaseUrl } from './rsvp-date'
 import { signTypedRsvpMessage, verifyTypedRsvpMessage } from './rsvp-verification'
 
@@ -78,6 +79,66 @@ function parseRoster(token: string, assemblyId: string, eventId: string): Roster
   if (typeof checkin !== 'boolean' || typeof members !== 'number' || !Number.isInteger(members) || members < 0) return { state: 'unreachable' }
   if (!Array.isArray(present) || present.length > 10_000 || !present.every(s => typeof s === 'string' && SUBJECT.test(s))) return { state: 'unreachable' }
   return { state: 'ok', checkin, members, present: new Set(present as string[]) }
+}
+
+async function postToRsvp(assembly: { id: string; rsvpEventId: string | null }, path: string, message: { typ: string } & Record<string, unknown>): Promise<Response | null | 'off'> {
+  const base = rsvpAppBaseUrl()
+  if (!assembly.rsvpEventId || !base) return 'off'
+  const body = signTypedRsvpMessage({ ...message, assemblyId: assembly.id, eventId: assembly.rsvpEventId }, 5 * 60)
+  if (!body) return 'off'
+  try {
+    return await fetch(`${base}${path}`, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, signal: AbortSignal.timeout(4000), cache: 'no-store'
+    })
+  } catch {
+    return null
+  }
+}
+
+export type AttendancePerson = { sub: string; name: string; present: boolean; left: boolean }
+export type Attendance =
+  | { state: 'ok'; checkin: boolean; trackPresence: boolean; people: AttendancePerson[] }
+  | { state: 'off' }
+  | { state: 'unreachable' }
+
+/**
+ * Anwesenheitsliste für die Sitzungsleitung (`assembly-attendance`, POST <rsvp-app>/api/assembly/attendance): alle
+ * Zusagen mit Namen und ob sie gerade da sind - zum Ein- und Auschecken ohne Scan. Nie zwischengespeichert, nur
+ * angezeigt, nie gespeichert.
+ */
+export async function fetchAttendance(assembly: { id: string; rsvpEventId: string | null }): Promise<Attendance> {
+  const response = await postToRsvp(assembly, '/api/assembly/attendance', { typ: 'assembly-attendance' })
+  if (response === 'off') return { state: 'off' }
+  if (!response?.ok) return { state: 'unreachable' }
+  const payload = verifyTypedRsvpMessage(await response.text(), 'assembly-attendance-result', 5 * 60)
+  if (!payload || payload.assemblyId !== assembly.id || payload.eventId !== assembly.rsvpEventId) return { state: 'unreachable' }
+  const { checkin, trackPresence, people } = payload
+  if (typeof checkin !== 'boolean' || typeof trackPresence !== 'boolean' || !Array.isArray(people) || people.length > 10_000) return { state: 'unreachable' }
+  const valid = people.every(p => p && typeof p === 'object' && typeof p.sub === 'string' && SUBJECT.test(p.sub)
+    && typeof p.name === 'string' && typeof p.present === 'boolean' && typeof p.left === 'boolean')
+  if (!valid) return { state: 'unreachable' }
+  return {
+    state: 'ok', checkin, trackPresence,
+    people: (people as AttendancePerson[]).map(p => ({ sub: p.sub, name: p.name.trim().slice(0, MAX_MEMBER_NAME) || 'Ohne Namen', present: p.present, left: p.left }))
+  }
+}
+
+export type PresenceChange = 'ok' | 'off' | 'no-checkin' | 'unknown' | 'unreachable'
+
+/**
+ * Checkt ein Mitglied in rsvp-app ein oder aus (`assembly-presence`, POST <rsvp-app>/api/assembly/presence) - für die
+ * Sitzungsleitung oder, wenn die Sitzung es erlaubt, das Mitglied selbst. `present` ist der Zielzustand. Danach kein
+ * Zwischenspeicher mehr: Die nächste Prüfung fragt frisch.
+ */
+export async function changePresence(assembly: { id: string; rsvpEventId: string | null }, sub: string, present: boolean): Promise<PresenceChange> {
+  if (!SUBJECT.test(sub)) return 'unknown'
+  const response = await postToRsvp(assembly, '/api/assembly/presence', { typ: 'assembly-presence', sub, present })
+  forgetRoster(assembly.id)
+  if (response === 'off') return 'off'
+  if (!response) return 'unreachable'
+  if (response.status === 409) return 'no-checkin'
+  if (response.status === 404) return 'unknown'
+  return response.ok ? 'ok' : 'unreachable'
 }
 
 /** Nach dem Lösen oder Ändern der Verknüpfung: nichts Veraltetes mehr ausliefern. */

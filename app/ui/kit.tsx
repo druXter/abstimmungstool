@@ -124,9 +124,10 @@ export function EmptyState({ children }: { children: ReactNode }) {
   return <p className="rounded-xl border border-dashed border-gray-300 p-6 text-center text-sm text-gray-500 dark:border-gray-600 dark:text-gray-400">{children}</p>
 }
 
-/** Inhaltsbereich einer Seite: "wide" für Listen und Übersichten, "narrow" für Formulare. */
-export function Main({ children, width = 'wide' }: { children: ReactNode; width?: 'wide' | 'narrow' }) {
-  return <main className={`mx-auto w-full px-4 py-6 sm:py-8 ${width === 'narrow' ? 'max-w-3xl' : 'max-w-5xl'} text-gray-900 dark:text-gray-100`}>{children}</main>
+/** Inhaltsbereich einer Seite: "wide" für Listen und Übersichten, "narrow" für Formulare, "full" für Arbeitsflächen (Sitzungsleitung). */
+export function Main({ children, width = 'wide' }: { children: ReactNode; width?: 'wide' | 'narrow' | 'full' }) {
+  const max = width === 'narrow' ? 'max-w-3xl' : width === 'full' ? 'max-w-7xl' : 'max-w-5xl'
+  return <main className={`mx-auto w-full px-4 py-6 sm:py-8 ${max} text-gray-900 dark:text-gray-100`}>{children}</main>
 }
 
 /** "Mo., 12.10.2026, 19:00" in der Zeitzone des Servers (TZ, wie Schließdatum und Termine). */

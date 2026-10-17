@@ -1,17 +1,19 @@
 'use server'
 
 // Sitzungen (Idee L7, docs/KONZEPT-SITZUNG.md): anlegen, Einstellungen, schnelle Abstimmungen, Rednerliste,
-// Verknüpfung mit rsvp-app lösen, teilen, löschen. Jede verwaltende Action prüft die Rechte über getAssemblyLevel.
+// Anwesenheit (Sitzungsleitung und selbst), Zeitplan und Tafel, Verknüpfung mit rsvp-app lösen, teilen, löschen. Jede
+// verwaltende Action prüft die Rechte über getAssemblyLevel.
 import { redirect } from 'next/navigation'
 import { revalidatePath } from 'next/cache'
 import { prisma } from './lib/prisma'
-import { getCurrentUser, requireUser } from './lib/auth'
+import { generateToken, getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
-import { fetchRoster, forgetRoster } from './lib/assembly-coupling'
+import { changePresence, fetchRoster, forgetRoster } from './lib/assembly-coupling'
 import {
   bumpAssembly, checkPresence, currentMember, getAssemblyLevel, MAX_ASSEMBLY_TITLE, MAX_QUORUM, quorumState, YES_NO_ABSTAIN, type AssemblyLevel
 } from './lib/assembly'
+import { parseTimelineLiveUrl, parseTimelineUrl } from './lib/timeline'
 
 const MAX_POLL_TITLE = 200
 const MAX_OPTIONS = 25
@@ -38,7 +40,8 @@ function readSettings(formData: FormData) {
     presenceRequired: formData.get('presenceRequired') === 'on',
     quorum: readQuorum(formData),
     speakerList: formData.get('speakerList') === 'on',
-    secretDefault: formData.get('secretDefault') === 'on'
+    secretDefault: formData.get('secretDefault') === 'on',
+    selfCheckin: formData.get('selfCheckin') === 'on'
   }
 }
 
@@ -251,3 +254,61 @@ export async function manageSpeaker(formData: FormData) {
   revalidatePath(`/sitzung/${assembly.id}`)
   redirect(`${manageUrl(assembly.id)}#rednerliste`)
 }
+
+// --- Anwesenheit -----------------------------------------------------------------------------------------------------
+
+const SUB_LENGTH = 128
+
+/**
+ * Sitzungsleitung checkt jemanden ein oder aus, ohne Scan (über rsvp-app, `assembly-presence`). `present` = '1' oder
+ * '0' ist der Zielzustand. Erfolg ohne Weiterleitung (die Liste bleibt, wie sie ist, samt Suche); bei Fehlern eine
+ * Meldung über der Anwesenheit.
+ */
+export async function chairPresence(formData: FormData) {
+  const assembly = await manageableAssembly(formString(formData, 'assemblyId', 50), 'moderator')
+  if (!assembly) return
+  const result = await changePresence(assembly, formString(formData, 'sub', SUB_LENGTH), formString(formData, 'present', 1) === '1')
+  if (result !== 'ok') redirect(manageUrl(assembly.id, `anwesenheit=${result}#anwesenheit`))
+  await bumpAssembly(assembly.id)
+  revalidatePath(`/sitzung/${assembly.id}`)
+  revalidatePath(manageUrl(assembly.id))
+}
+
+/** Mitglied checkt sich selbst ein oder aus - nur, wenn die Sitzung das erlaubt und sie läuft. */
+export async function selfPresence(formData: FormData) {
+  const assembly = await prisma.assembly.findUnique({ where: { id: formString(formData, 'assemblyId', 50) } })
+  const member = assembly ? await currentMember(assembly.id) : null
+  if (!assembly || !member || !assembly.selfCheckin || assembly.closedAt) return
+  const result = await changePresence(assembly, member.sub, formString(formData, 'present', 1) === '1')
+  await bumpAssembly(assembly.id)
+  revalidatePath(`/sitzung/${assembly.id}`)
+  redirect(`/sitzung/${assembly.id}${result === 'ok' ? '' : `?hinweis=presence-${result}`}#anwesenheit`)
+}
+
+// --- Zeitplan und Tafel ----------------------------------------------------------------------------------------------
+
+/** Links aus dem Zeitplan: Gästeansicht bzw. Tafel (Tagesordnung) und Live-Steuerung (eingebettet). Leer = keiner. */
+export async function updateAssemblyTimeline(formData: FormData) {
+  const assembly = await manageableAssembly(formString(formData, 'assemblyId', 50), 'moderator')
+  if (!assembly) return
+  const timeline = parseTimelineUrl(formString(formData, 'timelineUrl', 1000))
+  const live = parseTimelineLiveUrl(formString(formData, 'timelineLiveUrl', 1000))
+  const error = 'error' in timeline ? timeline.error : 'error' in live ? live.error : null
+  if (error) redirect(manageUrl(assembly.id, `fehler=${error}#zeitplan`))
+  await prisma.assembly.update({
+    where: { id: assembly.id },
+    data: { timelineUrl: 'value' in timeline ? timeline.value : null, timelineLiveUrl: 'value' in live ? live.value : null, version: { increment: 1 } }
+  })
+  revalidatePath(`/sitzung/${assembly.id}`)
+  redirect(manageUrl(assembly.id, 'zeitplan=1#zeitplan'))
+}
+
+/** Tafel-Link erzeugen, neu erzeugen (der alte gilt sofort nicht mehr) oder abschalten. */
+export async function updateAssemblyBoard(formData: FormData) {
+  const assembly = await manageableAssembly(formString(formData, 'assemblyId', 50), 'moderator')
+  if (!assembly) return
+  const off = formString(formData, 'intent', 10) === 'off'
+  await prisma.assembly.update({ where: { id: assembly.id }, data: { boardKey: off ? null : generateToken() } })
+  redirect(manageUrl(assembly.id, `${off ? 'tafelAus' : 'tafel'}=1#tafel`))
+}
+

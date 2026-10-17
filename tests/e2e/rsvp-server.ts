@@ -17,7 +17,23 @@ const ROSTERS = join('.e2e', 'rsvp-rosters.json')
 // Gleiches Secret wie playwright.config.ts (TEST_RSVP_SECRET) - hier nicht importiert, weil die Config diese Datei lädt.
 const SECRET = 'nur-fuer-e2e-tests-kein-echtes-secret'
 
-export type RosterScenario = { status?: number; checkin?: boolean; members?: number; present: string[]; badSignature?: boolean }
+export type RosterScenario = {
+  status?: number; checkin?: boolean; members?: number; present: string[]; badSignature?: boolean
+  /** Alle Zusagen mit Namen (POST /api/assembly/attendance) - wer in `present` steht, ist da, wer in `left`, gegangen. */
+  people?: { sub: string; name: string }[]
+  left?: string[]
+  trackPresence?: boolean
+  /** HTTP-Status für POST /api/assembly/presence (z.B. 503 = nicht erreichbar, 409 = kein QR-Einlass). */
+  presenceStatus?: number
+}
+
+function readRosters(): Record<string, RosterScenario> {
+  return existsSync(ROSTERS) ? JSON.parse(readFileSync(ROSTERS, 'utf8')) : {}
+}
+
+export function getRoster(assemblyId: string): RosterScenario | undefined {
+  return readRosters()[assemblyId]
+}
 
 /** Was rsvp-app für diese Sitzung als anwesend meldet (status: z.B. 503 = nicht erreichbar). */
 export function setRoster(assemblyId: string, roster: RosterScenario) {
@@ -30,6 +46,59 @@ export function setRoster(assemblyId: string, roster: RosterScenario) {
 function signed(payload: object, secret = SECRET): string {
   const part = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `${part}.${createHmac('sha256', secret).update(part).digest('base64url')}`
+}
+
+function decode(body: string): Record<string, unknown> {
+  return JSON.parse(Buffer.from(body.split('.')[0], 'base64url').toString('utf8'))
+}
+
+/** Anwesenheitsliste mit Namen für die Sitzungsleitung. */
+function attendanceResponse(body: string): { status: number; body: string } {
+  const request = decode(body) as { typ: string; assemblyId: string; eventId: string }
+  const roster = readRosters()[request.assemblyId]
+  if (request.typ !== 'assembly-attendance') return { status: 401, body: 'invalid' }
+  if (!roster) return { status: 404, body: 'not linked' }
+  if (roster.status && roster.status !== 200) return { status: roster.status, body: '' }
+  return {
+    status: 200,
+    body: signed({
+      typ: 'assembly-attendance-result', assemblyId: request.assemblyId, eventId: request.eventId, checkin: roster.checkin ?? true,
+      trackPresence: roster.trackPresence ?? true, exp: Math.floor(Date.now() / 1000) + 300,
+      people: (roster.people ?? []).map(p => ({ ...p, present: roster.present.includes(p.sub), left: (roster.left ?? []).includes(p.sub) }))
+    }, roster.badSignature ? 'falsch' : SECRET)
+  }
+}
+
+/** Ein- und Auschecken: ändert, was das Doppel danach als anwesend meldet (wie rsvp-app). */
+function presenceResponse(body: string): { status: number; body: string } {
+  const request = decode(body) as { typ: string; assemblyId: string; sub: string; present: boolean }
+  const all = readRosters()
+  const roster = all[request.assemblyId]
+  if (request.typ !== 'assembly-presence') return { status: 401, body: 'invalid' }
+  if (!roster) return { status: 404, body: 'not linked' }
+  if (roster.presenceStatus && roster.presenceStatus !== 200) return { status: roster.presenceStatus, body: '' }
+  if (roster.people && !roster.people.some(p => p.sub === request.sub)) return { status: 404, body: 'unknown member' }
+  const present = new Set(roster.present)
+  const left = new Set(roster.left ?? [])
+  if (request.present) {
+    present.add(request.sub)
+    left.delete(request.sub)
+  } else if (present.delete(request.sub)) {
+    left.add(request.sub)
+  }
+  all[request.assemblyId] = { ...roster, present: [...present], left: [...left] }
+  writeFileSync(ROSTERS, JSON.stringify(all))
+  return { status: 200, body: '{"ok":true}' }
+}
+
+/** Mitgeschriebene Ein-/Auscheck-Meldungen einer Sitzung (Payload dekodiert). */
+export function presenceMessages(assemblyId: string): Record<string, unknown>[] {
+  if (!existsSync(LOG)) return []
+  return readFileSync(LOG, 'utf8').trim().split('\n').filter(Boolean)
+    .map(line => JSON.parse(line) as { path: string; body: string })
+    .filter(entry => entry.path === '/api/assembly/presence')
+    .map(entry => decode(entry.body))
+    .filter(payload => payload.assemblyId === assemblyId)
 }
 
 function rosterResponse(body: string): { status: number; body: string } {
@@ -69,8 +138,9 @@ export function startRsvpServer(): Promise<Server> {
     request.on('end', () => {
       const body = Buffer.concat(chunks).toString('utf8')
       appendFileSync(LOG, `${JSON.stringify({ path: request.url, body })}\n`)
-      if (request.url === '/api/assembly/roster') {
-        const answer = rosterResponse(body)
+      const handler = ({ '/api/assembly/roster': rosterResponse, '/api/assembly/attendance': attendanceResponse, '/api/assembly/presence': presenceResponse } as Record<string, (b: string) => { status: number; body: string }>)[request.url ?? '']
+      if (handler) {
+        const answer = handler(body)
         return response.writeHead(answer.status, { 'Content-Type': 'text/plain' }).end(answer.body)
       }
       if (request.url !== '/api/poll-date') return response.writeHead(200).end('{"ok":true}')

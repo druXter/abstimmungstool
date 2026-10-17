@@ -2,7 +2,8 @@ import { createHmac } from 'node:crypto'
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { BASE_URL, createAccount, login, prisma, unique, uniqueIp } from './helpers'
 import { TEST_RSVP_SECRET } from '../../playwright.config'
-import { setRoster } from './rsvp-server'
+import { getRoster, presenceMessages, setRoster } from './rsvp-server'
+import { setAgenda, ZEITPLAN_ORIGIN } from './zeitplan-server'
 
 // Sitzungen (Idee L7, docs/KONZEPT-SITZUNG.md): Verknüpfung mit rsvp-app, Beitritt mit Nachweis, schnelle Abstimmungen
 // nur für Anwesende (geheim und namentlich), Beschlussfähigkeit, Rednerliste, Rechte. rsvp-app spielen die Tests:
@@ -17,7 +18,7 @@ const subject = () => createHmac('sha256', 'x').update(unique()).digest('base64u
 const access = (assemblyId: string, eventId: string, sub: string, name: string, extra: object = {}) =>
   sign({ typ: 'assembly-access', assemblyId, eventId, sub, name, exp: exp(), ...extra })
 
-async function createAssembly(ownerId: string, data: Partial<{ presenceRequired: boolean; quorum: number | null; speakerList: boolean; secretDefault: boolean; rsvpEventId: string | null }> = {}) {
+async function createAssembly(ownerId: string, data: Partial<{ presenceRequired: boolean; quorum: number | null; speakerList: boolean; secretDefault: boolean; rsvpEventId: string | null; selfCheckin: boolean; boardKey: string | null; timelineUrl: string | null }> = {}) {
   return prisma.assembly.create({ data: { title: `Sitzung ${unique()}`, ownerId, rsvpEventId: `ev${unique()}`, ...data } })
 }
 
@@ -120,6 +121,7 @@ test('Verknüpfung: erste Meldung aus rsvp-app gewinnt, andere Termine und falsc
   await login(page, owner.email)
   await page.goto(`/sitzung/${assembly.id}/verwalten`)
   await expect(page.getByTestId('assembly-link')).toContainText('MV 2026')
+  await page.getByText('Verknüpfung mit rsvp-app').click()
   page.once('dialog', dialog => dialog.accept())
   await page.getByRole('button', { name: 'Verknüpfung lösen' }).click()
   await expect(page.getByText('Die Verknüpfung ist gelöst')).toBeVisible()
@@ -380,6 +382,7 @@ test('Rechte: nur Owner, Admins und Freigaben leiten; Mitglieder und fremde Kont
 
   // Freigegeben: darf starten
   await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+  await admin.getByText('Gemeinsam leiten', { exact: true }).click()
   await admin.getByPlaceholder('E-Mail-Adresse eines Kontos').fill(strangerAccount.email)
   await admin.getByRole('button', { name: 'Teilen' }).click()
   await expect(admin.getByText('Freigegeben.')).toBeVisible()
@@ -388,6 +391,233 @@ test('Rechte: nur Owner, Admins und Freigaben leiten; Mitglieder und fremde Kont
   await stranger.goto(`/sitzung/${assembly.id}/verwalten`)
   await expect(stranger.getByRole('button', { name: 'Verknüpfung lösen' })).toHaveCount(0)
   await expect(stranger.getByRole('button', { name: 'Löschen', exact: true }).last()).toBeVisible()
-  await expect(stranger.getByRole('heading', { name: 'Gemeinsam leiten' })).toHaveCount(0)
+  await expect(stranger.getByText('Gemeinsam leiten', { exact: true })).toHaveCount(0)
+})
+
+// --- Sitzungsleitung, Selbst-Check-in, Tafel, Zeitplan (docs/KONZEPT-SITZUNG.md Abschnitte 6 und 7) -------------------
+
+test('Sitzungsleitung checkt andere ohne Scan ein und aus - Suche, Filter, Meldung bei Fehlern, nur mit Rechten', async ({ browser }) => {
+  const owner = await createAccount()
+  const assembly = await createAssembly(owner.id, { quorum: 2 })
+  const [anna, ben, cleo] = [subject(), subject(), subject()]
+  setRoster(assembly.id, { present: [anna], people: [{ sub: anna, name: 'Anna Abgeordnete' }, { sub: ben, name: 'Ben Beisitz' }, { sub: cleo, name: 'Cleo Chair' }] })
+  const benPhone = await member(browser, assembly, 'Ben Beisitz', ben)
+  const admin = await newPage(browser)
+  await login(admin, owner.email)
+  await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+
+  const list = admin.getByTestId('attendance')
+  await expect(list.locator('li')).toHaveCount(3)
+  await expect(list.locator('li').filter({ hasText: 'Ben Beisitz' })).toContainText('nicht da · 📱 beigetreten')
+  await expect(list.locator('li').filter({ hasText: 'Ben Beisitz' })).toHaveAttribute('data-present', 'false')
+  await expect(admin.getByTestId('stat-quorum')).toContainText('nein')
+
+  // Suche und Filter
+  await admin.getByPlaceholder('Name suchen').fill('cle')
+  await expect(list.locator('li')).toHaveCount(1)
+  await admin.getByPlaceholder('Name suchen').fill('')
+  await admin.getByRole('button', { name: 'Da (1)' }).click()
+  await expect(list.locator('li')).toHaveCount(1)
+  await admin.getByRole('button', { name: 'Alle (3)' }).click()
+
+  await admin.getByRole('button', { name: 'Ben Beisitz einchecken' }).click()
+  await expect(list.locator('li').filter({ hasText: 'Ben Beisitz' })).toHaveAttribute('data-present', 'true')
+  await expect(admin.getByTestId('stat-quorum')).toContainText('ja')
+  expect(presenceMessages(assembly.id).at(-1)).toMatchObject({ typ: 'assembly-presence', assemblyId: assembly.id, eventId: assembly.rsvpEventId, sub: ben, present: true })
+  await expect(benPhone.page.getByTestId('member-presence')).toHaveText('anwesend')
+
+  await admin.getByRole('button', { name: 'Anna Abgeordnete auschecken (geht)' }).click()
+  await expect(list.locator('li').filter({ hasText: 'Anna Abgeordnete' })).toContainText('gegangen')
+  await expect(admin.getByRole('button', { name: 'Anna Abgeordnete einchecken' })).toHaveText('Kommt wieder')
+  expect(getRoster(assembly.id)!.present).toEqual([ben])
+
+  // rsvp-app lehnt ab bzw. ist nicht erreichbar: Meldung, nichts geändert
+  setRoster(assembly.id, { ...getRoster(assembly.id)!, presenceStatus: 503 })
+  await admin.getByRole('button', { name: 'Cleo Chair einchecken' }).click()
+  await expect(admin.getByText('rsvp-app ist gerade nicht erreichbar - nichts geändert.')).toBeVisible()
+  expect(getRoster(assembly.id)!.present).toEqual([ben])
+
+  // Fremdes Konto und Mitglied können das Formular nicht nachspielen
+  setRoster(assembly.id, { ...getRoster(assembly.id)!, presenceStatus: undefined })
+  const fields = { ...(await formFields(admin, 'form:has(input[name="sub"][value="' + cleo + '"])')) }
+  const stranger = await newPage(browser)
+  await login(stranger, (await createAccount()).email)
+  const before = presenceMessages(assembly.id).length
+  await postAs(stranger, `/sitzung/${assembly.id}/verwalten`, fields)
+  await postAs(benPhone.page, `/sitzung/${assembly.id}/verwalten`, fields)
+  expect(presenceMessages(assembly.id)).toHaveLength(before)
+  await postAs(admin, `/sitzung/${assembly.id}/verwalten`, fields)
+  expect(getRoster(assembly.id)!.present).toEqual([ben, cleo])
+})
+
+test('Selbst ein- und auschecken in der Mitgliederansicht - nur mit Schalter, danach abstimmen', async ({ browser }) => {
+  const owner = await createAccount()
+  const assembly = await createAssembly(owner.id, { speakerList: true })
+  const dora = subject()
+  setRoster(assembly.id, { present: [], people: [{ sub: dora, name: 'Dora' }] })
+  const phone = await member(browser, assembly, 'Dora', dora)
+  // Ohne Schalter kein Knopf - und ein nachgespieltes Formular wirkt nicht
+  await expect(phone.page.getByRole('button', { name: 'Einchecken' })).toHaveCount(0)
+
+  await prisma.assembly.update({ where: { id: assembly.id }, data: { selfCheckin: true } })
+  await phone.page.reload()
+  const fields = await formFields(phone.page, 'form:has(input[name="present"])')
+  await prisma.assembly.update({ where: { id: assembly.id }, data: { selfCheckin: false } })
+  await postAs(phone.page, `/sitzung/${assembly.id}`, fields)
+  expect(presenceMessages(assembly.id)).toHaveLength(0)
+  await prisma.assembly.update({ where: { id: assembly.id }, data: { selfCheckin: true } })
+
+  const admin = await newPage(browser)
+  await login(admin, owner.email)
+  await startPoll(admin, assembly.id, 'Antrag Selbst')
+  await phone.page.reload()
+  await expect(ballot(phone.page, 'Antrag Selbst')).toContainText('Checke dich oben unter „Anwesenheit“ ein.')
+
+  await phone.page.getByRole('button', { name: 'Einchecken' }).click()
+  await expect(phone.page.getByTestId('member-presence')).toHaveText('anwesend')
+  expect(presenceMessages(assembly.id).at(-1)).toMatchObject({ sub: dora, present: true })
+  await ballot(phone.page, 'Antrag Selbst').getByLabel('Ja').check()
+  await ballot(phone.page, 'Antrag Selbst').getByRole('button', { name: 'Abstimmen' }).click()
+  await expect(ballot(phone.page, 'Antrag Selbst')).toContainText('Deine Stimme ist abgegeben.')
+
+  await phone.page.getByRole('button', { name: 'Ich gehe (auschecken)' }).click()
+  await expect(phone.page.getByTestId('member-presence')).toHaveText('nicht eingecheckt')
+  expect(presenceMessages(assembly.id).at(-1)).toMatchObject({ sub: dora, present: false })
+  await phone.page.getByRole('button', { name: '✋ Wortmeldung' }).click()
+  await expect(phone.page.getByText('Checke dich oben unter „Anwesenheit“ ein.').first()).toBeVisible()
+  expect(await prisma.assemblySpeaker.count({ where: { assemblyId: assembly.id } })).toBe(0)
+
+  // Gegen ein anderes Mitglied wirkt das Formular nicht: rsvp-app bekommt immer das eigene Pseudonym
+  await postAs(phone.page, `/sitzung/${assembly.id}`, { ...fields, sub: subject() })
+  expect(presenceMessages(assembly.id).at(-1)).toMatchObject({ sub: dora })
+})
+
+test('Tafel: nur mit Link, laufende Abstimmung ohne Zwischenstand, Ergebnis mit Namen nur bei namentlich, Rednerliste, Tagesordnung', async ({ browser, request }) => {
+  const owner = await createAccount()
+  const slug = `mv-${unique().toLowerCase().replace(/[^a-z0-9]/g, '')}`
+  const assembly = await createAssembly(owner.id, { secretDefault: false, quorum: 2, speakerList: true, boardKey: `tafel${unique().replace(/[^a-zA-Z0-9]/g, '')}`, timelineUrl: `${ZEITPLAN_ORIGIN}/${slug}?k=geheimertafelkey` })
+  setAgenda(slug, {
+    key: 'geheimertafelkey', announcement: 'Pause bis 15 Uhr',
+    items: [
+      { title: 'TOP 1: Begrüßung', status: 'past', start: new Date(Date.now() - 3_600_000).toISOString() },
+      { title: 'TOP 2: Haushalt', status: 'now', start: new Date(Date.now() - 600_000).toISOString() },
+      { title: 'TOP 3: Wahlen', status: 'upcoming', start: new Date(Date.now() + 1_800_000).toISOString() }
+    ]
+  })
+  const [eva, finn] = [subject(), subject()]
+  setRoster(assembly.id, { present: [eva, finn] })
+  const evaPhone = await member(browser, assembly, 'Eva', eva)
+  const finnPhone = await member(browser, assembly, 'Finn', finn)
+  const admin = await newPage(browser)
+  await login(admin, owner.email)
+
+  // Ohne oder mit falschem Schlüssel: nichts
+  for (const k of ['', '?k=falsch', `?k=${assembly.boardKey}x`]) expect((await request.get(`/sitzung/${assembly.id}/tafel${k}`)).status()).toBe(404)
+  const boardResponse = await request.get(`/sitzung/${assembly.id}/tafel?k=${assembly.boardKey}`)
+  expect(boardResponse.status()).toBe(200)
+  expect(boardResponse.headers()['referrer-policy']).toBe('no-referrer')
+  expect(boardResponse.headers()['x-robots-tag']).toBe('noindex, nofollow')
+
+  const board = await newPage(browser)
+  await board.goto(`/sitzung/${assembly.id}/tafel?k=${assembly.boardKey}`)
+  await expect(board.getByTestId('board-agenda')).toContainText('TOP 2: Haushalt')
+  await expect(board.getByTestId('board-agenda')).not.toContainText('TOP 1: Begrüßung')
+  await expect(board.getByText('📣 Pause bis 15 Uhr')).toBeVisible()
+  await expect(board.getByTestId('board-quorum')).toContainText('2 anwesend · beschlussfähig (ab 2)')
+
+  // Laufende Abstimmung: Zahl der Stimmen, kein Zwischenstand; aktualisiert sich selbst
+  const poll = await startPoll(admin, assembly.id, 'Antrag Tafel')
+  await expect(board.getByTestId('board-open')).toContainText('Antrag Tafel')
+  await ballot(evaPhone.page, 'Antrag Tafel').getByLabel('Ja').check()
+  await ballot(evaPhone.page, 'Antrag Tafel').getByRole('button', { name: 'Abstimmen' }).click()
+  await ballot(finnPhone.page, 'Antrag Tafel').getByLabel('Nein').check()
+  await ballot(finnPhone.page, 'Antrag Tafel').getByRole('button', { name: 'Abstimmen' }).click()
+  await expect(board.getByTestId('board-open')).toContainText('2 von 2 abgestimmt · namentlich', { timeout: 15_000 })
+  await expect(board.getByTestId('board-result')).toHaveCount(0)
+
+  // Geschlossen: Ergebnis mit Namen (namentlich)
+  await admin.getByTestId('open-polls').getByRole('button', { name: 'Schließen' }).click()
+  await expect(board.getByTestId('board-result')).toContainText('Antrag Tafel')
+  await expect(board.getByTestId('board-result')).toContainText('Eva')
+  await expect(board.getByTestId('board-result')).toContainText('Finn')
+  expect(poll.secretBallot).toBe(false)
+
+  // Geheim: keine Namen; die namentliche rückt zu den früheren Ergebnissen
+  await startPoll(admin, assembly.id, 'Wahl geheim', { secret: true })
+  await ballot(evaPhone.page, 'Wahl geheim').getByLabel('Ja').check()
+  await ballot(evaPhone.page, 'Wahl geheim').getByRole('button', { name: 'Abstimmen' }).click()
+  await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+  await admin.getByTestId('open-polls').getByRole('button', { name: 'Schließen' }).click()
+  await expect(board.getByTestId('board-result')).toContainText('Wahl geheim')
+  await expect(board.getByTestId('board-result')).not.toContainText('Eva')
+  await expect(board.getByTestId('board-earlier')).toContainText('Antrag Tafel: Ja 1 · Nein 1 · Enthaltung 0')
+
+  // Rednerliste
+  await finnPhone.page.getByRole('button', { name: '✋ Wortmeldung' }).click()
+  await expect(board.getByTestId('board-speakers')).toContainText('Finn')
+
+  // Neuer Link: alter gilt nicht mehr; abgeschaltet: keiner
+  await admin.getByText('Tafel', { exact: true }).click()
+  await admin.getByRole('button', { name: 'Neuen Link erzeugen' }).click()
+  await expect(admin.getByText('Neuer Tafel-Link erzeugt')).toBeVisible()
+  expect((await request.get(`/sitzung/${assembly.id}/tafel?k=${assembly.boardKey}`)).status()).toBe(404)
+  const renewed = (await prisma.assembly.findUniqueOrThrow({ where: { id: assembly.id } })).boardKey
+  await expect(admin.getByLabel('Tafel-Link', { exact: true })).toHaveValue(`${BASE_URL}/sitzung/${assembly.id}/tafel?k=${renewed}`)
+  await admin.getByRole('button', { name: 'Tafel abschalten' }).click()
+  await expect(admin.getByText('Die Tafel ist abgeschaltet.')).toBeVisible()
+  expect((await request.get(`/sitzung/${assembly.id}/tafel?k=${renewed}`)).status()).toBe(404)
+})
+
+test('Zeitplan: Links nur aus dem eingerichteten Zeitplan, Tagesordnung für Mitglieder, Live-Steuerung eingebettet', async ({ browser }) => {
+  const owner = await createAccount()
+  const assembly = await createAssembly(owner.id)
+  const slug = `mv-${unique().toLowerCase().replace(/[^a-z0-9]/g, '')}`
+  setAgenda(slug, { items: [{ title: 'TOP 1: Bericht', status: 'now', start: new Date().toISOString(), delayMin: 5 }, { title: 'TOP 2: Sonstiges', status: 'upcoming', start: new Date(Date.now() + 3_600_000).toISOString() }] })
+  setRoster(assembly.id, { present: [] })
+  const admin = await newPage(browser)
+  await login(admin, owner.email)
+  const save = async (timelineUrl: string, timelineLiveUrl = '') => {
+    // Jedes Mal frisch geladen: Die Meldung des vorigen Versuchs darf nicht als Ergebnis dieses Versuchs gelten.
+    await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+    await admin.getByText('Zeitplan', { exact: true }).click()
+    await admin.getByLabel('Gästeansicht oder Tafel-Link (Tagesordnung)').fill(timelineUrl)
+    await admin.getByLabel('Live-Steuerung').fill(timelineLiveUrl)
+    await admin.getByRole('button', { name: 'Zeitplan speichern' }).click()
+  }
+  // Fremde Adresse, falscher Pfad, ungültiger Schlüssel: abgelehnt
+  for (const [url, live, message] of [
+    [`https://zeitplan.example.test/${slug}`, '', 'Tagesordnung: Erwartet wird'],
+    [`${ZEITPLAN_ORIGIN}/admin/events/x`, '', 'Tagesordnung: Erwartet wird'],
+    [`${ZEITPLAN_ORIGIN}/${slug}/tafel?k=<script>`, '', 'Tagesordnung: Erwartet wird'],
+    [`${ZEITPLAN_ORIGIN}/${slug}`, `${ZEITPLAN_ORIGIN}/admin/events/abc/plan`, 'Live-Steuerung: Erwartet wird'],
+    [`${ZEITPLAN_ORIGIN}/${slug}`, `https://zeitplan.example.test/admin/events/abc/live`, 'Live-Steuerung: Erwartet wird']
+  ]) {
+    await save(url, live)
+    await expect(admin.getByText(message)).toBeVisible()
+  }
+  expect((await prisma.assembly.findUniqueOrThrow({ where: { id: assembly.id } })).timelineUrl).toBeNull()
+
+  // Tafel-Link wird zur Gästeansicht mit Schlüssel, Live-Steuerung normalisiert
+  await save(`${ZEITPLAN_ORIGIN}/${slug}/tafel?k=abcdefgh12345678&x=1`, `${ZEITPLAN_ORIGIN}/admin/events/evt123/live/`)
+  await expect(admin.getByText('Zeitplan gespeichert.')).toBeVisible()
+  const stored = await prisma.assembly.findUniqueOrThrow({ where: { id: assembly.id } })
+  expect(stored.timelineUrl).toBe(`${ZEITPLAN_ORIGIN}/${slug}?k=abcdefgh12345678`)
+  expect(stored.timelineLiveUrl).toBe(`${ZEITPLAN_ORIGIN}/admin/events/evt123/live`)
+  await expect(admin.getByTestId('timeline-live')).toHaveAttribute('src', `${ZEITPLAN_ORIGIN}/admin/events/evt123/live`)
+
+  // Mitglieder sehen die Tagesordnung mit dem laufenden Punkt
+  const phone = await member(browser, assembly, 'Gina')
+  await expect(phone.page.getByTestId('agenda-current')).toHaveText('Jetzt: TOP 1: Bericht')
+  await expect(phone.page.getByTestId('agenda')).toContainText('TOP 2: Sonstiges')
+  await expect(phone.page.getByTestId('agenda')).toContainText('+5 Min')
+
+  // Ohne Live-Steuerung zeigt die Sitzungsleitung die Tagesordnung selbst; Zeitplan nicht erreichbar: Hinweis, kein Fehler
+  await save(`${ZEITPLAN_ORIGIN}/${slug}`)
+  await expect(admin.getByTestId('agenda')).toContainText('TOP 1: Bericht')
+  setAgenda(slug, { status: 503, items: [] })
+  await new Promise(resolve => setTimeout(resolve, 5_500))
+  await phone.page.reload()
+  await expect(phone.page.getByTestId('agenda')).toHaveCount(0)
+  await expect(phone.page.getByText('Angemeldet als Gina')).toBeVisible()
 })
 

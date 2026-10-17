@@ -29,3 +29,8 @@ body:has([data-embed]) {
 body:has([data-embed]) [data-chrome] {
   display: none;
 }
+
+/* Tafel einer Sitzung (/sitzung/<id>/tafel): liegt als Vollbild über Kopf- und Fußzeile, scrollt selbst (Handy). */
+body:has([data-board]) {
+  overflow: hidden;
+}

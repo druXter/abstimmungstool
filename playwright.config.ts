@@ -2,6 +2,7 @@ import { defineConfig, devices } from '@playwright/test'
 import { SUITE_TOOLS, TEST_SUITE_IDPS } from './tests/e2e/suite-server'
 import { MAIL_PORT } from './tests/e2e/mail-server'
 import { RSVP_ORIGIN } from './tests/e2e/rsvp-server'
+import { ZEITPLAN_ORIGIN } from './tests/e2e/zeitplan-server'
 import { createECDH, createHash } from 'node:crypto'
 
 // E2E-Tests gegen eine echte, frisch gebaute Instanz (next build + next start) mit eigener
@@ -52,6 +53,8 @@ const SERVER_ENV: Record<string, string> = {
   RSVP_VERIFICATION_SECRET: TEST_RSVP_SECRET,
   // rsvp-app spielt tests/e2e/rsvp-server.ts (Terminabstimmung, Ergebnis-Meldung).
   RSVP_APP_BASE_URL: RSVP_ORIGIN,
+  // Zeitplan (Tagesordnung der Sitzungen): Test-Doppel aus tests/e2e/zeitplan-server.ts.
+  ZEITPLAN_BASE_URL: ZEITPLAN_ORIGIN,
   // Mailversand an den Test-Mailserver (tests/e2e/mail-server.ts): ohne TLS, ohne Anmeldung.
   SMTP_HOST: '127.0.0.1',
   SMTP_PORT: String(MAIL_PORT),
