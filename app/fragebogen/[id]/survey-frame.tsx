@@ -3,8 +3,7 @@ import type { ReactNode } from 'react'
 import type { SurveyIdentity } from '@prisma/client'
 import { closeSurvey, reopenSurvey } from '../../survey-actions'
 import { IDENTITY_LABELS, isSurveyOpen } from '../../lib/survey'
-import { Badge, ButtonLink, buttonClass, formatShortDate, Main } from '../../ui/kit'
-import NavLink from '../../ui/nav-link'
+import { Badge, ButtonLink, buttonClass, formatShortDate, Main, Tabs } from '../../ui/kit'
 
 type FrameSurvey = {
   id: string
@@ -52,10 +51,10 @@ export default function SurveyFrame({ survey, isOwner, children }: { survey: Fra
           </div>
         </div>
       </div>
-      <nav className="-mx-4 mb-6 flex overflow-x-auto border-b border-gray-200 px-4 dark:border-gray-700" aria-label="Bereiche des Fragebogens">
-        <NavLink href={`/fragebogen/${survey.id}/verwalten`} exact variant="tab">Übersicht</NavLink>
-        <NavLink href={`/fragebogen/${survey.id}/bearbeiten`} exact variant="tab">Bearbeiten</NavLink>
-      </nav>
+      <Tabs label="Bereiche des Fragebogens" items={[
+        { href: `/fragebogen/${survey.id}/verwalten`, label: 'Übersicht', exact: true },
+        { href: `/fragebogen/${survey.id}/bearbeiten`, label: 'Bearbeiten', exact: true }
+      ]} />
       {children}
     </Main>
   )

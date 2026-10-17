@@ -8,8 +8,7 @@ import { closePoll } from '../../actions'
 import { manageUrl, type ManageTab } from '../../lib/manage'
 import { POLL_TYPE_LABELS } from '../../lib/poll-types'
 import { IDENTITY_SHORT, pollStatus } from '../../lib/poll-status'
-import { Badge, buttonClass, ButtonLink, Main } from '../../ui/kit'
-import NavLink from '../../ui/nav-link'
+import { Badge, buttonClass, ButtonLink, Main, Tabs } from '../../ui/kit'
 
 /**
  * Lädt eine Abstimmung für eine Seite der Verwaltung und prüft die Berechtigung: Konto (Owner/Admin/Freigabe)
@@ -90,9 +89,7 @@ export default function PollFrame({ loaded, children }: { loaded: Loaded; childr
           </div>
         </div>
       </div>
-      <nav className="-mx-4 mb-6 flex overflow-x-auto border-b border-gray-200 px-4 dark:border-gray-700" aria-label="Bereiche der Abstimmung">
-        {tabs.map(t => <NavLink key={t.tab} href={manageUrl(poll.id, legacyToken, undefined, t.tab)} exact variant="tab">{t.label}</NavLink>)}
-      </nav>
+      <Tabs label="Bereiche der Abstimmung" items={tabs.map(t => ({ href: manageUrl(poll.id, legacyToken, undefined, t.tab), label: t.label, exact: true }))} />
       {children}
     </Main>
   )

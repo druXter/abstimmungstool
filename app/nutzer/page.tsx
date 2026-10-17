@@ -5,11 +5,7 @@ import { prisma } from '../lib/prisma'
 import { INVITE_LINK_COOKIE, requireUser } from '../lib/auth'
 import { createUser, deleteUser, resendInvite, updateUserRole } from '../auth-actions'
 import { isMailConfigured } from '../lib/mail'
-import SubmitButton from '../ui/submit-button'
-import { Main, PageHeader } from '../ui/kit'
-import Notice from '../ui/notice'
-import ConfirmForm from '../ui/confirm-form'
-import CopyableField from '../ui/copyable-field'
+import { Main, PageHeader, SubmitButton, Notice, ConfirmForm, CopyableField } from '../ui/kit'
 
 export const dynamic = 'force-dynamic'
 

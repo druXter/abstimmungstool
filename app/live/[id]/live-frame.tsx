@@ -1,7 +1,6 @@
 import Link from 'next/link'
 import type { ReactNode } from 'react'
-import { Badge, ButtonLink, Main } from '../../ui/kit'
-import NavLink from '../../ui/nav-link'
+import { Badge, ButtonLink, Main, Tabs } from '../../ui/kit'
 
 const PHASE_LABELS = { LOBBY: 'Lobby', QUESTION: 'läuft', REVEAL: 'läuft', LEADERBOARD: 'läuft', FINISHED: 'beendet' } as const
 
@@ -43,10 +42,10 @@ export default function LiveFrame({ session, isOwner, editable, children }: { se
           )}
         </div>
       </div>
-      <nav className="-mx-4 mb-6 flex overflow-x-auto border-b border-gray-200 px-4 dark:border-gray-700" aria-label="Bereiche der Live-Runde">
-        <NavLink href={`/live/${session.id}/verwalten`} exact variant="tab">Übersicht</NavLink>
-        {editable && <NavLink href={`/live/${session.id}/bearbeiten`} exact variant="tab">Fragen</NavLink>}
-      </nav>
+      <Tabs label="Bereiche der Live-Runde" items={[
+        { href: `/live/${session.id}/verwalten`, label: 'Übersicht', exact: true },
+        ...(editable ? [{ href: `/live/${session.id}/bearbeiten`, label: 'Fragen', exact: true }] : [])
+      ]} />
       {children}
     </Main>
   )

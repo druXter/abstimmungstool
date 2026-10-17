@@ -15,7 +15,7 @@ anlegt und verwaltet (siehe "Konten" unten).
 * **Übersichtliche Verwaltung** (wie in rsvp-app, `docs/KONZEPT-OBERFLAECHE.md`): Kopfzeile mit Konto-Menü,
   Übersicht "Abstimmungen" mit dem, was zu tun ist, zuerst; pro Abstimmung eine Seite mit Reitern Übersicht
   (Kennzahlen, Ergebnis, Link zum Teilen), Stimmlinks und Einstellungen (einklappbare Abschnitte, Speichern-Leiste).
-  Gleiche Bausteine wie rsvp-app in `app/ui/kit.tsx`.
+  Bausteine aus `suite-kit/ui` wie in allen Tools der Suite (Regeln: `docs/DESIGN.md` in suite-kit).
 * **Abstimmung anlegen (mit Konto):** kurz - Titel, optionale Beschreibung, optionales automatisches
   Schließungsdatum, 2-25 Optionen und eine Vorlage (Schnelle Umfrage, Terminfindung, Geheime Wahl, Ideen sammeln,
   `app/lib/poll-presets.ts`); alles Weitere danach unter "Einstellungen". Das Abstimmen selbst bleibt für jeden mit

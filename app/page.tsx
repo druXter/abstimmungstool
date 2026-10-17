@@ -1,6 +1,5 @@
 // app/page.tsx
-import InstallHint from './ui/install-hint'
-import { buttonClass, ButtonLink, Card, inputClass } from './ui/kit'
+import { buttonClass, ButtonLink, Card, inputClass, InstallHint } from './ui/kit'
 
 export default function Home() {
   return (

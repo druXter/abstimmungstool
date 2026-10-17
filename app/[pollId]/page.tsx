@@ -6,8 +6,6 @@ import { castVote, forgetVoteEmail, requestVoteEmail, suggestOption, unlockPoll 
 import { inputTypeFor } from '../lib/date-options'
 import { resolveVoter } from '../lib/voter-identity'
 import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
-import SubmitButton from '../ui/submit-button'
-import Notice from '../ui/notice'
 import PollResults from './poll-results'
 import { choiceLimits, loadResult, loadVoterNames, resultsVisible } from '../lib/results'
 import BallotInputs from './ballot-inputs'
@@ -20,7 +18,7 @@ import { logoutParticipant } from '../auth-actions'
 import { getCurrentUser } from '../lib/auth'
 import { getPollLevel } from '../lib/permissions'
 import { pollStatus } from '../lib/poll-status'
-import { Badge, ButtonLink } from '../ui/kit'
+import { Badge, ButtonLink, SubmitButton, Notice } from '../ui/kit'
 
 export const dynamic = 'force-dynamic'
 

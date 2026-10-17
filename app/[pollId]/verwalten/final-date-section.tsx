@@ -1,11 +1,10 @@
 // app/[pollId]/verwalten/final-date-section.tsx
+import { Notice, SubmitButton } from '../../ui/kit'
 import type { OptionKind } from '@prisma/client'
 import { confirmPollDate, retryRsvpTransfer } from '../../actions'
 import { finalDateLabel, needsDecision, reachableCount, voterContacts } from '../../lib/final-date'
 import { parseTransfer, rsvpDateStatus } from '../../lib/rsvp-date'
 import type { PollResult } from '../../lib/results'
-import Notice from '../../ui/notice'
-import SubmitButton from '../../ui/submit-button'
 
 type Poll = {
   id: string

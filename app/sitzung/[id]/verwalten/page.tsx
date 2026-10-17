@@ -11,11 +11,7 @@ import {
   closeAssembly, closeAssemblyPoll, createAssemblyPoll, deleteAssembly, deleteAssemblyPoll, manageSpeaker, shareAssembly, unlinkAssembly,
   unshareAssembly, updateAssembly, updateAssemblyBoard, updateAssemblyTimeline
 } from '../../../assembly-actions'
-import CopyableField from '../../../ui/copyable-field'
-import ConfirmForm from '../../../ui/confirm-form'
-import Notice from '../../../ui/notice'
-import SubmitButton from '../../../ui/submit-button'
-import { Badge, buttonClass, ButtonLink, Card, hintClass, inputClass, labelClass, Main, PageHeader, SettingsSection, Stat } from '../../../ui/kit'
+import { Badge, buttonClass, ButtonLink, Card, hintClass, inputClass, labelClass, Main, PageHeader, SettingsSection, Stat, CopyableField, ConfirmForm, Notice, SubmitButton } from '../../../ui/kit'
 import AssemblySettingsFields from '../../settings-fields'
 import LiveRefresh from '../../live-refresh'
 import QuorumLine from '../../quorum-line'

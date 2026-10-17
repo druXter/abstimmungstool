@@ -2,10 +2,8 @@ import { redirect } from 'next/navigation'
 import { requireUser } from '../../lib/auth'
 import { canCreatePolls } from '../../lib/permissions'
 import { createLive } from '../../live-actions'
-import SubmitButton from '../../ui/submit-button'
-import Notice from '../../ui/notice'
 import QuestionsEditor from '../questions-editor'
-import { Card, inputClass, labelClass, Main, PageHeader } from '../../ui/kit'
+import { Card, inputClass, labelClass, Main, PageHeader, SubmitButton, Notice } from '../../ui/kit'
 
 export const dynamic = 'force-dynamic'
 

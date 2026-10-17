@@ -1,11 +1,10 @@
 // app/[pollId]/bestaetigen/page.tsx
+import { SubmitButton, Notice } from '../../ui/kit'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { prisma } from '../../lib/prisma'
 import { confirmVoteEmail } from '../../actions'
 import { findPendingConfirmation } from '../../lib/email-voters'
-import SubmitButton from '../../ui/submit-button'
-import Notice from '../../ui/notice'
 
 export const dynamic = 'force-dynamic'
 

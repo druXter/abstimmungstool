@@ -7,11 +7,8 @@ import {
   scaleRange, scaleRowLabel, type ScaleStats
 } from '../../../lib/survey'
 import { clearSurveyResponses, deleteSurvey, deleteSurveyResponses, shareSurvey, unshareSurvey } from '../../../survey-actions'
-import CopyableField from '../../../ui/copyable-field'
-import ConfirmForm from '../../../ui/confirm-form'
-import Notice from '../../../ui/notice'
 import QrCode from '../../../ui/qr-code'
-import { buttonClass, Card, formatShortDate, inputClass, Stat } from '../../../ui/kit'
+import { buttonClass, Card, formatShortDate, inputClass, Stat, CopyableField, ConfirmForm, Notice } from '../../../ui/kit'
 import SurveyFrame from '../survey-frame'
 import { HEIGHT_MESSAGE } from '../../../lib/survey-embed'
 

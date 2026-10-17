@@ -1,10 +1,9 @@
 // app/[pollId]/verwalten/voter-links-panel.tsx
 'use client'
 
+import { CopyableField, Notice } from '../../ui/kit'
 import { useActionState } from 'react'
 import { manageVoterLinks, type VoterLinkState } from '../../voter-link-actions'
-import CopyableField from '../../ui/copyable-field'
-import Notice from '../../ui/notice'
 import QrCode from '../../ui/qr-code'
 
 type LinkRow = { id: string; label: string; email: string | null; hasVoted: boolean }

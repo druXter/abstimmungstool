@@ -46,8 +46,9 @@ Allen gemeinsam: Ergebnis beim Schließen dem Konto mitteilen. Unbekannte Werte 
 
 ## Gestaltung
 
-* Dieselben Bausteine wie rsvp-app in `app/ui/kit.tsx` (Card, Badge, Stat, ButtonLink/buttonClass, SettingsSection,
-  PageHeader, inputClass, Main). Hinweise weiter über `app/ui/notice.tsx` (gleiche Farben).
+* Bausteine aus `suite-kit/ui` (seit suite-kit v0.3.0 gemeinsam für alle Tools, Regeln in `docs/DESIGN.md` dort),
+  re-exportiert in `app/ui/kit.tsx` zusammen mit dem eigenen `formatShortDate`; Kopf- und Fußzeile sind
+  `AppHeader`/`AppFooter`, die Reiter `Tabs`, Grundregeln kommen aus `suite-kit/theme.css`.
 * Ruhig: weiß/grau, Blau nur für Hauptaktionen und den aktiven Reiter, keine Emojis an Knöpfen. Farbe trägt Bedeutung:
   grün offen, grau beendet, amber „braucht eine Entscheidung“ (Termin festlegen, Vorschläge, abgelaufen), rot
   nicht beschlussfähig, lila Live-Runde, türkis freigegeben.

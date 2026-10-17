@@ -2,11 +2,9 @@ import { redirect } from 'next/navigation'
 import { requireUser } from '../../lib/auth'
 import { canCreatePolls } from '../../lib/permissions'
 import { createSurvey } from '../../survey-actions'
-import SubmitButton from '../../ui/submit-button'
-import Notice from '../../ui/notice'
 import QuestionsEditor from '../questions-editor'
 import IdentityFields from '../identity-fields'
-import { Card, hintClass, inputClass, labelClass, Main, PageHeader } from '../../ui/kit'
+import { Card, hintClass, inputClass, labelClass, Main, PageHeader, SubmitButton, Notice } from '../../ui/kit'
 
 export const dynamic = 'force-dynamic'
 

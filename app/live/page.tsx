@@ -1,6 +1,5 @@
+import { Notice, SubmitButton } from '../ui/kit'
 import { joinLive } from '../live-actions'
-import Notice from '../ui/notice'
-import SubmitButton from '../ui/submit-button'
 
 export const dynamic = 'force-dynamic'
 

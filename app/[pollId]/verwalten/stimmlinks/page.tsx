@@ -1,8 +1,8 @@
+import { Notice } from '../../../ui/kit'
 import { redirect } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { isMailConfigured } from '../../../lib/mail'
 import { manageUrl } from '../../../lib/manage'
-import Notice from '../../../ui/notice'
 import PollFrame, { loadManagedPoll } from '../poll-frame'
 import VoterLinksPanel from '../voter-links-panel'
 
