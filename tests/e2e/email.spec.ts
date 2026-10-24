@@ -119,3 +119,33 @@ test('Stimmlinks (Modus LINK) gehen an die eingetragenen Adressen', async ({ pag
   expect(linkIn(await waitForMail(email), `${BASE_URL}/`)).toBe(shown)
   await expect(page.getByLabel('Cem', { exact: true })).toBeVisible()
 })
+
+test('Bot-Schutz: ohne gültige Lösung keine Mail, nachgespielte Lösung gilt nicht noch einmal', async ({ page }) => {
+  await page.setExtraHTTPHeaders({ 'x-forwarded-for': uniqueIp() })
+  const owner = await createAccount()
+  const poll = await createPoll(owner.id, { voterIdentity: 'EMAIL' })
+  const email = uniqueEmail('mensch')
+  await page.goto(`/${poll.id}`)
+  await page.getByLabel('E-Mail-Adresse').fill(email)
+  const captured = page.waitForRequest(r => r.method() === 'POST' && !!r.headers()['next-action'])
+  await page.getByRole('button', { name: 'Bestätigungslink schicken' }).click()
+  await page.waitForURL(/hinweis=mail-gesendet/)
+  await waitForMail(email)
+  const request = await captured
+
+  const original = request.postDataBuffer()!.toString('utf8')
+  const pow = /name="(?:_?\d+_)?pow"\r\n\r\n([^\r]*)/.exec(original)![1]
+  expect(pow).toMatch(/^[0-9a-f]{24}\.\d{13}:\d+:[0-9a-f]{64}$/)
+  const bot = uniqueEmail('bot')
+  for (const body of [original.replace(email, bot), original.replace(email, bot).replace(pow, '')]) {
+    const response = await page.request.post(request.url(), {
+      headers: { 'next-action': request.headers()['next-action'], 'content-type': request.headers()['content-type'], origin: BASE_URL, 'x-forwarded-for': uniqueIp() },
+      data: body, maxRedirects: 0
+    })
+    expect(response.headers()['x-action-redirect'] ?? response.headers()['location']).toContain('hinweis=mail-pruefung')
+  }
+  await page.goto(`/${poll.id}?hinweis=mail-pruefung`)
+  await expect(page.getByText('Die Sicherheitsprüfung hat nicht geklappt')).toBeVisible()
+  await new Promise(resolve => setTimeout(resolve, 500))
+  expect(mailsTo(bot)).toHaveLength(0)
+})

@@ -1,7 +1,7 @@
 // app/actions.ts
 'use server'
 
-import { safeEqual } from 'suite-kit'
+import { powError, safeEqual } from 'suite-kit'
 import { redirect } from 'next/navigation'
 import type { OptionKind, ResultsVisibility } from '@prisma/client'
 import { parseDateOption, parseOptionKind, toInputValue } from './lib/date-options'
@@ -487,7 +487,8 @@ export async function unlockPoll(formData: FormData): Promise<void> {
 /**
  * Modus EMAIL, Schritt 1: Bestätigungslink an die eingegebene Adresse schicken (siehe
  * app/lib/email-voters.ts). Gedrosselt pro IP und pro Adresse+Abstimmung, sonst wäre das
- * Formular eine Mailschleuder für fremde Postfächer. Die Rückmeldung verrät bewusst nicht,
+ * Formular eine Mailschleuder für fremde Postfächer. Dazu der Bot-Schutz (ProofOfWork im Formular, suite-kit) -
+ * anders als das Abstimmen selbst braucht dieses Formular deshalb JavaScript. Die Rückmeldung verrät bewusst nicht,
  * ob die Adresse schon bestätigt ist.
  */
 export async function requestVoteEmail(formData: FormData): Promise<void> {
@@ -500,6 +501,7 @@ export async function requestVoteEmail(formData: FormData): Promise<void> {
   const email = normalizeEmail(formString(formData, 'email', 254))
   if (!email) redirect(pollUrl(pollId, {}, 'mail-ungueltig'))
   if (!isEmailAllowed(email, poll.allowedEmails)) redirect(pollUrl(pollId, {}, 'mail-nicht-zugelassen'))
+  if (powError(formData)) redirect(pollUrl(pollId, {}, 'mail-pruefung'))
   if (!(await reserve(voteEmailRules(await clientIp(), email, pollId)))) redirect(pollUrl(pollId, {}, 'mail-gedrosselt'))
 
   const link = await createEmailConfirmation(pollId, email)

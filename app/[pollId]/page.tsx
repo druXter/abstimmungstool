@@ -1,6 +1,7 @@
 // app/[pollId]/page.tsx
 import { notFound, redirect } from 'next/navigation'
 import Link from 'next/link'
+import { POW_MESSAGE } from 'suite-kit/web'
 import { prisma } from '../lib/prisma'
 import { castVote, forgetVoteEmail, requestVoteEmail, suggestOption, unlockPoll } from '../actions'
 import { inputTypeFor } from '../lib/date-options'
@@ -18,7 +19,7 @@ import { logoutParticipant } from '../auth-actions'
 import { getCurrentUser } from '../lib/auth'
 import { getPollLevel } from '../lib/permissions'
 import { pollStatus } from '../lib/poll-status'
-import { Badge, ButtonLink, labelClass, Notice, SubmitButton } from '../ui/kit'
+import { Badge, ButtonLink, labelClass, Notice, ProofOfWork, SubmitButton } from '../ui/kit'
 
 export const dynamic = 'force-dynamic'
 
@@ -43,6 +44,7 @@ const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: str
   'mail-ungueltig': { tone: 'error', text: 'Bitte gib eine gültige E-Mail-Adresse ein.' },
   'mail-nicht-zugelassen': { tone: 'error', text: 'Mit dieser Adresse kann bei dieser Abstimmung nicht abgestimmt werden.' },
   'mail-gedrosselt': { tone: 'error', text: 'Für diese Adresse wurden gerade schon mehrere Links angefordert. Bitte schau in dein Postfach (auch in den Spam-Ordner) oder versuche es in einer Stunde erneut.' },
+  'mail-pruefung': { tone: 'error', text: POW_MESSAGE },
   'mail-fehler': { tone: 'error', text: 'Die Mail konnte gerade nicht verschickt werden. Bitte versuche es später erneut.' },
   'anmeldung-fehlgeschlagen': { tone: 'error', text: 'Die Anmeldung über das andere Tool ist fehlgeschlagen. Bitte versuche es noch einmal.' },
   'anbieter-nicht-erreichbar': { tone: 'error', text: 'Das andere Tool ist gerade nicht erreichbar. Bitte versuche es später erneut.' }
@@ -216,6 +218,7 @@ export default async function PollPage({
                 className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-gray-900 dark:text-gray-100"
               />
             </div>
+            <ProofOfWork />
             <SubmitButton>Bestätigungslink schicken</SubmitButton>
           </form>
         )}

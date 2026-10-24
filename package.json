@@ -17,7 +17,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "suite-kit": "github:druXter/suite-kit#v0.7.1"
+    "suite-kit": "github:druXter/suite-kit#v0.8.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",

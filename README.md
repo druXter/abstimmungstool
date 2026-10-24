@@ -167,6 +167,11 @@ Identität ersetzen** - die Oberfläche sagt das jeweils beim Einstellen:
   Menschen hinter einem NAT eine Adresse teilen. Das Ändern der eigenen Auswahl zählt nicht.
   Ohne erkennbare IP (kein Proxy-Header) wird nicht gedrosselt, sonst teilten sich alle einen
   Zähler; wer den Proxy umgehen kann, könnte den Header ohnehin selbst setzen.
+* **Bot-Schutz beim Bestätigungslink** (Modus `EMAIL`): Das Formular, das einen Link an eine beliebige Adresse
+  schickt, verlangt zusätzlich eine gelöste Rechenaufgabe (`ProofOfWork` aus `suite-kit/ui`, Prüfung mit `powError`,
+  Aufgaben unter `/api/suite/pow`; Hinweis `mail-pruefung`). Es braucht deshalb JavaScript. Abstimmen, Vorschläge
+  und Fragebögen bleiben bewusst ohne: Sie lösen keine Mails an fremde Adressen aus und sind gedrosselt, Fragebögen
+  zusätzlich mit Einmal-Token und Lockfeld geschützt.
 
 Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Seite
 (`?hinweis=…`, feste Texte in `app/[pollId]/page.tsx`).
