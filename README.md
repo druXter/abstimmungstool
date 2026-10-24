@@ -909,9 +909,9 @@ die geplante Terminabstimmung mit rsvp-app (`TODO.md`).
   Konto" wird ein im Browser noch vorhandenes Abo an die aktuelle Sitzung gebunden. Abos, die der
   Push-Dienst als erloschen meldet (404/410), werden gelöscht.
 * **Nur bekannte Push-Dienste:** Gespeichert werden nur Endpoints von Google (FCM), Mozilla,
-  Apple und Microsoft (`PUSH_SERVICE_HOSTS` in `app/push-actions.ts`) - der Server schickt
-  später Anfragen dorthin, eine beliebige Adresse wäre eine SSRF-Lücke. Kommt ein neuer
-  Browser-Push-Dienst dazu, dort ergänzen.
+  Apple und Microsoft (`validPushSubscription` aus `suite-kit/web`, für alle Tools gleich) - der
+  Server schickt später Anfragen dorthin, eine beliebige Adresse wäre eine SSRF-Lücke. Kommt ein
+  neuer Browser-Push-Dienst dazu, in suite-kit ergänzen.
 * **Service Worker** (`public/sw.js`): zeigt Mitteilungen an und öffnet beim Antippen die
   mitgeschickte Adresse - nur auf dieser Herkunft.
 * iPhone/iPad: Push nur, wenn das Tool als App installiert ist (iOS 16.4+).

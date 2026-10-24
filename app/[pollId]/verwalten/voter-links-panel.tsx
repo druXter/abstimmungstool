@@ -1,7 +1,7 @@
 // app/[pollId]/verwalten/voter-links-panel.tsx
 'use client'
 
-import { CopyableField, Notice } from '../../ui/kit'
+import { CopyableField, hintClass, Notice } from '../../ui/kit'
 import { useActionState } from 'react'
 import { manageVoterLinks, type VoterLinkState } from '../../voter-link-actions'
 import QrCode from '../../ui/qr-code'
@@ -89,7 +89,7 @@ export default function VoterLinksPanel({
             placeholder={'Anna\nBen <ben@example.org>\nCem; cem@example.org'}
             className="w-full rounded-lg border border-gray-300 bg-white p-2 text-sm text-gray-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100 dark:focus:ring-blue-900"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Optional mit E-Mail-Adresse. Statt Namen geht auch nur eine Anzahl:</p>
+          <p className={hintClass}>Optional mit E-Mail-Adresse. Statt Namen geht auch nur eine Anzahl:</p>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="link-count" className="text-sm">Anzahl ohne Namen</label>

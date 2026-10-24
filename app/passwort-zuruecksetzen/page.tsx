@@ -1,5 +1,5 @@
 // app/passwort-zuruecksetzen/page.tsx
-import { SubmitButton, Notice } from '../ui/kit'
+import { hintClass, Notice, SubmitButton } from '../ui/kit'
 import Link from 'next/link'
 import { prisma } from '../lib/prisma'
 import { hashToken } from '../lib/auth'
@@ -62,7 +62,7 @@ export default async function PasswortZuruecksetzenPage({
                 minLength={MIN_PASSWORD_LENGTH} autoComplete="new-password"
                 className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
               />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Mindestens {MIN_PASSWORD_LENGTH} Zeichen - am besten ein ganzer Satz.</p>
+              <p className={hintClass}>Mindestens {MIN_PASSWORD_LENGTH} Zeichen - am besten ein ganzer Satz.</p>
             </div>
             <div>
               <label htmlFor="passwordConfirm" className="block text-sm font-medium mb-1">Passwort wiederholen</label>

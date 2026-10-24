@@ -1,6 +1,7 @@
 // app/[pollId]/poll-results.tsx
 import type { PollResult } from '../lib/results'
 import { ANSWER_VALUES, formatVoteValue } from '../lib/poll-types'
+import { hintClass } from '../ui/kit'
 
 /**
  * Geteilte Ergebnis-Darstellung für die öffentliche Abstimmungsseite und die
@@ -86,7 +87,7 @@ export default function PollResults({
               {partial > 0 && <div className="bg-blue-200 dark:bg-blue-800 h-2" style={{ width: `${partial}%` }}></div>}
             </div>
             {optionNames.length > 0 && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              <p className={hintClass}>
                 {optionNames.map(n => (pollType === 'CHOICE' ? n.name : `${n.name} (${formatVoteValue(pollType, n.value)})`)).join(', ')}
               </p>
             )}

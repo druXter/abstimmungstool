@@ -18,7 +18,7 @@ import { logoutParticipant } from '../auth-actions'
 import { getCurrentUser } from '../lib/auth'
 import { getPollLevel } from '../lib/permissions'
 import { pollStatus } from '../lib/poll-status'
-import { Badge, ButtonLink, SubmitButton, Notice } from '../ui/kit'
+import { Badge, ButtonLink, labelClass, Notice, SubmitButton } from '../ui/kit'
 
 export const dynamic = 'force-dynamic'
 
@@ -210,7 +210,7 @@ export default async function PollPage({
               danach kannst du in diesem Browser abstimmen.
             </p>
             <div>
-              <label htmlFor="vote-email" className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">E-Mail-Adresse</label>
+              <label htmlFor="vote-email" className={labelClass}>E-Mail-Adresse</label>
               <input
                 id="vote-email" type="email" name="email" required maxLength={254} autoComplete="email"
                 className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900 text-gray-900 dark:text-gray-100"
@@ -298,7 +298,7 @@ export default async function PollPage({
             )}
             {asksForName && (
               <div>
-                <label htmlFor="voter-name" className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-1">Dein Name</label>
+                <label htmlFor="voter-name" className={labelClass}>Dein Name</label>
                 <input
                   id="voter-name" name="voterName" required maxLength={60} autoComplete="name"
                   defaultValue={myVoteRows[0]?.voterName ?? ''}

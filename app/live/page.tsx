@@ -1,4 +1,4 @@
-import { Notice, SubmitButton } from '../ui/kit'
+import { hintClass, Notice, SubmitButton } from '../ui/kit'
 import { joinLive } from '../live-actions'
 
 export const dynamic = 'force-dynamic'
@@ -38,7 +38,7 @@ export default async function LiveJoinPage({ searchParams }: { searchParams: Pro
             id="live-name" name="nickname" required maxLength={24} autoComplete="nickname" defaultValue={name}
             className="w-full rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-900 p-2 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 dark:focus:ring-blue-900"
           />
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Erscheint auf der Leinwand und in der Rangliste. Kein Konto nötig.</p>
+          <p className={hintClass}>Erscheint auf der Leinwand und in der Rangliste. Kein Konto nötig.</p>
         </div>
         <SubmitButton>Los geht&apos;s</SubmitButton>
       </form>
