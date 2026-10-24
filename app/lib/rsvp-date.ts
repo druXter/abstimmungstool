@@ -64,7 +64,7 @@ async function post(payload: Parameters<typeof signPollDateMessage>[0]): Promise
       method: 'POST',
       headers: { 'Content-Type': 'text/plain' },
       body,
-      signal: AbortSignal.timeout(5000)
+      redirect: 'error', signal: AbortSignal.timeout(5000)
     })
     if (!response.ok) return null
     const json = await response.json()

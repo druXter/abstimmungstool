@@ -62,7 +62,7 @@ export async function fetchRoster(assembly: { id: string; rsvpEventId: string | 
   let roster: Roster = { state: 'unreachable' }
   try {
     const response = await fetch(`${base}/api/assembly/roster`, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, signal: AbortSignal.timeout(4000), cache: 'no-store'
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, redirect: 'error', signal: AbortSignal.timeout(4000), cache: 'no-store'
     })
     if (response.ok) roster = parseRoster(await response.text(), assembly.id, assembly.rsvpEventId)
   } catch {
@@ -88,7 +88,7 @@ async function postToRsvp(assembly: { id: string; rsvpEventId: string | null }, 
   if (!body) return 'off'
   try {
     return await fetch(`${base}${path}`, {
-      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, signal: AbortSignal.timeout(4000), cache: 'no-store'
+      method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, redirect: 'error', signal: AbortSignal.timeout(4000), cache: 'no-store'
     })
   } catch {
     return null

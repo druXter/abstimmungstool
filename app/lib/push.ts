@@ -109,7 +109,7 @@ export async function sendPushToUser(userId: string, message: PushMessage): Prom
           Authorization: vapidAuthorization(subscription.endpoint, keys)
         },
         body: new Uint8Array(encryptPayload(Buffer.from(JSON.stringify(message)), subscription)),
-        signal: AbortSignal.timeout(5000)
+        redirect: 'error', signal: AbortSignal.timeout(5000)
       })
       if (response.status === 404 || response.status === 410) {
         await prisma.pushSubscription.deleteMany({ where: { id: subscription.id } })
