@@ -289,10 +289,10 @@ test('Teilen: Moderation darf präsentieren und exportieren, nicht löschen oder
   expect(download.suggestedFilename()).toBe(`live-runde-${live.id}.csv`)
   const csv = (await (await download.createReadStream()).toArray()).map(c => c.toString('utf8')).join('')
   expect(csv.startsWith('﻿')).toBe(true)
-  expect(csv).toContain('"1";"Hauptstadt?";"Auswahl";"Paris";"1";"ja"')
-  expect(csv).toContain('"2";"Ein Wort?";"Wortwolke";"Sonne";"1";""')
-  expect(csv).toContain(`"'=1+1";"1";"Hauptstadt?";"Paris";"ja";"875";"2,5";""`)
-  expect(csv).toContain(`"1";"'=1+1";"875"`)
+  expect(csv).toContain('1;Hauptstadt?;Auswahl;Paris;1;ja')
+  expect(csv).toContain('2;Ein Wort?;Wortwolke;Sonne;1;')
+  expect(csv).toContain(`'=1+1;1;Hauptstadt?;Paris;ja;875;2,5;`)
+  expect(csv).toContain(`1;'=1+1;875`)
 
   // Freigabe zurücknehmen -> kein Zugriff mehr.
   await page.goto(`/live/${live.id}/verwalten`)

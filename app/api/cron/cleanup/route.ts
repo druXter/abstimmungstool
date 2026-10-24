@@ -1,7 +1,7 @@
 // app/api/cron/cleanup/route.ts
+import { safeEqual } from 'suite-kit'
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
-import { safeEqual } from '../../../lib/permissions'
 import { participantVoterKey, voterKey } from '../../../lib/voter-identity'
 
 // Bewusst dieselben Fristen wie in rsvp-app (dort app/api/cron/cleanup/route.ts), damit die

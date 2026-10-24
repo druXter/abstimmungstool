@@ -1,6 +1,7 @@
 // app/actions.ts
 'use server'
 
+import { safeEqual } from 'suite-kit'
 import { redirect } from 'next/navigation'
 import type { OptionKind, ResultsVisibility } from '@prisma/client'
 import { parseDateOption, parseOptionKind, toInputValue } from './lib/date-options'
@@ -20,7 +21,7 @@ import { emailHash, parseTransfer, transferFinalDate } from './lib/rsvp-date'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
 import { POLL_PRESETS, presetOf } from './lib/poll-presets'
 import { getCurrentUser, requireUser } from './lib/auth'
-import { canCreatePolls, getPollLevel, isAtLeast, safeEqual } from './lib/permissions'
+import { canCreatePolls, getPollLevel, isAtLeast } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
 import { formString, normalizeEmail } from './lib/form'
 import { withVoted } from './lib/assembly'

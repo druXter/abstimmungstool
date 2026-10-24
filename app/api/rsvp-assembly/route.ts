@@ -1,5 +1,6 @@
 // app/api/rsvp-assembly/route.ts
 import { NextResponse } from 'next/server'
+import { readLimitedText } from 'suite-kit/web'
 import { prisma } from '../../lib/prisma'
 import { verifyAssemblyLink, forgetRoster } from '../../lib/assembly-coupling'
 
@@ -8,8 +9,13 @@ import { verifyAssemblyLink, forgetRoster } from '../../lib/assembly-coupling'
  * meldet sich beim Speichern des Links. Eine freie Sitzung übernimmt den Termin, eine schon mit genau diesem Termin
  * verknüpfte aktualisiert den Titel, jede andere antwortet mit 409 - rsvp-app zeigt das im Formular.
  */
+/** Größere Meldungen verschickt rsvp-app nie; alles darüber wird gar nicht erst gelesen. */
+const MAX_BODY = 10_000
+
 export async function POST(request: Request) {
-  const message = verifyAssemblyLink(await request.text())
+  const body = await readLimitedText(request, MAX_BODY)
+  if (body === null) return NextResponse.json({ ok: false, error: 'too large' }, { status: 413 })
+  const message = verifyAssemblyLink(body)
   if (!message) return NextResponse.json({ ok: false, error: 'invalid' }, { status: 401 })
 
   const assembly = await prisma.assembly.findUnique({ where: { id: message.assemblyId }, select: { id: true, title: true, rsvpEventId: true } })

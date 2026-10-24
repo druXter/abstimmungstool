@@ -1,4 +1,5 @@
 // app/lib/mail.ts
+import { escapeHtml } from 'suite-kit/web'
 import nodemailer from 'nodemailer'
 
 // Gleicher Transporter-Aufbau wie in rsvp-app - falls beide Tools auf demselben
@@ -22,26 +23,16 @@ export function isMailConfigured(): boolean {
   return !!process.env.SMTP_HOST
 }
 
-/** Maskiert Text für die Verwendung in HTML (Mail-Inhalte enthalten u.a. frei wählbare Namen/Titel). */
-function esc(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
 function layout(heading: string, body: string, buttonLabel: string, link: string, footer: string): string {
   return `
       <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-        <h2>${esc(heading)}</h2>
-        <p>${esc(body)}</p>
+        <h2>${escapeHtml(heading)}</h2>
+        <p>${escapeHtml(body)}</p>
         <p style="text-align: center; margin: 30px 0;">
-          <a href="${esc(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">${esc(buttonLabel)}</a>
+          <a href="${escapeHtml(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">${escapeHtml(buttonLabel)}</a>
         </p>
-        <p style="font-size: 12px; color: #666;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${esc(link)}</p>
-        <p style="font-size: 12px; color: #666;">${esc(footer)}</p>
+        <p style="font-size: 12px; color: #666;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${escapeHtml(link)}</p>
+        <p style="font-size: 12px; color: #666;">${escapeHtml(footer)}</p>
       </div>
     `
 }
@@ -155,7 +146,7 @@ export async function sendPollResultEmail(
   result: { title: string; lines: string[]; summary: string },
   link: string
 ): Promise<boolean> {
-  const listHtml = result.lines.map(line => `<li>${esc(line)}</li>`).join('')
+  const listHtml = result.lines.map(line => `<li>${escapeHtml(line)}</li>`).join('')
   return send(
     toEmail,
     `Abstimmung beendet: ${result.title}`,
@@ -171,11 +162,11 @@ Alle Details und den CSV-Export findest du auf der Verwaltungsseite:
 ${link}`,
     `
       <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-        <h2>Abstimmung beendet: ${esc(result.title)}</h2>
-        <p><strong>${esc(result.summary)}</strong></p>
+        <h2>Abstimmung beendet: ${escapeHtml(result.title)}</h2>
+        <p><strong>${escapeHtml(result.summary)}</strong></p>
         <ul>${listHtml}</ul>
         <p style="text-align: center; margin: 30px 0;">
-          <a href="${esc(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Zur Verwaltungsseite</a>
+          <a href="${escapeHtml(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Zur Verwaltungsseite</a>
         </p>
         <p style="font-size: 12px; color: #666;">Du bekommst diese Mail, weil bei dieser Abstimmung "Ergebnis beim Schließen mitteilen" eingeschaltet ist.</p>
       </div>

@@ -4,10 +4,10 @@ services:
     container_name: abstimmungstool
     restart: unless-stopped
     ports:
-      # Port 3006 gewählt, da 3000-3005 auf diesem Server bereits belegt sind
-      # (siehe andere Docker-Compose-Services) - bei Bedarf anpassen.
-      # Nur auf localhost: Der Cloudflare-Tunnel verbindet sich über 127.0.0.1. Auf allen Schnittstellen wäre die App
-      # am Tunnel vorbei erreichbar - dann ließe sich X-Forwarded-For frei setzen und jede Drosselung umgehen.
+      # Nur auf localhost: Der Cloudflare-Tunnel (cloudflared auf dem Host) verbindet sich über 127.0.0.1. Auf allen
+      # Schnittstellen wäre das Tool über die öffentliche IPv6 des Servers am Tunnel vorbei erreichbar - dann ließe sich
+      # X-Forwarded-For frei setzen und jede IP-Drosselung umgehen (suite-kit docs/KONVENTIONEN.md, "Betrieb").
+      # Ports der Suite: 3005 rsvp-app, 3006 Abstimmungstool, 3007 Seating, 3008 Zeitplan, 3009 Schichten.
       - "127.0.0.1:3006:3000"
     volumes:
       # Speichert die SQLite-Datenbank sicher außerhalb des Containers, damit
@@ -18,3 +18,12 @@ services:
     environment:
       - DATABASE_URL=file:/app/data/prod.db
       - TZ=Europe/Berlin
+    networks:
+      - default
+      # Uptime Kuma (eigener Container im Netz proxy_net) prüft die Erreichbarkeit intern über http://abstimmungstool:3000 -
+      # der Port oben ist nur noch auf localhost offen.
+      - proxy_net
+
+networks:
+  proxy_net:
+    external: true

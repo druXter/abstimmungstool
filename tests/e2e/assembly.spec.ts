@@ -9,8 +9,9 @@ import { setAgenda, ZEITPLAN_ORIGIN } from './zeitplan-server'
 // nur für Anwesende (geheim und namentlich), Beschlussfähigkeit, Rednerliste, Rechte. rsvp-app spielen die Tests:
 // Nachweise signieren sie selbst, die Anwesenheit liefert das Test-Doppel (tests/e2e/rsvp-server.ts, setRoster).
 
+/** Nachricht von rsvp-app im Format der Suite; `aud` (wir) und `iat` (jetzt) ergänzt, wenn sie fehlen. */
 function sign(payload: object, secret = TEST_RSVP_SECRET): string {
-  const part = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const part = Buffer.from(JSON.stringify({ aud: new URL(BASE_URL).origin, iat: Math.floor(Date.now() / 1000), ...payload })).toString('base64url')
   return `${part}.${createHmac('sha256', secret).update(part).digest('base64url')}`
 }
 const exp = (seconds = 600) => Math.floor(Date.now() / 1000) + seconds
@@ -273,7 +274,7 @@ test('Namentlich: Name an der Stimme, im Ergebnis und in der CSV; Abstimmungssei
   const csv = await (await admin.request.get(`/sitzung/${assembly.id}/verwalten/export`, { headers: { Cookie: (await admin.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ') } })).text()
   const outsider = await newPage(browser)
   expect((await outsider.request.get(`/sitzung/${assembly.id}/verwalten/export`)).status()).toBe(404)
-  expect(csv).toContain('"Wahl Kasse";"namentlich";"Finn";"1";"1";"1";"";"Eva"')
+  expect(csv).toContain('Wahl Kasse;namentlich;Finn;1;1;1;;Eva')
 })
 
 test('Beschlüsse fürs Protokoll (rsvp-app): nur geschlossene, Namen nur namentlich, nur für den verknüpften Termin', async ({ browser, request }) => {

@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { BASE_RULE, NO_FRAMING, NO_REFERRER, NOT_STORED, PRIVATE_PAGE, SECRET_URL_PAGE, SUITE_RULES } from "suite-kit/web";
 
 const nextConfig: NextConfig = {
   // Live-Runden: Fragen mit Bildern gehen in EINER Server Action an den Server (Editor verkleinert
@@ -7,7 +8,8 @@ const nextConfig: NextConfig = {
     serverActions: { bodySizeLimit: '16mb' }
   },
 
-  // Sicherheits-Header für alle Seiten. Bewusst KEINE Einbettung in fremde Seiten
+  // Sicherheits-Header aus den Bausteinen von suite-kit (docs/KONVENTIONEN.md, "Sicherheits-Header"); hier stehen
+  // nur die Pfade dieses Tools. Bewusst KEINE Einbettung in fremde Seiten
   // (frame-ancestors 'none'): Login, Verwaltung und Konto-Seiten dürfen nicht in einem
   // unsichtbaren iFrame auftauchen (Clickjacking). Die Verzahnung mit rsvp-app läuft über
   // normale Links, nicht über Einbettung.
@@ -23,55 +25,30 @@ const nextConfig: NextConfig = {
   // gering, da nirgends fremder Inhalt als HTML ausgegeben wird (React maskiert alles).
   async headers() {
     return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
-          // Nur für diesen Host (ohne includeSubDomains), damit andere Subdomains der
-          // Suite davon unberührt bleiben. Wirkt nur über HTTPS.
-          { key: "Strict-Transport-Security", value: "max-age=31536000" },
-        ],
-      },
+      BASE_RULE,
       {
         // Alles außer dem eingebetteten Fragebogen (siehe oben). Der Pfad ist "/<anything>" ohne die Form
         // "fragebogen/<id>/einbetten" - auch mit angehängtem Schrägstrich, den Next.js sonst umleitet.
         source: "/:path((?!fragebogen/[^/]+/einbetten/?$).*)",
-        headers: [
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'none'" },
-        ],
+        headers: NO_FRAMING,
       },
-      {
-        // Der Service Worker darf NIE aus einem Cache kommen (Browser, Cloudflare, Proxy), sonst blieben
-        // Nutzer auf einer alten Version hängen und Korrekturen kämen nicht an. Eigene CSP: Er lädt
-        // ausschließlich Skripte und Ressourcen derselben Herkunft. Steht NACH der allgemeinen Regel und
-        // überschreibt deren CSP (dort nur frame-ancestors) - deshalb wird frame-ancestors hier wiederholt.
-        source: "/sw.js",
-        headers: [
-          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
-          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
-          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'; frame-ancestors 'none'" },
-        ],
-      },
-      {
-        // Die Föderations-Endpunkte tragen Einmal-Werte (Login-Bestätigung, state) in der
-        // URL. Diese Regel steht NACH der allgemeinen und überschreibt deren Referrer-Policy:
-        // ohne sie würde "strict-origin-when-cross-origin" das route-eigene "no-referrer" aushebeln.
-        source: "/api/suite/:path*",
-        headers: [{ key: "Referrer-Policy", value: "no-referrer" }],
-      },
+      // Login, Konto und Verwaltung: nicht einbetten, nicht indexieren, nicht cachen.
+      { source: "/:page(anmelden|konto|nutzer|meine-abstimmungen|erstellen|passwort-vergessen)", headers: PRIVATE_PAGE },
+      { source: "/anmelden/:path*", headers: PRIVATE_PAGE },
+      { source: "/:area(live|sitzung|fragebogen)/:id/:page(verwalten|bearbeiten|praesentieren)/:path*", headers: PRIVATE_PAGE },
+      { source: "/:pollId/verwalten/:path*", headers: PRIVATE_PAGE },
+      // Einmal-Links aus Mails (Passwort-Reset, Bestätigung der Stimme): zusätzlich kein Referer.
+      { source: "/passwort-zuruecksetzen", headers: SECRET_URL_PAGE },
+      { source: "/:pollId/bestaetigen", headers: SECRET_URL_PAGE },
       {
         // Tafel einer Sitzung (/sitzung/<id>/tafel?k=...): Der Schlüssel steht in der URL - kein Referer, kein Cache,
         // kein Index. Steht nach der allgemeinen Regel und überschreibt deren Referrer-Policy.
         source: "/sitzung/:id/tafel",
-        headers: [
-          { key: "Referrer-Policy", value: "no-referrer" },
-          { key: "Cache-Control", value: "no-store" },
-          { key: "X-Robots-Tag", value: "noindex, nofollow" },
-        ],
+        headers: [...NO_REFERRER, ...NOT_STORED],
       },
+      // Service Worker (nie cachen, eigene CSP) und Föderations-Endpunkte (Einmal-Werte in der URL, kein Referer) -
+      // zuletzt, damit sie die Regeln davor überschreiben.
+      ...SUITE_RULES,
     ];
   },
 };

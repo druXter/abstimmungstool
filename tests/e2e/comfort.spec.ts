@@ -27,11 +27,11 @@ test('CSV-Export: Zählstand und Namen, Formeln entschärft, nur für Verwaltend
   const csv = (await (await download.createReadStream()).toArray()).map(chunk => chunk.toString('utf8')).join('')
 
   expect(csv.startsWith('﻿')).toBe(true)
-  expect(csv).toContain('"Teilnehmende";"2"')
-  expect(csv).toContain('"Ergebnis";"Nicht beschlussfähig: 2 von mindestens 5 Teilnehmenden."')
-  expect(csv).toContain('"Pizza";"1";"50 %"')
-  expect(csv).toContain('"Anna";"Pizza"')
-  expect(csv).toContain(`"'=HYPERLINK(""http://example.test"")";"Sushi"`)
+  expect(csv).toContain('Teilnehmende;2')
+  expect(csv).toContain('Ergebnis;Nicht beschlussfähig: 2 von mindestens 5 Teilnehmenden.')
+  expect(csv).toContain('Pizza;1;50 %')
+  expect(csv).toContain('Anna;Pizza')
+  expect(csv).toContain(`"'=HYPERLINK(""http://example.test"")";Sushi`)
 })
 
 test('QR-Code zum Abstimmungslink', async ({ page }) => {

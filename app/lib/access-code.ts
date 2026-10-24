@@ -1,8 +1,8 @@
 // app/lib/access-code.ts
+import { safeEqual } from 'suite-kit'
 import { createHash } from 'node:crypto'
 import { cookies } from 'next/headers'
 import { cookieOptions } from './auth'
-import { safeEqual } from './permissions'
 
 /**
  * Optionaler Zugangscode pro Abstimmung (Poll.accessCode, siehe schema.prisma). Wer ihn

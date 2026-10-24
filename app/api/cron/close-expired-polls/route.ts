@@ -1,7 +1,7 @@
 // app/api/cron/close-expired-polls/route.ts
+import { safeEqual } from 'suite-kit'
 import { NextResponse } from 'next/server'
 import { prisma } from '../../../lib/prisma'
-import { safeEqual } from '../../../lib/permissions'
 import { afterPollClosed } from '../../../lib/poll-closed'
 
 /**

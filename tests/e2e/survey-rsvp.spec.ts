@@ -1,15 +1,16 @@
 import { createHmac } from 'node:crypto'
 import { expect, test, type Browser, type Page } from '@playwright/test'
 import { createAccount, login, prisma, unique, uniqueIp } from './helpers'
-import { TEST_RSVP_SECRET } from '../../playwright.config'
+import { BASE_URL, TEST_RSVP_SECRET } from '../../playwright.config'
 
 // Fragebogen im Modus RSVP (Idee L8 Teil 2, verifyRsvpSurveyToken in app/lib/rsvp-verification.ts): Antworten nur
 // mit dem Link-Nachweis, den rsvp-app bei "Feedback geben" ausstellt - eine Antwort pro Zusage (Pseudonym `sub`),
 // änderbar. rsvp-app spielen die Tests selbst: Sie signieren den Nachweis im selben Format wie rsvp-app
 // (app/lib/feedback-link.ts dort). Jeder abgelehnte Fall hat eine positive Gegenprobe im selben Test.
 
+/** Nachricht von rsvp-app im Format der Suite; `aud` (wir) und `iat` (jetzt) ergänzt, wenn sie fehlen. */
 function sign(payload: object, secret = TEST_RSVP_SECRET): string {
-  const part = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const part = Buffer.from(JSON.stringify({ aud: new URL(BASE_URL).origin, iat: Math.floor(Date.now() / 1000), ...payload })).toString('base64url')
   return `${part}.${createHmac('sha256', secret).update(part).digest('base64url')}`
 }
 

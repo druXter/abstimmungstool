@@ -1,14 +1,17 @@
 import { createHmac } from 'node:crypto'
 import { expect, test } from '@playwright/test'
 import { createAccount, createPoll, login, PASSWORD, prisma, uniqueEmail, openSection } from './helpers'
-import { TEST_RSVP_SECRET } from '../../playwright.config'
+import { BASE_URL, TEST_RSVP_SECRET } from '../../playwright.config'
 
 // Stimmabgabe und Identitätsmodell (Poll.voterIdentity, siehe app/lib/voter-identity.ts).
 // rsvp-app spielen die Tests selbst: Sie signieren Klick-Tokens und Webhooks mit dem
-// gemeinsamen Test-Secret, genau im Format aus app/lib/rsvp-verification.ts.
+// gemeinsamen Test-Secret, genau im Format aus app/lib/rsvp-verification.ts ({ typ, aud, ..., iat, exp }).
 
+/** Klick-Token (`poll-access`) bzw. Zu-/Absage-Meldung (`poll-attendance`, mit eventId) im Format der Suite. */
 function signRsvp(payload: object): string {
-  const part = Buffer.from(JSON.stringify({ ...payload, exp: Math.floor(Date.now() / 1000) + 600 })).toString('base64url')
+  const iat = Math.floor(Date.now() / 1000)
+  const typ = 'eventId' in payload ? 'poll-attendance' : 'poll-access'
+  const part = Buffer.from(JSON.stringify({ typ, aud: new URL(BASE_URL).origin, ...payload, iat, exp: iat + 600 })).toString('base64url')
   return `${part}.${createHmac('sha256', TEST_RSVP_SECRET).update(part).digest('base64url')}`
 }
 

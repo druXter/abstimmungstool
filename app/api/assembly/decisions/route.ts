@@ -1,5 +1,6 @@
 // app/api/assembly/decisions/route.ts
 import { NextResponse } from 'next/server'
+import { readLimitedText } from 'suite-kit/web'
 import { prisma } from '../../../lib/prisma'
 import { loadResult, loadVoterNames } from '../../../lib/results'
 import { signDecisions, verifyDecisionsRequest, type Decision } from '../../../lib/assembly-coupling'
@@ -8,6 +9,8 @@ export const dynamic = 'force-dynamic'
 
 /** So viele Beschlüsse gehen höchstens heraus - für eine Sitzung mehr als genug. */
 const MAX_DECISIONS = 200
+/** Die Anfrage von rsvp-app ist klein; alles darüber wird gar nicht erst gelesen. */
+const MAX_BODY = 10_000
 
 /**
  * Beschlüsse einer Sitzung für das Protokoll im Zeitplan-Rückblick (docs/KONZEPT-SITZUNG.md, Nachricht
@@ -16,7 +19,9 @@ const MAX_DECISIONS = 200
  * namentlichen Abstimmungen - den Namen. Laufende Abstimmungen gehen nicht heraus.
  */
 export async function POST(request: Request) {
-  const message = verifyDecisionsRequest((await request.text()).slice(0, 10_000))
+  const body = await readLimitedText(request, MAX_BODY)
+  if (body === null) return NextResponse.json({ ok: false, error: 'too large' }, { status: 413 })
+  const message = verifyDecisionsRequest(body)
   if (!message) return NextResponse.json({ ok: false, error: 'invalid' }, { status: 401 })
 
   const assembly = await prisma.assembly.findUnique({ where: { id: message.assemblyId }, select: { id: true, rsvpEventId: true } })

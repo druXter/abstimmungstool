@@ -156,10 +156,10 @@ test('Anonym ausfüllen: jede Abgabe zählt, Danke-Text, Pflichtfrage und Höchs
     const response = await fetch(url)
     return response.ok ? response.text() : `HTTP ${response.status}`
   }, `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"Durchschnitt: 3";"2"')
-  expect(csv).toContain('"Essen";"1";"50 %"')
-  expect(csv).toContain('"4";"Freunde";"Essen";"Mehr Sitzplätze"')
-  expect(csv).toContain('"2";"";"Musik, Programm";""')
+  expect(csv).toContain('Durchschnitt: 3;2')
+  expect(csv).toContain('Essen;1;50 %')
+  expect(csv).toContain('4;Freunde;Essen;Mehr Sitzplätze')
+  expect(csv).toContain('2;;Musik, Programm;')
 
   // Fremde sehen weder Verwaltung noch Export.
   expect((await guest.request.get(`/fragebogen/${survey.id}/verwalten/export`)).status()).toBe(404)
@@ -525,7 +525,7 @@ test('Raster am Desktop: Tabelle mit Spaltenköpfen, ohne JS-Prüfung serverseit
   await expect(grid.getByRole('row', { name: /Stadtführung/ }).getByRole('cell').nth(2)).toContainText('1 · 100%')
 
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"Kneipentour: gut";"1";"100 %"')
+  expect(csv).toContain('Kneipentour: gut;1;100 %')
   expect(csv).toContain('"Rallye: gut; Kneipentour: gut; Stadtführung: schlecht";"Rallye: Mo; Kneipentour: Mo, Mi"')
 })
 
@@ -678,9 +678,9 @@ test('Blöcke am Desktop: Gegensatzpaar links | Knöpfe | rechts, serverseitige 
 
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
   // Beide UEQ-S-Skalen tragen die Nummer ihrer Überschrift.
-  expect(csv).toContain('"1. UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend";"1. UEQ-S: Pragmatische Qualität: kompliziert ↔ einfach";"1. UEQ-S: Hedonische Qualität: langweilig ↔ spannend";"2. Wie sehr stimmst du zu?: Die App war hilfreich."')
-  expect(csv).toContain('"7";"4";"1";"";"";""')
-  expect(csv).toContain('"Gesamt: Durchschnitt 5,5 (zentriert 1,5)";"4"')
+  expect(csv).toContain('1. UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend;1. UEQ-S: Pragmatische Qualität: kompliziert ↔ einfach;1. UEQ-S: Hedonische Qualität: langweilig ↔ spannend;2. Wie sehr stimmst du zu?: Die App war hilfreich.')
+  expect(csv).toContain('7;4;1;;;')
+  expect(csv).toContain('Gesamt: Durchschnitt 5,5 (zentriert 1,5);4')
   expect(csv).not.toContain('Teil 1: Dein Eindruck')
 })
 
@@ -704,7 +704,7 @@ test('Nummern ausschalten: keine Nummern beim Ausfüllen, in der Auswertung und 
   await page.goto(`/fragebogen/${survey.id}/verwalten`)
   await expect(page.getByTestId('survey-result').first().getByRole('heading')).toHaveText(/^UEQ-S: Pragmatische Qualität/)
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend"')
+  expect(csv).toContain('UEQ-S: Pragmatische Qualität: behindernd ↔ unterstützend')
 })
 
 test('Editor warnt, wenn eine Frage ohne Titel an eine andere Frage anschließt', async ({ page }) => {
@@ -812,9 +812,9 @@ test('Ausweich-Antwort am Handy: abgesetzt unter der Skala, erfüllt die Pflicht
   await expect(result.getByRole('row', { name: /Mensaplan/ }).getByRole('cell').nth(2)).toHaveText('3,5')
 
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"Campus-Karte: nicht genutzt";"1"')
-  expect(csv).toContain('"5";"nicht genutzt";"nicht genutzt"')
-  expect(csv).toContain('"2";"4";"1"')
+  expect(csv).toContain('Campus-Karte: nicht genutzt;1')
+  expect(csv).toContain('5;nicht genutzt;nicht genutzt')
+  expect(csv).toContain('2;4;1')
 })
 
 test('Ausweich-Antwort am Desktop: eigene Spalte rechts neben der Skala, ohne JS-Prüfung serverseitig korrekt', async ({ browser }) => {
@@ -907,7 +907,7 @@ test('Sonstiges mit Textfeld: im Editor einschalten, Tippen kreuzt an, Texte in 
   await expect(texts).toContainText('1 eingetippte Antwort')
   await expect(texts).toContainText('Gasthörer')
   const csv = await page.evaluate(async url => (await fetch(url)).text(), `/fragebogen/${survey.id}/verwalten/export`)
-  expect(csv).toContain('"Sonstiges: Gasthörer";"Plakat, Sonstiges: Instagram"')
+  expect(csv).toContain('Sonstiges: Gasthörer;Plakat, Sonstiges: Instagram')
 })
 
 test('Englisch (?lang=en): feste Texte, Hinweise und Danke auf Englisch, die Sprache bleibt nach dem Absenden', async ({ browser }) => {

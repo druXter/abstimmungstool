@@ -1,17 +1,10 @@
 // app/lib/permissions.ts
-import { timingSafeEqual } from 'node:crypto'
+import { safeEqual } from 'suite-kit'
 import { prisma } from './prisma'
 import type { CurrentUser } from './auth'
 
 export function canCreatePolls(user: CurrentUser): boolean {
   return user.role !== 'MODERATOR'
-}
-
-/** Konstantzeitvergleich für Tokens - `===` würde über die Antwortzeit verraten, wie viele Zeichen stimmen. */
-export function safeEqual(a: string, b: string): boolean {
-  const ab = Buffer.from(a)
-  const bb = Buffer.from(b)
-  return ab.length === bb.length && timingSafeEqual(ab, bb)
 }
 
 /**

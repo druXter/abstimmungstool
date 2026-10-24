@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test": "vitest run",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -16,7 +17,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "suite-kit": "github:druXter/suite-kit#v0.3.0"
+    "suite-kit": "github:druXter/suite-kit#v0.5.1"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
@@ -33,7 +34,8 @@
     "postcss": "^8.5.23",
     "prisma": "^6.19.3",
     "tailwindcss": "^4.3.3",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "deepmerge-ts": "^8.0.2"

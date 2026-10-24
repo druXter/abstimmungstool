@@ -1,11 +1,11 @@
 // app/[pollId]/verwalten/export/route.ts
+import { csvResponse } from 'suite-kit/web'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { getPollLevel } from '../../../lib/permissions'
 import { loadResult, type PollResult } from '../../../lib/results'
 import { formatVoteValue } from '../../../lib/poll-types'
 import { resultSummary } from '../../../lib/poll-closed'
-import { csvResponse } from '../../../lib/csv'
 
 /**
  * CSV-Export der Ergebnisse für alle, die die Abstimmung verwalten dürfen (dieselbe Prüfung

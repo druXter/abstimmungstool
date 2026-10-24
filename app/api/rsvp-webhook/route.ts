@@ -1,5 +1,6 @@
 // app/api/rsvp-webhook/route.ts
 import { NextResponse } from 'next/server'
+import { readLimitedText } from 'suite-kit/web'
 import { prisma } from '../../lib/prisma'
 import { verifyRsvpWebhookPayload } from '../../lib/rsvp-verification'
 import { voterKey } from '../../lib/voter-identity'
@@ -22,8 +23,12 @@ import { voterKey } from '../../lib/voter-identity'
  * beim Schließen dieser Abstimmung bekannt ist, welchem rsvp-app-Event das Ergebnis
  * gemeldet werden soll (siehe app/lib/rsvp-notify.ts).
  */
+/** Größere Meldungen verschickt rsvp-app nie; alles darüber wird gar nicht erst gelesen. */
+const MAX_BODY = 10_000
+
 export async function POST(request: Request) {
-  const body = await request.text()
+  const body = await readLimitedText(request, MAX_BODY)
+  if (body === null) return NextResponse.json({ error: 'too large' }, { status: 413 })
   const message = verifyRsvpWebhookPayload(body)
   if (!message) {
     return NextResponse.json({ error: 'invalid signature' }, { status: 401 })

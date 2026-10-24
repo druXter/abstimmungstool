@@ -291,25 +291,43 @@ Beim Anlegen kann eine Abstimmung auf "Nur über rsvp-app" gestellt werden
 
 ### Token-Format (Vertrag zwischen rsvp-app und diesem Tool)
 
+Alle Nachrichten der Kopplung im gemeinsamen Format der Suite (`signLinkMessage`/`verifyLinkMessage` aus `suite-kit`,
+Regeln in `suite-kit/docs/KONVENTIONEN.md`, „Anbindungen zwischen Tools“):
+
 ```
 <base64url(JSON-Payload)>.<base64url(HMAC-SHA256(payloadPart, RSVP_VERIFICATION_SECRET))>
+Payload: { "typ": "<Art>", "aud": "<Origin des Empfängers>", ...Felder, "iat": <Unix-Sekunden>, "exp": <Unix-Sekunden> }
 ```
 
-Zwei Varianten teilen sich dieses Format (siehe `app/lib/rsvp-verification.ts`):
+* **`typ`** ist Pflicht und wird geprüft: Eine Nachricht der einen Art gilt nie als eine andere.
+* **`aud`** ist der Origin des Empfängers (hier `BASE_URL`, in rsvp-app dessen `BASE_URL`): Eine Nachricht an rsvp-app
+  gilt hier nicht und umgekehrt.
+* **Gültigkeit** vom Empfänger begrenzt: höchstens 15 Minuten für Klick-Token und Meldungen (ausgestellt für 5-10
+  Minuten), nur der Fragebogen-Nachweis bis 24 Stunden (er muss das Ausfüllen überdauern).
 
-* **Klick-Token** (`?verify=...` am Abstimmungs-Link): `{ "email": "gast@example.com", "pollId": "<Poll.id dieses Tools>", "attending": true, "exp": <Unix-Timestamp Sekunden> }`
-* **Webhook-Nachricht** (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): zusätzlich `"eventId": "<Event.id in rsvp-app>"` - daraus lernt dieses Tool beiläufig `Poll.rsvpEventId`, um beim Schließen zu wissen, wohin das Ergebnis gemeldet werden soll (siehe "Ergebnis-Meldung" unten).
-* **Fragebogen-Nachweis** (`?verify=...` an einem Fragebogen im Modus `RSVP`): `{ "typ": "survey-access", "surveyId": "<Survey.id>", "sub": "<Pseudonym>", "exp": ... }` - siehe "Fragebogen für Gäste aus rsvp-app".
+Von rsvp-app an dieses Tool (`app/lib/rsvp-verification.ts`):
+
+* **`poll-access`** - Klick-Token (`?verify=...` am Abstimmungs-Link): `email`, `pollId` (Poll.id dieses Tools),
+  `attending`. `aud` ist der Origin des Abstimmungs-Links.
+* **`poll-attendance`** - Zu-/Absage (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): zusätzlich
+  `eventId` (Event.id in rsvp-app) - daraus lernt dieses Tool beiläufig `Poll.rsvpEventId`, um beim Schließen zu
+  wissen, wohin das Ergebnis gemeldet werden soll (siehe "Ergebnis-Meldung" unten).
+* **`survey-access`** - Fragebogen-Nachweis (`?verify=...` an einem Fragebogen im Modus `RSVP`): `surveyId`, `sub`
+  (Pseudonym) - siehe "Fragebogen für Gäste aus rsvp-app".
+* **`assembly-*`** - Sitzungen, siehe "Sitzungen".
+
+Von diesem Tool an rsvp-app: **`poll-result`** (Ergebnis-Meldung), **`poll-date-status`** und **`poll-date-set`**
+(Terminabstimmung), **`assembly-*`**.
 
 * `RSVP_VERIFICATION_SECRET` muss auf beiden Seiten identisch sein (gemeinsames
   HMAC-Secret, z.B. `openssl rand -hex 32`) - niemals das Secret selbst übertragen,
   nur damit signierte Tokens.
-* `pollId` bindet den Token an GENAU diese eine Abstimmung - ein für Abstimmung A
+* `pollId` bindet den Klick-Token an GENAU diese eine Abstimmung - ein für Abstimmung A
   ausgestellter Token gilt nicht für Abstimmung B.
-* `exp` sollte kurz sein (einige Minuten), damit ein versehentlich weitergeleiteter
-  Link nicht dauerhaft gültig bleibt.
-* Prüf-Implementierung: `app/lib/rsvp-verification.ts` (`verifyRsvpToken`). Zum
-  lokalen Testen ohne rsvp-app: `signRsvpTokenForTesting()` in derselben Datei -
+* Beide Seiten haben dieselben **festen Prüfnachrichten** in ihren Unit-Tests (`tests/unit/rsvp-verification.test.ts`
+  hier, `tests/unit/poll-verification.test.ts` in rsvp-app): Ändert sich das Format, bricht der Test - dann beide
+  Seiten in einem Zug ändern und gemeinsam ausrollen.
+* Zum lokalen Testen ohne rsvp-app: `signRsvpTokenForTesting()` in `app/lib/rsvp-verification.ts` -
   bewusst nicht produktiv verlinkt, nur für Entwicklung/Tests.
 
 ## Konten
@@ -389,10 +407,15 @@ Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
   beendet alle anderen Sitzungen. Einladungs-/Reset-Links: einmalig, befristet, nur als Hash.
 * **Berechtigungen** werden serverseitig in jeder Server Action geprüft, nie nur in der
   Oberfläche. Server Actions prüfen zusätzlich den Origin (CSRF, Next.js-Standard).
-* **Header:** `X-Frame-Options`/`frame-ancestors 'none'` (kein Einbetten), `nosniff`,
-  `Referrer-Policy`, HSTS (siehe `next.config.ts`). Einzige Ausnahme vom Einbett-Verbot ist
-  `/fragebogen/<id>/einbetten`: dort `frame-ancestors 'self'` plus `EMBED_ALLOWED_ORIGINS` (`proxy.ts`,
-  siehe "Fragebögen").
+* **Header** (Bausteine aus `suite-kit/web`, siehe `next.config.ts`, geprüft in `tests/e2e/headers.spec.ts`):
+  `X-Frame-Options`/`frame-ancestors 'none'` (kein Einbetten), `nosniff`, `Referrer-Policy`, HSTS. Anmelden, Konto,
+  Kontenliste, „Meine Abstimmungen“, Anlegen und alle Verwaltungs- und Bearbeitungsseiten zusätzlich `noindex` und
+  `no-store`; Passwort-Reset, Stimm-Bestätigung und Tafel (Geheimnis in der URL) außerdem `no-referrer`. Einzige
+  Ausnahme vom Einbett-Verbot ist `/fragebogen/<id>/einbetten`: dort `frame-ancestors 'self'` plus
+  `EMBED_ALLOWED_ORIGINS` (`proxy.ts`, siehe "Fragebögen").
+* **Gemeinsame Helfer aus suite-kit** statt eigener Kopien: `escapeHtml` für alles in HTML-Mails, `csvResponse` für
+  die CSV-Exporte (Semikolon, CRLF, BOM, Formel-Schutz), `readLimitedText` für die Bodies der Anbindungen (413 über
+  10 KB, schon beim Lesen begrenzt), `safeEqual` für Geheimnisse.
 
 ### Konten-Verbund mit anderen Tools (optional)
 
@@ -487,8 +510,9 @@ weist in allen Modi mit Namen darauf hin, wer sie sieht.
 * **CSV-Export** (`app/[pollId]/verwalten/export/route.ts`): für alle, die die Abstimmung
   verwalten dürfen (bei Alt-Abstimmungen mit `?token=`). Semikolon, UTF-8 mit BOM (öffnet sich
   in einem deutschen Excel direkt). Enthält Zählstand, Teilnehmende, Ergebnis und - nur wenn
-  die Stimmen Namen tragen - wer was gewählt hat. Werte, die mit `= + - @` beginnen, bekommen
-  ein `'` vorangestellt (Schutz vor CSV-/Formel-Injection über frei eingegebene Namen).
+  die Stimmen Namen tragen - wer was gewählt hat. Textzellen, die mit `= + - @`, Tab oder Zeilenumbruch beginnen,
+  bekommen ein `'` vorangestellt (Schutz vor CSV-/Formel-Injection über frei eingegebene Namen; Format aller Tools,
+  `csvResponse` aus `suite-kit/web`).
 * **QR-Code** zum Abstimmungslink, im Browser erzeugt (`app/ui/qr-code.tsx`, Paket `qrcode`). Links und Codes
   lassen sich per Knopf kopieren (`app/ui/copyable-field.tsx`).
 * **Duplizieren** (`duplicatePoll`, unter "Einstellungen"): neue Abstimmung des eingeloggten Kontos mit Titel
@@ -703,8 +727,8 @@ Wer darf, entscheidet rsvp-app (Zusage, die zählt; mit QR-Einlass nur Eingechec
 * Ausfüllen geht nur mit dem Nachweis, den rsvp-app bei jedem Klick frisch ausstellt (`?verify=`, beim Absenden als
   verstecktes Feld `verify` weitergereicht). Ohne gültigen Nachweis zeigt die Seite kein Formular, nur einen Hinweis -
   bewusst ohne Cookie-Ersatz. Ist der Nachweis beim Absenden abgelaufen, wird nichts gespeichert (`?hinweis=rsvp`).
-* Format wie die übrigen Nachrichten mit rsvp-app (siehe "Token-Format"): `{ "typ": "survey-access", "surveyId":
-  "<Survey.id>", "sub": "<Pseudonym>", "exp": <Unix-Sekunden> }`, höchstens 24 Stunden gültig (rsvp-app: 12),
+* Format wie die übrigen Nachrichten mit rsvp-app (siehe "Token-Format"): `{ "typ": "survey-access", "aud":
+  "<BASE_URL>", "surveyId": "<Survey.id>", "sub": "<Pseudonym>", "iat": ..., "exp": ... }`, höchstens 24 Stunden gültig (rsvp-app: 12),
   geprüft von `verifyRsvpSurveyToken` in `app/lib/rsvp-verification.ts`. `typ` und `surveyId` statt `pollId` halten
   die Nachrichtenarten auseinander: Ein Abstimmungs-Token öffnet keinen Fragebogen und umgekehrt.
 * `sub` ist ein Pseudonym der Zusage (HMAC über Fragebogen und Antwort-ID in rsvp-app, base64url): kein Name, keine
@@ -828,7 +852,7 @@ Bei Abstimmungen mit Terminoptionen (Tage oder Termine mit Uhrzeit) und "Termin 
 
 Die öffentliche Abstimmungsseite zeigt danach "Termin steht fest" (mit Link zum rsvp-app-Event).
 Vertrag (`POST <RSVP_APP_BASE_URL>/api/poll-date`, Body = signierter Token wie beim "Token-Format"
-oben, 5 Minuten gültig, immer mit `typ`):
+oben, 5 Minuten gültig; `aud`, `iat` und `exp` ergänzt das Format):
 
 * `{ typ: "poll-date-status", pollId, owner: { toolUserId, rsvpUserId|null } }` → `{ ok, events: [{ id, title, datePending }], canCreate }`
 * `{ typ: "poll-date-set", pollId, pollTitle, startsAt (ISO), owner, create, skipEmailHashes: [sha256-hex] }` → `{ ok, updated: [{ id, title, url }], created: { id, title, url, adminUrl } | null, unchanged: [{ id, title }] }`
@@ -945,9 +969,11 @@ weitermachen, sondern den Fehler ansehen.
 
 ## Tests
 
-End-to-End-Tests mit Playwright (`tests/e2e/`):
+Unit-Tests mit Vitest (`tests/unit/`, reine Logik aus `app/lib`, z.B. das Nachrichtenformat mit rsvp-app samt festen
+Prüfnachrichten) und End-to-End-Tests mit Playwright (`tests/e2e/`):
 
 ```bash
+npm test                          # Unit-Tests
 npx playwright install chromium   # einmalig
 npm run test:e2e
 ```
@@ -967,7 +993,7 @@ einbettenden Seiten liefern kleine Server auf `localhost:3697-3699` aus) und die
 Reiter samt Token bei Alt-Abstimmungen, Einstellungen, Freigaben, Konto-Menü). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
-(`tests/e2e/push-server.ts`, Port 2641); der Test prüft die VAPID-Signatur und entschlüsselt den
+(`tests/e2e/push-server.ts`, Port 2641); die Sicherheits-Header prüft `headers.spec.ts`; der Push-Test prüft die VAPID-Signatur und entschlüsselt den
 Inhalt mit einer unabhängigen RFC-8291-Implementierung (Dev-Paket `http_ece`). Nicht automatisch
 getestet ist das Einschalten im Browser selbst: Headless-Chromium meldet Mitteilungen immer als
 verweigert.
@@ -988,8 +1014,12 @@ docker compose up -d --build
 ```
 
 Beim Bauen holt `npm` das gemeinsame Paket `suite-kit` direkt von GitHub - das Dockerfile
-installiert dafür `git`. `./data` wird für die SQLite-Datenbank gemountet. Beim Start
-läuft zuerst `scripts/migrate-db.js` (Sicherung landet ebenfalls in `./data`), dann
-`prisma db push`. Vor einem Update mit Datenumzug trotzdem selbst eine Sicherung ziehen. Port 3006 ist in
-`docker-compose.yml` voreingestellt (3000-3005 sind auf diesem Server bereits von
-anderen Diensten belegt) - bei Bedarf anpassen.
+installiert dafür `git`. Das Image (`node:22-alpine`) installiert mit `npm ci` exakt nach `package-lock.json`, baut
+und läuft als unprivilegierter Nutzer `node` (UID 1000), wie alle Tools der Suite. `./data` wird für die
+SQLite-Datenbank gemountet und muss deshalb UID 1000 gehören (einmalig:
+`docker run --rm --user root -v "$PWD/data:/d" --entrypoint chown abstimmungstool-abstimmungstool -R 1000:1000 /d`).
+Beim Start läuft zuerst `scripts/migrate-db.js` (Sicherung landet ebenfalls in `./data`), dann
+`prisma db push --skip-generate` (der Client ist schon beim Build erzeugt). Vor einem Update mit Datenumzug trotzdem
+selbst eine Sicherung ziehen. Port 3006 ist in `docker-compose.yml` voreingestellt und nur an `127.0.0.1` gebunden
+(der Cloudflare-Tunnel verbindet sich über localhost); Uptime Kuma prüft die Erreichbarkeit intern über das Netz
+`proxy_net` (`http://abstimmungstool:3000`).

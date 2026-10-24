@@ -18,12 +18,18 @@ data/
 .env
 .env.local
 
-# IDE-Dateien
+# IDE-Dateien und KI-Assistenten
 .vscode
+.claude
+CLAUDE.md
+AGENTS.md
 
-# Ausgaben der E2E-Tests (siehe README, "Tests")
+# Tests und Testergebnisse gehören nicht ins Image (siehe README, "Tests")
+tests
 test-results
 playwright-report
+playwright.config.ts
+vitest.config.mts
 .e2e
 
 # Sicherungen von scripts/migrate-db.js

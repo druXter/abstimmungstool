@@ -1,6 +1,6 @@
+import { csvResponse } from 'suite-kit/web'
 import { prisma } from '../../../../lib/prisma'
 import { getCurrentUser } from '../../../../lib/auth'
-import { csvResponse } from '../../../../lib/csv'
 import { loadResult, loadVoterNames } from '../../../../lib/results'
 import { getAssemblyLevel } from '../../../../lib/assembly'
 

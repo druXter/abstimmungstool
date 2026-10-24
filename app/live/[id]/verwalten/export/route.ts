@@ -1,7 +1,7 @@
+import { csvResponse } from 'suite-kit/web'
 import { prisma } from '../../../../lib/prisma'
 import { getCurrentUser } from '../../../../lib/auth'
 import { describeResponse, formatNumber, getLiveLevel, isCorrectResponse, loadLiveResults } from '../../../../lib/live'
-import { csvResponse } from '../../../../lib/csv'
 
 const KIND_LABELS = { CHOICE: 'Auswahl', MULTI: 'Mehrfachauswahl', ESTIMATE: 'Schätzfrage', WORDCLOUD: 'Wortwolke', TEXT: 'Freitext' } as const
 

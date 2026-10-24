@@ -1,6 +1,6 @@
+import { csvResponse } from 'suite-kit/web'
 import { prisma } from '../../../../lib/prisma'
 import { getCurrentUser } from '../../../../lib/auth'
-import { csvResponse } from '../../../../lib/csv'
 import {
   csvColumns, formatDecimal, getSurveyLevel, gridKey, isGrid, isQuestion, KIND_LABELS, loadSurveyResults, questionNumbers, scaleCenter, scaleRange,
   scaleRowLabel

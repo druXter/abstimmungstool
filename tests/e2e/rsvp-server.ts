@@ -43,8 +43,10 @@ export function setRoster(assemblyId: string, roster: RosterScenario) {
   writeFileSync(ROSTERS, JSON.stringify(all))
 }
 
+/** Antwort an das Abstimmungstool im Format der Suite: `aud` ist dessen Origin (BASE_URL setzt playwright.config.ts). */
 function signed(payload: object, secret = SECRET): string {
-  const part = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const aud = new URL(process.env.BASE_URL!).origin
+  const part = Buffer.from(JSON.stringify({ aud, iat: Math.floor(Date.now() / 1000), ...payload })).toString('base64url')
   return `${part}.${createHmac('sha256', secret).update(part).digest('base64url')}`
 }
 
