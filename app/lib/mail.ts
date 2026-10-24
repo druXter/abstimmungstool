@@ -1,5 +1,7 @@
 // app/lib/mail.ts
-import { escapeHtml } from 'suite-kit/web'
+import { renderMail } from 'suite-kit/web'
+
+type RenderedMail = ReturnType<typeof renderMail>
 import nodemailer from 'nodemailer'
 
 // Gleicher Transporter-Aufbau wie in rsvp-app - falls beide Tools auf demselben
@@ -23,21 +25,23 @@ export function isMailConfigured(): boolean {
   return !!process.env.SMTP_HOST
 }
 
-function layout(heading: string, body: string, buttonLabel: string, link: string, footer: string): string {
-  return `
-      <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-        <h2>${escapeHtml(heading)}</h2>
-        <p>${escapeHtml(body)}</p>
-        <p style="text-align: center; margin: 30px 0;">
-          <a href="${escapeHtml(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">${escapeHtml(buttonLabel)}</a>
-        </p>
-        <p style="font-size: 12px; color: #666;">Falls der Button nicht funktioniert, kopiere diesen Link in deinen Browser:<br>${escapeHtml(link)}</p>
-        <p style="font-size: 12px; color: #666;">${escapeHtml(footer)}</p>
-      </div>
-    `
+/** Marke im Kopf jeder Mail, wie in der Kopfzeile des Tools. */
+export const MAIL_BRAND = { letter: 'A', name: 'Abstimmungstool' }
+
+/**
+ * Mail mit Anrede, Text, einem Knopf und Kleingedrucktem - aus den Bausteinen der Suite (renderMail aus suite-kit,
+ * dieselbe Vorlage in allen Tools). HTML und Klartext aus demselben Inhalt, alles escapet.
+ */
+function layout(heading: string, body: string, buttonLabel: string, link: string, footer: string): RenderedMail {
+  return renderMail({
+    brand: MAIL_BRAND,
+    heading,
+    blocks: [{ kind: 'p', text: 'Hallo,' }, { kind: 'p', text: body }, { kind: 'button', label: buttonLabel, href: link }],
+    footer
+  })
 }
 
-async function send(toEmail: string, subject: string, text: string, html: string): Promise<boolean> {
+async function send(toEmail: string, subject: string, { html, text }: RenderedMail): Promise<boolean> {
   if (!isMailConfigured()) return false
 
   try {
@@ -61,12 +65,6 @@ export async function sendInviteEmail(toEmail: string, link: string, validDays: 
   return send(
     toEmail,
     'Einladung zum Abstimmungstool',
-    `Hallo,
-
-für dich wurde ein Konto im Abstimmungstool angelegt. Lege mit diesem Link dein Passwort fest (${validDays} Tage gültig, nur einmal nutzbar):
-${link}
-
-Falls du damit nicht gerechnet hast, ignoriere diese Mail einfach.`,
     layout(
       'Einladung zum Abstimmungstool',
       `Für dich wurde ein Konto angelegt. Lege jetzt dein Passwort fest - der Link ist ${validDays} Tage gültig und nur einmal nutzbar.`,
@@ -82,12 +80,6 @@ export async function sendPasswordResetEmail(toEmail: string, link: string): Pro
   return send(
     toEmail,
     'Passwort zurücksetzen - Abstimmungstool',
-    `Hallo,
-
-für dein Konto im Abstimmungstool wurde ein neues Passwort angefordert. Mit diesem Link kannst du es festlegen (1 Stunde gültig, nur einmal nutzbar):
-${link}
-
-Falls du das nicht warst, ignoriere diese Mail - dein Passwort bleibt unverändert.`,
     layout(
       'Passwort zurücksetzen',
       'Für dein Konto wurde ein neues Passwort angefordert. Der Link ist 1 Stunde gültig und nur einmal nutzbar.',
@@ -103,12 +95,6 @@ export async function sendVoterLinkEmail(toEmail: string, pollTitle: string, lin
   return send(
     toEmail,
     `Deine Einladung zur Abstimmung: ${pollTitle}`,
-    `Hallo,
-
-du bist eingeladen, bei der Abstimmung "${pollTitle}" mitzumachen. Das ist dein persönlicher Link - bitte gib ihn nicht weiter, er zählt als deine Stimme:
-${link}
-
-Solange die Abstimmung offen ist, kannst du deine Auswahl über denselben Link ändern.`,
     layout(
       pollTitle,
       'Du bist eingeladen, bei dieser Abstimmung mitzumachen. Das ist dein persönlicher Link - bitte gib ihn nicht weiter, er zählt als deine Stimme. Solange die Abstimmung offen ist, kannst du deine Auswahl über denselben Link ändern.',
@@ -124,12 +110,6 @@ export async function sendVoteConfirmationEmail(toEmail: string, pollTitle: stri
   return send(
     toEmail,
     `Bitte bestätige deine Adresse: ${pollTitle}`,
-    `Hallo,
-
-jemand (vermutlich du) möchte mit dieser Adresse bei der Abstimmung "${pollTitle}" abstimmen. Mit diesem Link bestätigst du die Adresse (${validHours} Stunden gültig, nur einmal nutzbar):
-${link}
-
-Falls du das nicht warst, ignoriere diese Mail einfach - ohne Bestätigung passiert nichts.`,
     layout(
       pollTitle,
       `Jemand (vermutlich du) möchte mit dieser Adresse bei dieser Abstimmung abstimmen. Bestätige die Adresse mit dem Button - der Link ist ${validHours} Stunden gültig und nur einmal nutzbar.`,
@@ -146,32 +126,18 @@ export async function sendPollResultEmail(
   result: { title: string; lines: string[]; summary: string },
   link: string
 ): Promise<boolean> {
-  const listHtml = result.lines.map(line => `<li>${escapeHtml(line)}</li>`).join('')
-  return send(
-    toEmail,
-    `Abstimmung beendet: ${result.title}`,
-    `Hallo,
-
-die Abstimmung "${result.title}" ist beendet.
-
-${result.summary}
-
-${result.lines.map(line => `- ${line}`).join('\n')}
-
-Alle Details und den CSV-Export findest du auf der Verwaltungsseite:
-${link}`,
-    `
-      <div style="font-family: sans-serif; color: #333; max-width: 600px; margin: 0 auto;">
-        <h2>Abstimmung beendet: ${escapeHtml(result.title)}</h2>
-        <p><strong>${escapeHtml(result.summary)}</strong></p>
-        <ul>${listHtml}</ul>
-        <p style="text-align: center; margin: 30px 0;">
-          <a href="${escapeHtml(link)}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #fff; text-decoration: none; border-radius: 5px; font-weight: bold;">Zur Verwaltungsseite</a>
-        </p>
-        <p style="font-size: 12px; color: #666;">Du bekommst diese Mail, weil bei dieser Abstimmung "Ergebnis beim Schließen mitteilen" eingeschaltet ist.</p>
-      </div>
-    `
-  )
+  return send(toEmail, `Abstimmung beendet: ${result.title}`, renderMail({
+    brand: MAIL_BRAND,
+    heading: `Abstimmung beendet: ${result.title}`,
+    blocks: [
+      { kind: 'p', text: 'Hallo,' },
+      { kind: 'p', text: [{ strong: result.summary }] },
+      { kind: 'list', items: result.lines },
+      { kind: 'p', text: 'Alle Details und den CSV-Export findest du auf der Verwaltungsseite.' },
+      { kind: 'button', label: 'Zur Verwaltungsseite', href: link }
+    ],
+    footer: 'Du bekommst diese Mail, weil bei dieser Abstimmung „Ergebnis beim Schließen mitteilen“ eingeschaltet ist.'
+  }))
 }
 
 /** Terminabstimmung: der festgelegte Termin an eine abstimmende Person (app/lib/final-date.ts). */
@@ -180,13 +146,6 @@ export async function sendFinalDateEmail(toEmail: string, pollTitle: string, dat
   return send(
     toEmail,
     `Termin steht fest: ${pollTitle}`,
-    `Hallo,
-
-die Terminabstimmung "${pollTitle}" ist entschieden: ${dateLabel}.
-${eventUrl ? `\nZur Veranstaltung (Zu-/Absage): ${eventUrl}\n` : ''}
-Ergebnis der Abstimmung: ${pollLink}
-
-Du bekommst diese Mail, weil du bei der Abstimmung mitgemacht hast.`,
     layout(
       `Termin steht fest: ${pollTitle}`,
       `Die Terminabstimmung ist entschieden: ${dateLabel}.${eventUrl ? ' Über den Button kannst du direkt zu- oder absagen.' : ''}`,
@@ -203,12 +162,6 @@ export async function sendDecisionRequestEmail(toEmail: string, pollTitle: strin
   return send(
     toEmail,
     `${tie ? 'Termin entscheiden' : 'Termin bestätigen'}: ${pollTitle}`,
-    `Hallo,
-
-die Terminabstimmung "${pollTitle}" ist beendet. ${summary}
-
-${ask} Erst danach werden die Abstimmenden benachrichtigt und der Termin ggf. an rsvp-app übergeben:
-${link}`,
     layout(
       `${tie ? 'Termin entscheiden' : 'Termin bestätigen'}: ${pollTitle}`,
       `Die Terminabstimmung ist beendet. ${summary} ${ask} Erst danach werden die Abstimmenden benachrichtigt und der Termin ggf. an rsvp-app übergeben.`,

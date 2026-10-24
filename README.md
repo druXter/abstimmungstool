@@ -413,7 +413,7 @@ Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
   `no-store`; Passwort-Reset, Stimm-Bestätigung und Tafel (Geheimnis in der URL) außerdem `no-referrer`. Einzige
   Ausnahme vom Einbett-Verbot ist `/fragebogen/<id>/einbetten`: dort `frame-ancestors 'self'` plus
   `EMBED_ALLOWED_ORIGINS` (`proxy.ts`, siehe "Fragebögen").
-* **Gemeinsame Helfer aus suite-kit** statt eigener Kopien: `escapeHtml` für alles in HTML-Mails, `csvResponse` für
+* **Gemeinsame Helfer aus suite-kit** statt eigener Kopien: `renderMail` für alle Mails (gemeinsame Vorlage der Suite, escapet selbst), `csvResponse` für
   die CSV-Exporte (Semikolon, CRLF, BOM, Formel-Schutz), `readLimitedText` für die Bodies der Anbindungen (413 über
   10 KB, schon beim Lesen begrenzt), `safeEqual` für Geheimnisse.
 
