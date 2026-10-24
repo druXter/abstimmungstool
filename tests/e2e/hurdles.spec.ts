@@ -125,6 +125,28 @@ test.describe('Zugangscode', () => {
     await expect(page.getByRole('heading', { name: 'Zugangscode erforderlich' })).toBeVisible()
   })
 
+  test('Cookie lässt sich nicht selbst berechnen - Raten geht nur über die gedrosselte Code-Eingabe', async ({ page }) => {
+    await page.setExtraHTTPHeaders({ 'x-forwarded-for': uniqueIp() })
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { accessCode: 'Sommerfest' })
+    const setCookie = (value: string) => page.context().addCookies([{ name: `poll_access_${poll.id}`, value, domain: '127.0.0.1', path: `/${poll.id}` }])
+
+    // Früheres Format: SHA-256 über Abstimmungs-ID und Code - aus öffentlichen Angaben berechenbar.
+    await setCookie(createHash('sha256').update(`${poll.id}\u0000sommerfest`).digest('base64url'))
+    await page.goto(`/${poll.id}`)
+    await expect(page.getByRole('heading', { name: 'Zugangscode erforderlich' })).toBeVisible()
+
+    // Positivkontrolle: über die Code-Eingabe wird freigeschaltet, der Schlüssel liegt nur in der Datenbank.
+    await page.getByLabel('Zugangscode').fill('Sommerfest')
+    await page.getByRole('button', { name: 'Weiter' }).click()
+    await expect(page.getByRole('heading', { name: poll.title })).toBeVisible()
+    const { accessCookieKey } = await prisma.poll.findUniqueOrThrow({ where: { id: poll.id }, select: { accessCookieKey: true } })
+    expect(accessCookieKey).toMatch(/^[A-Za-z0-9_-]{43}$/)
+    const cookie = (await page.context().cookies()).find(c => c.name === `poll_access_${poll.id}`)!
+    expect(cookie.value).not.toContain('sommerfest')
+    expect(cookie.httpOnly).toBe(true)
+  })
+
   test('castVote prüft den Code selbst - ein Formular ohne Freischaltung zählt nicht', async ({ page }) => {
     await page.setExtraHTTPHeaders({ 'x-forwarded-for': uniqueIp() })
     const owner = await createAccount()

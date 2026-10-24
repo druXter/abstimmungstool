@@ -148,8 +148,11 @@ Identität ersetzen** - die Oberfläche sagt das jeweils beim Einstellen:
 * **Zugangscode** (`Poll.accessCode`, `app/lib/access-code.ts`): Ohne Code zeigt die
   Abstimmungsseite nichts - weder Titel noch Optionen noch Ergebnis -, und `castVote` lehnt
   ab. Wer ihn eingibt, bekommt ein Cookie `poll_access_<pollId>` (nur für den Pfad dieser
-  Abstimmung, 30 Tage) mit einem Hash aus Abstimmung und Code; ein geänderter Code macht alte
-  Cookies wertlos. Groß-/Kleinschreibung zählt nicht. Eingaben sind pro IP und Abstimmung
+  Abstimmung, 30 Tage) mit einem HMAC über Abstimmung und Code, Schlüssel ist ein zufälliger Wert je
+  Abstimmung (`Poll.accessCookieKey`, entsteht beim ersten richtigen Code, nur in der Datenbank). Ein
+  geänderter Code macht alte Cookies wertlos. Ohne geheimen Schlüssel ließe sich das Cookie aus der
+  öffentlichen Abstimmungs-ID und einem geratenen Code selbst berechnen - Raten ginge dann an der
+  Drosselung vorbei (bis 24.10.2026 so; seitdem einmal neu eingeben). Groß-/Kleinschreibung zählt nicht. Eingaben sind pro IP und Abstimmung
   gedrosselt (10 in 15 Minuten). Der Code liegt im Klartext in der Datenbank, weil die
   Verwaltungsseite ihn zum Weitergeben anzeigt (dort auch ein Link mit `?code=`, der das Feld
   nur vorausfüllt). **Verhindert keine Mehrfachabstimmung** - alle kennen denselben Code.

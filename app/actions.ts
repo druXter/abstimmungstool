@@ -469,7 +469,7 @@ export async function retryRsvpTransfer(formData: FormData): Promise<void> {
 export async function unlockPoll(formData: FormData): Promise<void> {
   const pollId = formString(formData, 'pollId', 50)
   const identity = identityFromForm(formData)
-  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, accessCode: true } })
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, accessCode: true, accessCookieKey: true } })
   if (!poll) return
 
   const rules = accessCodeRules(await clientIp(), poll.id)

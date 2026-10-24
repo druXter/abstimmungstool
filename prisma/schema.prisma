@@ -195,6 +195,10 @@ model Poll {
   // gespeichert, weil die Verwaltung ihn zum Weitergeben wieder anzeigen muss - er ist ein
   // geteiltes Merkwort, kein Passwort. Siehe app/lib/access-code.ts.
   accessCode               String?
+  // Zufälliger Schlüssel für das Cookie nach richtiger Code-Eingabe (HMAC über Abstimmung und Code, app/lib/access-code.ts).
+  // Ohne ihn ließe sich das Cookie aus der öffentlichen Abstimmungs-ID und einem geratenen Code selbst berechnen - und
+  // damit die Drosselung der Code-Eingabe umgehen. Entsteht beim ersten richtigen Code, nie nach außen gegeben.
+  accessCookieKey          String?
   // Nur im Modus LINK: "nur Teilnahme speichern, nicht wer was gewählt hat" (geheime Wahl).
   // Die Stimme hängt dann an einem Schlüssel, der sich nur aus dem Link-Token ableiten lässt
   // (den die Datenbank nie sieht), am VoterLink steht nur hasVoted - siehe
