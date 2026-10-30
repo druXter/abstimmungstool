@@ -262,6 +262,10 @@ model Poll {
   assembly                 Assembly?         @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
   assemblyPresent          Int?
   assemblyQuorumMet        Boolean?
+  // Mehrheitsregel (Idee L33, app/lib/majority.ts, null = keine) und beim Schließen festgehalten: Zahl der Mitglieder
+  // für Regeln "der Mitglieder" (Assembly.memberCount, sonst die Zusagen in rsvp-app; null = nicht bekannt).
+  assemblyMajority         String?
+  assemblyMembers          Int?
 
   @@index([ownerId])
   @@index([assemblyId])
@@ -799,6 +803,10 @@ model Assembly {
   secretDefault    Boolean           @default(true)
   // Mitglieder checken sich in der Sitzung selbst ein und aus (über rsvp-app, `assembly-presence`).
   selfCheckin      Boolean           @default(false)
+  // Mehrheiten (Idee L33, app/lib/majority.ts): Vorauswahl für neue Ja/Nein/Enthaltung-Abstimmungen (null = keine
+  // Regel, nur Zahlen) und die Zahl der Mitglieder laut Satzung für Regeln "der Mitglieder" (null = Zusagen in rsvp-app).
+  majorityDefault  String?
+  memberCount      Int?
   // Tafel /sitzung/<id>/tafel?k=<boardKey> für Beamer und Gäste ohne Stimmrecht, null = keine Tafel. Zufällig, neu
   // erzeugbar; zeigt nur, was auch Mitglieder sehen.
   boardKey         String?           @unique

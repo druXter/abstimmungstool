@@ -165,6 +165,11 @@ export type Decision = {
   quorumMet: boolean | null
   /** Namen nur bei namentlichen Abstimmungen - wie in den Ergebnissen der Sitzung. */
   options: { label: string; votes: number; names?: string[] }[]
+  /**
+   * Nur mit Mehrheitsregel (Idee L33): Ergebnis und Rechnung als Text, z.B. "angenommen (absolute Mehrheit der
+   * Anwesenden: 12 Ja, nötig 11 von 20)". Fehlt sonst - ältere Empfänger kennen das Feld nicht und lassen es weg.
+   */
+  verdict?: string
 }
 
 /** Antwort: die geschlossenen Abstimmungen der Sitzung mit Ergebnis, signiert, 5 Minuten gültig. null ohne Secret. */

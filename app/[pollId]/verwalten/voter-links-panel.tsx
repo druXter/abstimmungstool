@@ -117,7 +117,7 @@ export default function VoterLinksPanel({
                 <span className="min-w-0 truncate">
                   <span className={`inline-block w-2 h-2 rounded-full mr-2 ${link.hasVoted ? 'bg-green-500' : 'bg-gray-300 dark:bg-gray-600'}`} aria-hidden />
                   {link.label}
-                  {link.email && link.email !== link.label && <span className="text-gray-400 dark:text-gray-500"> · {link.email}</span>}
+                  {link.email && link.email !== link.label && <span className="text-gray-500 dark:text-gray-400"> · {link.email}</span>}
                   <span className="sr-only">{link.hasVoted ? ' (hat abgestimmt)' : ' (fehlt noch)'}</span>
                 </span>
                 <span className="flex items-center gap-3 text-xs">

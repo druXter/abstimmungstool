@@ -67,7 +67,7 @@ export async function openSection(page: Page, id: string) {
 
 /** Meldet über das Konto-Menü in der Kopfzeile ab. */
 export async function logout(page: Page) {
-  await page.getByLabel('Konto-Menü').click()
+  await page.locator('summary', { hasText: 'Konto-Menü' }).click()
   await page.getByRole('button', { name: 'Abmelden' }).click()
 }
 

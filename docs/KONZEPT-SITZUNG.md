@@ -108,8 +108,8 @@ schließt ab. Nur wer abstimmen dürfte, kann sich melden (mit „Nur Anwesende�
 ## 5. Protokoll
 
 - rsvp-app: Anwesenheit (Reiter, CSV) - wer wann kam und ging.
-- Abstimmungstool: Beschlüsse der Sitzung als CSV (Zeit, Titel, Ergebnis, anwesend, beschlussfähig, bei namentlich die
-  Namen).
+- Abstimmungstool: Beschlüsse der Sitzung als CSV (Zeit, Titel, Ergebnis, anwesend, beschlussfähig, Ergebnis nach der
+  Mehrheitsregel, bei namentlich die Namen).
 - Zeitplan: Rückblick mit Ist-Zeiten und Protokollnotizen je Tagesordnungspunkt (L24). **Zusammenführung:** Gibt der
   Termin in rsvp-app es frei (zwei einzelne Häkchen: Kommen und Gehen, Beschlüsse), fragt der Rückblick beim Öffnen
   rsvp-app (`protocol-request` an `/api/timeline/protocol`, Secret der Zeitplan-Anbindung); rsvp-app holt die Beschlüsse
@@ -173,6 +173,28 @@ Die Tagesordnung bleibt im Zeitplan-Tool; die Sitzung kennt zwei Links, beide nu
 
 **Bewusst nicht:** eine eigene Steuer-Schnittstelle Abstimmungstool → Zeitplan. Sie bräuchte ein weiteres Secret und
 eine zweite Rechteprüfung; der iFrame nutzt die vorhandene Live-Steuerung mit ihren Rechten unverändert.
+
+## 9. Mehrheiten (Idee L33, umgesetzt 2026-10-30)
+
+Die Leitung wählt die Regel aus ihrer Satzung, das Tool rechnet nur (`app/lib/majority.ts`, reine Funktionen mit
+Unit-Tests). Nur für **Ja/Nein/Enthaltung**; eine Wahl mit eigenen Optionen bekommt nie eine Regel (Personenwahlen,
+Stichwahl und Losentscheid bewusst nicht).
+
+- **Regeln** (`Poll.assemblyMajority`, Vorauswahl `Assembly.majorityDefault`, pro Abstimmung änderbar, leer = nur
+  Zahlen wie bisher): einfache Mehrheit (mehr Ja als Nein, Gleichstand abgelehnt), absolute Mehrheit (mehr als die
+  Hälfte) und zwei Drittel (mindestens ⅔, aufgerundet) - bezogen auf die abgegebenen Stimmen (Enthaltungen zählen wie
+  Nein), die Anwesenden oder die Mitglieder; zwei Drittel zusätzlich der Ja- und Nein-Stimmen (Enthaltungen zählen nicht).
+  Ohne eine Ja-Stimme ist nie etwas angenommen.
+- **Bezugsgrößen beim Schließen festgehalten:** Anwesende (`assemblyPresent`, wie bisher) und Mitglieder
+  (`assemblyMembers` = `Assembly.memberCount` aus den Einstellungen, z.B. die Sitze laut Satzung, sonst die Zusagen in
+  rsvp-app). Eine spätere Änderung der Einstellungen ändert keine geschlossene Abstimmung.
+- **Ergebnis:** „angenommen“ bzw. „abgelehnt“ mit der Rechnung („absolute Mehrheit der Anwesenden: 12 Ja, nötig 11 von
+  20“). War die Sitzung beim Schließen nicht beschlussfähig: „kein Beschluss (nicht beschlussfähig)“, egal wie
+  abgestimmt wurde. Fehlt die Bezugsgröße (rsvp-app beim Schließen nicht erreichbar): „Mehrheit nicht bestimmbar“ statt
+  zu raten.
+- **Wo:** Sitzungsleitung, Mitgliederansicht, Tafel (auch frühere Ergebnisse), CSV (Spalten „Ergebnis“ und „Mehrheit“)
+  und die Beschlüsse für rsvp-app (optionales Feld `verdict` als Text, rsvp-app prüft es und gibt es an den
+  Zeitplan-Rückblick weiter, der es ans Ende der Zeile setzt). Ältere Empfänger ignorieren das Feld.
 
 ## Datenschutz
 

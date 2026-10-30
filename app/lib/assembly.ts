@@ -10,8 +10,7 @@ import { fetchRoster, type Roster } from './assembly-coupling'
 
 export const MAX_ASSEMBLY_TITLE = 200
 export const MAX_QUORUM = 10_000
-/** Ja/Nein/Enthaltung - die übliche Beschlussabstimmung. */
-export const YES_NO_ABSTAIN = ['Ja', 'Nein', 'Enthaltung']
+export { YES_NO_ABSTAIN } from './majority'
 /** So lange gilt der Beitritt in diesem Browser - eine Sitzung dauert selten länger, danach erneut über rsvp-app. */
 const MEMBER_COOKIE_HOURS = 24
 

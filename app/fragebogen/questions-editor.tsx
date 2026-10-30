@@ -206,7 +206,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         <button
                           type="button" aria-label={`Option ${j + 1} entfernen`}
                           onClick={() => update(i, prev => ({ options: prev.options.filter((_, k) => k !== j), optionsText: prev.options.map((_, k) => prev.optionsText[k] ?? false).filter((_, k) => k !== j) }))}
-                          className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+                          className="text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
                         </button>
@@ -360,7 +360,7 @@ function LabelList({ title, name, items, min, max, question, itemLabel, placehol
               <button
                 type="button" aria-label={`${itemLabel} ${j + 1} entfernen`}
                 onClick={() => onChange(items.filter((_, k) => k !== j))}
-                className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+                className="text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-300 px-1"
               >
                 ✕
               </button>
@@ -412,7 +412,7 @@ function PairList({ question, name, left, right, onChange }: {
               <button
                 type="button" aria-label={`Zeile ${j + 1} entfernen`}
                 onClick={() => onChange(left.filter((_, k) => k !== j), left.map((_, k) => right[k] ?? '').filter((_, k) => k !== j))}
-                className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+                className="text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-300 px-1"
               >
                 ✕
               </button>

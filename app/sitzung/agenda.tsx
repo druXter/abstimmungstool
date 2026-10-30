@@ -9,7 +9,7 @@ export default function AgendaList({ agenda }: { agenda: Agenda }) {
   return (
     <ol className="space-y-1 text-sm" data-testid="agenda">
       {agenda.items.map(item => (
-        <li key={item.id} data-status={item.status} className={`flex gap-3 rounded-md px-2 py-1 ${item.status === 'now' ? 'bg-blue-50 font-semibold text-blue-900 dark:bg-blue-950 dark:text-blue-100' : item.status === 'past' ? 'text-gray-400 dark:text-gray-500' : 'text-gray-800 dark:text-gray-200'}`}>
+        <li key={item.id} data-status={item.status} className={`flex gap-3 rounded-md px-2 py-1 ${item.status === 'now' ? 'bg-blue-50 font-semibold text-blue-900 dark:bg-blue-950 dark:text-blue-100' : item.status === 'past' ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-200'}`}>
           <span className={`w-12 shrink-0 tabular-nums ${item.status === 'cancelled' ? 'line-through' : ''}`}>{item.approximate ? '~' : ''}{agendaClock(item.start, agenda.timezone)}</span>
           <span className={`min-w-0 ${item.status === 'cancelled' ? 'line-through' : ''}`}>
             {item.title}

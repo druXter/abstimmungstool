@@ -78,7 +78,7 @@ Formular, auch kein Cookie-Ersatz; der Nachweis reist beim Absenden als Feld mit
 
 * `/fragebogen/<id>` – normale Seite mit Kopfzeile, `/fragebogen/<id>/einbetten` – ohne Kopf- und Fußzeile, mit
   transparentem Hintergrund, meldet ihre Höhe per `postMessage` (`{ type: 'abstimmungstool:hoehe', id, height }`) an
-  die einbettende Seite.
+  die einbettende Seite, seit 2026-10-30 zusätzlich im Format der Suite (`{ type: 'suite:height', height }`, Idee Q10).
 * **Nur diese Route** darf in fremden Seiten erscheinen. `proxy.ts` setzt dort zur Laufzeit
   `frame-ancestors 'self' <EMBED_ALLOWED_ORIGINS>`; die allgemeine Regel in `next.config.ts` (`frame-ancestors 'none'`,
   `X-Frame-Options: DENY`) nimmt die Route aus. Laufzeit statt Build, weil die `.env` nicht im Docker-Image liegt.

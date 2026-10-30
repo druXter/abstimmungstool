@@ -179,7 +179,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         <button
                           type="button" aria-label={`Antwort ${j + 1} entfernen`}
                           onClick={() => update(i, prev => ({ answers: prev.answers.filter((_, k) => k !== j) }))}
-                          className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+                          className="text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
                         </button>
@@ -222,7 +222,7 @@ export default function QuestionsEditor({ initial }: { initial?: EditorQuestion[
                         <button
                           type="button" aria-label={`Richtige Antwort ${j + 1} entfernen`}
                           onClick={() => update(i, prev => ({ answers: prev.answers.filter((_, k) => k !== j) }))}
-                          className="text-gray-400 dark:text-gray-500 hover:text-red-700 dark:hover:text-red-300 px-1"
+                          className="text-gray-500 dark:text-gray-400 hover:text-red-700 dark:hover:text-red-300 px-1"
                         >
                           ✕
                         </button>

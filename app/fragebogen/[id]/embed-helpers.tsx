@@ -1,13 +1,16 @@
 'use client'
 
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { EMBED_HEIGHT_MESSAGE } from 'suite-kit/ui'
 import { HEIGHT_MESSAGE } from '../../lib/survey-embed'
 import { surveyTexts, type SurveyLang } from '../../lib/survey-i18n'
 
 /**
  * Inhalt der eingebetteten Seite: meldet seine Höhe bei jeder Änderung per postMessage an die
  * einbettende Seite, damit sie das iFrame ohne eigene Bildlaufleiste passend groß machen kann. Nur
- * die Höhe und die ID geht hinaus - nichts, was eine fremde Seite nicht ohnehin sähe.
+ * die Höhe und die ID geht hinaus - nichts, was eine fremde Seite nicht ohnehin sähe. Zweimal: im
+ * eigenen Format (mit ID, so liest es die Campus-App) und im Format der Suite (suite-kit
+ * EmbedHeight, Idee Q10 - so liest es die Startseite).
  */
 export function EmbedRoot({ surveyId, lang = 'de', children }: { surveyId: string; lang?: SurveyLang; children: ReactNode }) {
   const root = useRef<HTMLDivElement>(null)
@@ -15,7 +18,11 @@ export function EmbedRoot({ surveyId, lang = 'de', children }: { surveyId: strin
   useEffect(() => {
     const element = root.current
     if (!element || window.parent === window) return
-    const report = () => window.parent.postMessage({ type: HEIGHT_MESSAGE, id: surveyId, height: Math.ceil(element.getBoundingClientRect().height) }, '*')
+    const report = () => {
+      const height = Math.ceil(element.getBoundingClientRect().height)
+      window.parent.postMessage({ type: HEIGHT_MESSAGE, id: surveyId, height }, '*')
+      window.parent.postMessage({ type: EMBED_HEIGHT_MESSAGE, height }, '*')
+    }
     const observer = new ResizeObserver(report)
     observer.observe(element)
     report()

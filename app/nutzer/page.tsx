@@ -137,7 +137,7 @@ export default async function NutzerPage({
                 )
               })}
             </ul>
-            <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
               Konten mit Admin-Rolle lassen sich hier nicht ändern oder löschen (Schutz vor versehentlichem Aussperren) -
               das geht nur per <code>create-user.js</code> auf dem Server.
             </p>

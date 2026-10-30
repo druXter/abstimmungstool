@@ -19,7 +19,7 @@ const subject = () => createHmac('sha256', 'x').update(unique()).digest('base64u
 const access = (assemblyId: string, eventId: string, sub: string, name: string, extra: object = {}) =>
   sign({ typ: 'assembly-access', assemblyId, eventId, sub, name, exp: exp(), ...extra })
 
-async function createAssembly(ownerId: string, data: Partial<{ presenceRequired: boolean; quorum: number | null; speakerList: boolean; secretDefault: boolean; rsvpEventId: string | null; selfCheckin: boolean; boardKey: string | null; timelineUrl: string | null }> = {}) {
+async function createAssembly(ownerId: string, data: Partial<{ majorityDefault: string | null; memberCount: number | null; presenceRequired: boolean; quorum: number | null; speakerList: boolean; secretDefault: boolean; rsvpEventId: string | null; selfCheckin: boolean; boardKey: string | null; timelineUrl: string | null }> = {}) {
   return prisma.assembly.create({ data: { title: `Sitzung ${unique()}`, ownerId, rsvpEventId: `ev${unique()}`, ...data } })
 }
 
@@ -274,7 +274,7 @@ test('Namentlich: Name an der Stimme, im Ergebnis und in der CSV; Abstimmungssei
   const csv = await (await admin.request.get(`/sitzung/${assembly.id}/verwalten/export`, { headers: { Cookie: (await admin.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ') } })).text()
   const outsider = await newPage(browser)
   expect((await outsider.request.get(`/sitzung/${assembly.id}/verwalten/export`)).status()).toBe(404)
-  expect(csv).toContain('Wahl Kasse;namentlich;Finn;1;1;1;;Eva')
+  expect(csv).toContain('Wahl Kasse;namentlich;Finn;1;1;1;;;;Eva')
 })
 
 test('Beschlüsse fürs Protokoll (rsvp-app): nur geschlossene, Namen nur namentlich, nur für den verknüpften Termin', async ({ browser, request }) => {
@@ -322,6 +322,82 @@ test('Beschlüsse fürs Protokoll (rsvp-app): nur geschlossene, Namen nur nament
   expect(payload.decisions[1].options).toContainEqual({ label: 'Eva', votes: 1 })
   expect(JSON.stringify(payload.decisions[1])).not.toContain('names')
   expect(secret.secretBallot).toBe(true)
+})
+
+test('Mehrheiten (L33): Regel pro Abstimmung, angenommen/abgelehnt, kein Beschluss ohne Beschlussfähigkeit, in Tafel, CSV und Protokoll', async ({ browser, request }) => {
+  const owner = await createAccount()
+  const assembly = await createAssembly(owner.id, { secretDefault: false, quorum: 2, boardKey: `k${unique()}` })
+  const [ida, jan, kim] = [subject(), subject(), subject()]
+  setRoster(assembly.id, { present: [ida, jan, kim], members: 9 })
+  const pages = [await member(browser, assembly, 'Ida', ida), await member(browser, assembly, 'Jan', jan), await member(browser, assembly, 'Kim', kim)]
+  const admin = await newPage(browser)
+  await login(admin, owner.email)
+
+  // Vorauswahl und Zahl der Mitglieder in den Einstellungen
+  await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+  await admin.getByText('Einstellungen', { exact: true }).click()
+  await admin.getByLabel('Mehrheit für neue Abstimmungen').selectOption('TWO_THIRDS_MEMBERS')
+  await admin.getByLabel('Mitglieder insgesamt (optional)').fill('6')
+  await admin.getByRole('button', { name: 'Speichern', exact: true }).click()
+  await expect(admin.getByText('Einstellungen gespeichert.')).toBeVisible()
+  expect(await prisma.assembly.findUniqueOrThrow({ where: { id: assembly.id } })).toMatchObject({ majorityDefault: 'TWO_THIRDS_MEMBERS', memberCount: 6 })
+  await expect(admin.getByLabel('Mehrheit (nur Ja / Nein / Enthaltung)')).toHaveValue('TWO_THIRDS_MEMBERS')
+
+  const vote = async (title: string, answers: string[]) => {
+    for (const [i, answer] of answers.entries()) {
+      await pages[i].page.reload()
+      await ballot(pages[i].page, title).getByLabel(answer).check()
+      await ballot(pages[i].page, title).getByRole('button', { name: 'Abstimmen' }).click()
+      await expect(ballot(pages[i].page, title)).toContainText('Deine Stimme ist abgegeben.')
+    }
+    await admin.goto(`/sitzung/${assembly.id}/verwalten`)
+    await admin.getByTestId('open-polls').locator('li').filter({ hasText: title }).getByRole('button', { name: 'Schließen' }).click()
+    await expect(admin.getByTestId('closed-polls')).toContainText(title)
+  }
+
+  // ⅔ der Mitglieder (6): 3 Ja reichen nicht (nötig 4) - Mitgliederzahl aus den Einstellungen, nicht aus rsvp-app (9)
+  await startPoll(admin, assembly.id, 'Satzungsänderung')
+  await vote('Satzungsänderung', ['Ja', 'Ja', 'Ja'])
+  const closed = (title: string) => admin.getByTestId('closed-polls').locator('li').filter({ hasText: title }).first()
+  await expect(closed('Satzungsänderung').getByTestId('verdict')).toHaveText(/abgelehnt.*⅔ der Mitglieder: 3 Ja, nötig 4 von 6/)
+  expect(await prisma.poll.findFirstOrThrow({ where: { assemblyId: assembly.id, title: 'Satzungsänderung' } })).toMatchObject({ assemblyMajority: 'TWO_THIRDS_MEMBERS', assemblyMembers: 6 })
+
+  // Einfache Mehrheit pro Abstimmung gewählt: 2 Ja, 1 Nein = angenommen
+  await admin.getByLabel('Antrag bzw. Frage').fill('Antrag Grillfest')
+  await admin.getByLabel('Mehrheit (nur Ja / Nein / Enthaltung)').selectOption('SIMPLE')
+  await admin.getByRole('button', { name: 'Abstimmung starten' }).click()
+  await expect(admin.getByTestId('open-polls')).toContainText('einfache Mehrheit')
+  await vote('Antrag Grillfest', ['Ja', 'Nein', 'Ja'])
+  await expect(closed('Antrag Grillfest').getByTestId('verdict')).toHaveText(/angenommen.*einfache Mehrheit: 2 Ja, 1 Nein/)
+
+  // Eine Wahl bekommt nie eine Regel, auch wenn das Formular eine schickt
+  const election = await startPoll(admin, assembly.id, 'Wahl Kasse', { choices: ['Ida', 'Jan'] })
+  expect(election.assemblyMajority).toBeNull()
+
+  // Nicht beschlussfähig (nur 1 anwesend, ab 2): kein Beschluss trotz Ja
+  setRoster(assembly.id, { present: [ida], members: 9 })
+  await startPoll(admin, assembly.id, 'Antrag spät')
+  await admin.waitForTimeout(5500)
+  await vote('Antrag spät', ['Ja'])
+  await expect(closed('Antrag spät').getByTestId('verdict')).toHaveText(/kein Beschluss \(nicht beschlussfähig\)/)
+
+  // Mitgliederansicht und Tafel zeigen das Ergebnis
+  await pages[0].page.reload()
+  await expect(pages[0].page.getByTestId('assembly-result').filter({ hasText: 'Antrag Grillfest' }).getByTestId('verdict')).toContainText('angenommen')
+  const board = await newPage(browser)
+  await board.goto(`/sitzung/${assembly.id}/tafel?k=${assembly.boardKey}`)
+  await expect(board.getByTestId('verdict')).toContainText('kein Beschluss')
+  await expect(board.getByTestId('board-earlier')).toContainText('Antrag Grillfest: Ja 2 · Nein 1 · Enthaltung 0 – angenommen')
+
+  // CSV und Beschlüsse fürs Protokoll
+  const csv = await (await admin.request.get(`/sitzung/${assembly.id}/verwalten/export`, { headers: { Cookie: (await admin.context().cookies()).map(c => `${c.name}=${c.value}`).join('; ') } })).text()
+  expect(csv).toContain('Satzungsänderung;namentlich;Ja;3;3;3;ja;abgelehnt;⅔ der Mitglieder: 3 Ja, nötig 4 von 6;')
+  const response = await request.post('/api/assembly/decisions', {
+    data: sign({ typ: 'assembly-decisions', assemblyId: assembly.id, eventId: assembly.rsvpEventId, exp: exp(240) }), headers: { 'content-type': 'text/plain' }
+  })
+  const payload = JSON.parse(Buffer.from((await response.text()).split('.')[0], 'base64url').toString('utf8'))
+  expect(payload.decisions.find((d: { title: string }) => d.title === 'Antrag Grillfest').verdict).toBe('angenommen (einfache Mehrheit: 2 Ja, 1 Nein)')
+  expect(payload.decisions.find((d: { title: string }) => d.title === 'Wahl Kasse')).toBeUndefined()
 })
 
 test('Rednerliste: nur Anwesende melden sich, GO-Antrag zuerst, Leitung ruft auf; ohne Rednerliste nichts', async ({ browser }) => {

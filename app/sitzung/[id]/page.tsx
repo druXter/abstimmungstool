@@ -5,6 +5,8 @@ import { castVote } from '../../actions'
 import { requestToSpeak, selfPresence, withdrawSpeak } from '../../assembly-actions'
 import { resolveVoter } from '../../lib/voter-identity'
 import { loadResult, loadVoterNames } from '../../lib/results'
+import { verdictFor } from '../../lib/majority'
+import VerdictLine from '../verdict'
 import { fetchRoster } from '../../lib/assembly-coupling'
 import { currentMember, quorumState, SPEAKER_KIND_LABEL, speakerOrder } from '../../lib/assembly'
 import { fetchAgenda } from '../../lib/timeline'
@@ -219,6 +221,7 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
                   {[`${result.voters} abgestimmt`, poll.assemblyPresent !== null ? `${poll.assemblyPresent} anwesend` : null,
                     poll.assemblyQuorumMet === true ? 'beschlussfähig' : poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null].filter(Boolean).join(' · ')}
                 </p>
+                <VerdictLine verdict={verdictFor(poll, result.options)} />
               </article>
             ))}
           </section>

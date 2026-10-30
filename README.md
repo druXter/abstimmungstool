@@ -684,7 +684,8 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   (`parseSurveyAnswers`). Gedrosselt pro IP und Fragebogen (200 pro Stunde, anonym jede Abgabe, sonst die erste).
   Danach ein Danke-Text (einstellbar). Ergebnisse sieht nur die Verwaltung.
 * **Einbetten** (`/fragebogen/<id>/einbetten`): ohne Kopf- und Fußzeile (`[data-embed]` in `globals.css`), durchsichtig,
-  meldet seine Höhe per `postMessage({ type: 'abstimmungstool:hoehe', id, height })`. Die Verwaltung zeigt den
+  meldet seine Höhe per `postMessage({ type: 'abstimmungstool:hoehe', id, height })` und zusätzlich im Format der
+  Suite (`{ type: 'suite:height', height }`, suite-kit `EmbedHeight`, Idee Q10 - so liest es die Startseite). Die Verwaltung zeigt den
   fertigen Schnipsel (iFrame plus Listener für die Höhe). Voraussetzungen:
   * Die einbettende Seite steht in `EMBED_ALLOWED_ORIGINS` (`.env`, durch Leerzeichen getrennt, Platzhalter nur als
     erste Subdomain, z.B. `https://campus-koblenz.app https://*.ramonroeser.de`). `proxy.ts` setzt daraus zur Laufzeit
@@ -775,7 +776,11 @@ setzt (24 Stunden, nur der Hash in `AssemblyMember.tokenHash`). Ein Beitritt von
 
 **Abstimmen** (`Poll.assemblyId`, Identität `ASSEMBLY`, nie in den normalen Einstellungen wählbar): „Neue Abstimmung“
 in der Verwaltung mit Titel und Art (Ja/Nein/Enthaltung oder Wahl mit eigenen Optionen, wahlweise mehrere), sofort
-offen, Ergebnis nach dem Schließen. Mitglieder stimmen direkt auf `/sitzung/<id>` ab, die Seite aktualisiert sich
+offen, Ergebnis nach dem Schließen. **Mehrheiten** (Idee L33, Konzept Abschnitt 9): Für Ja/Nein/Enthaltung lässt sich
+eine Regel wählen (Vorauswahl in den Einstellungen) - einfache Mehrheit, absolute Mehrheit oder zwei Drittel der
+abgegebenen Stimmen, der Anwesenden oder der Mitglieder (Zahl aus den Einstellungen, sonst die Zusagen). Das Ergebnis
+zeigt dann „angenommen“ oder „abgelehnt“ mit der Rechnung, bei fehlender Beschlussfähigkeit „kein Beschluss“ - in
+Leitung, Mitgliederansicht, Tafel, CSV und im Protokoll des Zeitplans. Wahlen haben keine Regel. Mitglieder stimmen direkt auf `/sitzung/<id>` ab, die Seite aktualisiert sich
 selbst (`Assembly.version`, `/api/sitzung/<id>/stand`). **Geheim:** Schlüssel aus Cookie-Token und Abstimmung (wie
 die geheime Wahl mit Stimmlinks), keine Zeitstempel; die Teilnahme steht in `AssemblyMember.votedPolls` (eine
 Änderung der Zeile, keine neue Zeile - so verrät die Reihenfolge nichts). Wer danach von einem anderen Gerät
@@ -950,6 +955,22 @@ die Datenschutzerklärung, Punkt 11). Ein weiterer Cronjob-Endpoint, den Uptime 
 * Außerdem abgelaufene Sitzungen, Einladungs-/Reset-Links, veraltete Drossel-Zähler und nie
   bestätigte E-Mail-Anfragen (Modus `EMAIL`) nach Ablauf ihres Links.
 
+## Auskunft und Löschung zu einer Adresse
+
+Auf dem Server, ohne Endpunkt im Netz (Idee Q8, Regeln in `suite-kit/docs/KONVENTIONEN.md` „Datenschutz“):
+
+```bash
+docker compose exec -T abstimmungstool node auskunft.js anna@example.org                   # alles zur Adresse als JSON
+docker compose exec -T abstimmungstool node auskunft.js anna@example.org --loeschen        # Probe: was würde gelöscht
+docker compose exec -T abstimmungstool node auskunft.js anna@example.org --loeschen --ja   # löschen
+```
+
+Für alle Tools auf einmal: `suite-kit/scripts/auskunft.sh <adresse> [--loeschen [--ja]]` (je Tool eine Datei in
+`~/auskunft/`). Gefunden wird ohne Groß-/Kleinschreibung; Tokens, Hashes und Push-Schlüssel stehen nie in der Ausgabe.
+Verwaltungskonten löscht das Skript nie (daran hängen Inhalte), es nennt sie in den Hinweisen.
+
+Findet Verwaltungskonto, Stimmen mit der Adresse als Schlüssel (Modus EMAIL und RSVP), Bestätigungen, Stimmlinks, Freigabelisten und alte Verwaltungslinks. Löschen anonymisiert Stimmen (Ergebnisse bleiben), löscht Bestätigungen und entfernt die Adresse aus Stimmlinks, Freigabelisten (nie leer - sonst dürfte jede Adresse) und Verwaltungslinks.
+
 ## Setup
 
 ```bash
@@ -985,6 +1006,9 @@ npm test                          # Unit-Tests
 npx playwright install chromium   # einmalig
 npm run test:e2e
 ```
+
+**Barrierefreiheit** (Idee Q11): `tests/e2e/a11y.spec.ts` prüft die wichtigsten Seiten für Gäste und Verwaltung mit
+axe (`@axe-core/playwright`) nach WCAG 2.1 A/AA, hell und dunkel; jeder Befund lässt den Test scheitern. `tests/e2e/auskunft.spec.ts` prüft `auskunft.js`.
 
 Abgedeckt sind der Konten-Verbund (`suite.spec.ts`; Teilnehmendenkonten: `participant.spec.ts`), die Stimmabgabe samt
 Identitätsmodi (`voting.spec.ts`; rsvp-app spielen die Tests dort selbst, indem sie

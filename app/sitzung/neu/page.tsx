@@ -29,7 +29,7 @@ export default async function NewAssemblyPage({ searchParams }: { searchParams: 
             <label htmlFor="assembly-title" className={labelClass}>Titel</label>
             <input id="assembly-title" name="title" required maxLength={200} placeholder="z.B. Mitgliederversammlung 2026" className={inputClass} />
           </div>
-          <AssemblySettingsFields value={{ presenceRequired: true, quorum: null, speakerList: false, secretDefault: true, selfCheckin: false }} />
+          <AssemblySettingsFields value={{ presenceRequired: true, quorum: null, speakerList: false, secretDefault: true, selfCheckin: false, majorityDefault: null, memberCount: null }} />
         </Card>
         <div className="flex justify-end">
           <SubmitButton inline>Sitzung anlegen</SubmitButton>

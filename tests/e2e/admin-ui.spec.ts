@@ -193,7 +193,7 @@ test('Konto-Menü: Mein Konto und Abmelden, Konten nur für Creator und Admins',
   const nav = page.getByRole('navigation', { name: 'Hauptnavigation' })
   await expect(nav.getByRole('link', { name: 'Abstimmungen' })).toHaveAttribute('aria-current', 'page')
   await expect(nav.getByRole('link', { name: 'Konten' })).toBeVisible()
-  await page.getByLabel('Konto-Menü').click()
+  await page.locator('summary', { hasText: 'Konto-Menü' }).click()
   await page.getByRole('link', { name: 'Mein Konto' }).click()
   await expect(page).toHaveURL(/\/konto$/)
   await logout(page)

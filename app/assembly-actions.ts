@@ -14,6 +14,7 @@ import {
   bumpAssembly, checkPresence, currentMember, getAssemblyLevel, MAX_ASSEMBLY_TITLE, MAX_QUORUM, quorumState, YES_NO_ABSTAIN, type AssemblyLevel
 } from './lib/assembly'
 import { parseTimelineLiveUrl, parseTimelineUrl } from './lib/timeline'
+import { parseMajorityRule } from './lib/majority'
 
 const MAX_POLL_TITLE = 200
 const MAX_OPTIONS = 25
@@ -30,15 +31,17 @@ async function manageableAssembly(id: string, required: AssemblyLevel) {
   return assembly
 }
 
-function readQuorum(formData: FormData): number | null {
-  const value = Number(formString(formData, 'quorum', 10))
+function readCount(formData: FormData, name: string): number | null {
+  const value = Number(formString(formData, name, 10))
   return Number.isInteger(value) && value >= 1 && value <= MAX_QUORUM ? value : null
 }
 
 function readSettings(formData: FormData) {
   return {
     presenceRequired: formData.get('presenceRequired') === 'on',
-    quorum: readQuorum(formData),
+    quorum: readCount(formData, 'quorum'),
+    majorityDefault: parseMajorityRule(formString(formData, 'majorityDefault', 30)),
+    memberCount: readCount(formData, 'memberCount'),
     speakerList: formData.get('speakerList') === 'on',
     secretDefault: formData.get('secretDefault') === 'on',
     selfCheckin: formData.get('selfCheckin') === 'on'
@@ -79,11 +82,13 @@ export async function createAssemblyPoll(formData: FormData) {
   if (labels.length < 2 || labels.length > MAX_OPTIONS) redirect(manageUrl(assembly.id, 'fehler=optionen#neue-abstimmung'))
   const secret = formData.get('secret') === 'on'
   const multiple = kind === 'choice' && formData.get('multiple') === 'on'
+  // Mehrheitsregel nur für Ja/Nein/Enthaltung - eine Wahl hat keine (Personenwahlen bewusst nicht, Idee L33)
+  const majority = kind === 'yesno' ? parseMajorityRule(formString(formData, 'majority', 30)) : null
 
   await prisma.poll.create({
     data: {
       title, ownerId: assembly.ownerId, assemblyId: assembly.id, voterIdentity: 'ASSEMBLY', secretBallot: secret, showVoterNames: !secret,
-      allowMultipleChoices: multiple, resultsVisibility: 'AFTER_CLOSE',
+      allowMultipleChoices: multiple, resultsVisibility: 'AFTER_CLOSE', assemblyMajority: majority,
       options: { create: labels.map((label, position) => ({ label, position })) }
     }
   })
@@ -92,13 +97,16 @@ export async function createAssemblyPoll(formData: FormData) {
   redirect(manageUrl(assembly.id, 'abstimmung=1'))
 }
 
-/** Schließt eine Abstimmung der Sitzung und hält fest, wie viele anwesend waren und ob die Sitzung beschlussfähig war. */
-async function closeWithSnapshot(assembly: { id: string; rsvpEventId: string | null; quorum: number | null }, pollIds: string[]) {
+/**
+ * Schließt eine Abstimmung der Sitzung und hält fest, wie viele anwesend waren, ob die Sitzung beschlussfähig war und
+ * wie viele Mitglieder sie hat (für Mehrheiten "der Mitglieder": die Zahl aus den Einstellungen, sonst die Zusagen).
+ */
+async function closeWithSnapshot(assembly: { id: string; rsvpEventId: string | null; quorum: number | null; memberCount: number | null }, pollIds: string[]) {
   if (pollIds.length === 0) return
   const state = quorumState(assembly, await fetchRoster(assembly, { fresh: true }))
   await prisma.poll.updateMany({
     where: { id: { in: pollIds }, assemblyId: assembly.id, closedAt: null },
-    data: { closedAt: new Date(), assemblyPresent: state.present, assemblyQuorumMet: state.met }
+    data: { closedAt: new Date(), assemblyPresent: state.present, assemblyQuorumMet: state.met, assemblyMembers: assembly.memberCount ?? state.members }
   })
 }
 

@@ -17,6 +17,9 @@ import LiveRefresh from '../../live-refresh'
 import QuorumLine from '../../quorum-line'
 import AgendaList from '../../agenda'
 import AttendanceList from '../../attendance-list'
+import VerdictLine from '../../verdict'
+import { MajoritySelect } from '../../settings-fields'
+import { MAJORITY_RULES, parseMajorityRule, verdictFor } from '../../../lib/majority'
 
 export const dynamic = 'force-dynamic'
 
@@ -60,7 +63,7 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
     include: {
       owner: { select: { email: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
-      polls: { orderBy: { createdAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true } },
+      polls: { orderBy: { createdAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true } },
       speakers: { where: { doneAt: null }, include: { member: { select: { name: true } } } },
       members: { select: { sub: true } }
     }
@@ -175,6 +178,8 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
                     <p className={hintClass}>Nur für „Wahl“. Bei Ja / Nein / Enthaltung bleibt das Feld leer.</p>
                   </div>
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="multiple" /> Mehrere Optionen wählbar (nur Wahl)</label>
+                  <MajoritySelect id="poll-majority" name="majority" label="Mehrheit (nur Ja / Nein / Enthaltung)" defaultValue={assembly.majorityDefault}
+                    hint="Nach dem Schließen steht beim Ergebnis „angenommen“ oder „abgelehnt“. Vorauswahl unter „Einrichtung → Einstellungen“." />
                   <label className="flex items-center gap-2 text-sm"><input type="checkbox" name="secret" defaultChecked={assembly.secretDefault} /> Geheim (sonst namentlich)</label>
                   <SubmitButton inline>Abstimmung starten</SubmitButton>
                 </form>
@@ -189,6 +194,7 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
                     <li key={poll.id} className="flex flex-wrap items-center justify-between gap-3 py-2">
                       <span>
                         <span className="font-medium">{poll.title}</span> <Badge tone={poll.secretBallot ? 'indigo' : 'gray'}>{poll.secretBallot ? 'geheim' : 'namentlich'}</Badge>
+                        {parseMajorityRule(poll.assemblyMajority) && <> <Badge tone="blue">{MAJORITY_RULES[parseMajorityRule(poll.assemblyMajority)!].short}</Badge></>}
                         <span className="block text-sm text-gray-600 dark:text-gray-400">{voterCounts.get(poll.id) ?? 0} abgestimmt{quorum.present !== null ? ` von ${quorum.present} Anwesenden` : ''}</span>
                       </span>
                       <span className="flex gap-2">
@@ -263,6 +269,7 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
                         {[`${result.voters} abgestimmt`, poll.assemblyPresent !== null ? `${poll.assemblyPresent} anwesend` : null,
                           poll.assemblyQuorumMet === true ? 'beschlussfähig' : poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null].filter(Boolean).join(' · ')}
                       </p>
+                      <VerdictLine verdict={verdictFor(poll, result.options)} />
                     </li>
                   ))}
                 </ul>

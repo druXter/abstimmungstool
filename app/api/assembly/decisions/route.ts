@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server'
 import { readLimitedText } from 'suite-kit/web'
 import { prisma } from '../../../lib/prisma'
 import { loadResult, loadVoterNames } from '../../../lib/results'
+import { OUTCOME_LABEL, verdictDetail, verdictFor } from '../../../lib/majority'
 import { signDecisions, verifyDecisionsRequest, type Decision } from '../../../lib/assembly-coupling'
 
 export const dynamic = 'force-dynamic'
@@ -15,8 +16,8 @@ const MAX_BODY = 10_000
 /**
  * Beschlüsse einer Sitzung für das Protokoll im Zeitplan-Rückblick (docs/KONZEPT-SITZUNG.md, Nachricht
  * `assembly-decisions`): rsvp-app fragt signiert an, wenn der Termin die Beschlüsse freigibt. Geantwortet wird nur für
- * den Termin, mit dem die Sitzung verknüpft ist (sonst 404), mit Zeitpunkt, Ergebnis, Anwesenden und - nur bei
- * namentlichen Abstimmungen - den Namen. Laufende Abstimmungen gehen nicht heraus.
+ * den Termin, mit dem die Sitzung verknüpft ist (sonst 404), mit Zeitpunkt, Ergebnis, Anwesenden, dem Ergebnis
+ * nach der Mehrheitsregel (falls eingestellt) und - nur bei namentlichen Abstimmungen - den Namen. Laufende Abstimmungen gehen nicht heraus.
  */
 export async function POST(request: Request) {
   const body = await readLimitedText(request, MAX_BODY)
@@ -29,13 +30,14 @@ export async function POST(request: Request) {
 
   const polls = await prisma.poll.findMany({
     where: { assemblyId: assembly.id, closedAt: { not: null } }, orderBy: { closedAt: 'asc' }, take: MAX_DECISIONS,
-    select: { id: true, title: true, secretBallot: true, createdAt: true, closedAt: true, assemblyPresent: true, assemblyQuorumMet: true }
+    select: { id: true, title: true, secretBallot: true, createdAt: true, closedAt: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true }
   })
   const decisions: Decision[] = []
   for (const poll of polls) {
     const result = await loadResult(poll.id)
     if (!result) continue
     const names = poll.secretBallot ? null : await loadVoterNames(poll.id)
+    const verdict = verdictFor(poll, result.options)
     decisions.push({
       title: poll.title,
       secret: poll.secretBallot,
@@ -44,7 +46,8 @@ export async function POST(request: Request) {
       voters: result.voters,
       present: poll.assemblyPresent,
       quorumMet: poll.assemblyQuorumMet,
-      options: result.options.map(o => ({ label: o.label, votes: o.votes, ...(names ? { names: (names[o.id] ?? []).map(n => n.name) } : {}) }))
+      options: result.options.map(o => ({ label: o.label, votes: o.votes, ...(names ? { names: (names[o.id] ?? []).map(n => n.name) } : {}) })),
+      ...(verdict ? { verdict: `${OUTCOME_LABEL[verdict.outcome]} (${verdictDetail(verdict)})` } : {})
     })
   }
   const reply = signDecisions(assembly.id, message.eventId, decisions)

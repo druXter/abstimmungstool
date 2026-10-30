@@ -4,6 +4,8 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { loadResult, loadVoterNames } from '../../../lib/results'
+import { OUTCOME_LABEL, verdictFor } from '../../../lib/majority'
+import VerdictLine from '../../verdict'
 import { fetchRoster } from '../../../lib/assembly-coupling'
 import { quorumState, speakerOrder } from '../../../lib/assembly'
 import { agendaClock, fetchAgenda } from '../../../lib/timeline'
@@ -37,7 +39,7 @@ export default async function AssemblyBoardPage({ params, searchParams }: { para
   const assembly = await prisma.assembly.findUnique({
     where: { id },
     include: {
-      polls: { orderBy: { closedAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true } },
+      polls: { orderBy: { closedAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true } },
       speakers: { where: { doneAt: null }, include: { member: { select: { name: true } } } }
     }
   })
@@ -168,6 +170,7 @@ export default async function AssemblyBoardPage({ params, searchParams }: { para
                       latest.poll.assemblyQuorumMet === true ? 'beschlussfähig' : latest.poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null,
                       latest.poll.secretBallot ? 'geheim' : 'namentlich'].filter(Boolean).join(' · ')}
                   </p>
+                  <VerdictLine verdict={verdictFor(latest.poll, latest.result.options)} board />
                 </div>
               </section>
             )}
@@ -180,6 +183,7 @@ export default async function AssemblyBoardPage({ params, searchParams }: { para
                     <li key={poll.id} className="text-slate-200">
                       <span className="font-semibold">{poll.title}:</span>{' '}
                       <span className="text-slate-300">{result.options.map(o => `${o.label} ${o.votes}`).join(' · ')}</span>
+                      {(() => { const verdict = verdictFor(poll, result.options); return verdict && <span className="text-slate-300"> – {OUTCOME_LABEL[verdict.outcome]}</span> })()}
                     </li>
                   ))}
                 </ul>

@@ -100,7 +100,7 @@ export default async function AnmeldenPage({
           </div>
         )}
 
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-gray-500 dark:text-gray-400">
           Zum Abstimmen brauchst du kein Konto - nur zum Anlegen und Verwalten von Abstimmungen.
         </p>
       </div>

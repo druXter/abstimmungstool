@@ -98,7 +98,7 @@ export default async function BearbeitenPage({
                       className={inputClass.replace('w-full', 'flex-1')}
                     />
                     {hasVotes ? (
-                      <span className="text-xs text-gray-400 dark:text-gray-500 whitespace-nowrap" title="Optionen mit bereits abgegebenen Stimmen können nicht gelöscht werden">
+                      <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap" title="Optionen mit bereits abgegebenen Stimmen können nicht gelöscht werden">
                         {option._count.votes} Stimme{option._count.votes === 1 ? '' : 'n'} · gesperrt
                       </span>
                     ) : (

@@ -124,7 +124,7 @@ export default async function VerwaltenPage({
             </div>
             <PollResults result={result} names={voterNames} showVoterNames closed={ended} />
             {hasVoterNames && !poll.showVoterNames && (
-              <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">
+              <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
                 Die Namen oben siehst nur du (und wer die Abstimmung verwaltet). Auf der öffentlichen Seite sind sie
                 verborgen - &quot;Abstimmende namentlich anzeigen&quot; ist aus (Einstellungen → Ergebnis).
               </p>
