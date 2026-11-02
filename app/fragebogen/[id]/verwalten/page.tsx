@@ -11,6 +11,9 @@ import QrCode from '../../../ui/qr-code'
 import { buttonClass, Card, formatShortDate, inputClass, Stat, CopyableField, ConfirmForm, Notice } from '../../../ui/kit'
 import SurveyFrame from '../survey-frame'
 import { HEIGHT_MESSAGE } from '../../../lib/survey-embed'
+import { summaryAllowed } from '../../../lib/survey-summary'
+import { aiConfigured } from 'suite-kit'
+import SummaryPanel from './summary-panel'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,10 +48,10 @@ export default async function ManageSurveyPage({
   searchParams
 }: {
   params: Promise<{ id: string }>
-  searchParams: Promise<{ angelegt?: string; geleert?: string; entfernt?: string; fehler?: string; geteilt?: string; teilenFehler?: string }>
+  searchParams: Promise<{ angelegt?: string; geleert?: string; entfernt?: string; fehler?: string; geteilt?: string; teilenFehler?: string; ki?: string; frage?: string }>
 }) {
   const { id } = await params
-  const { angelegt, geleert, entfernt, fehler, geteilt, teilenFehler } = await searchParams
+  const { angelegt, geleert, entfernt, fehler, geteilt, teilenFehler, ki, frage } = await searchParams
   const survey = await prisma.survey.findUnique({
     where: { id },
     include: {
@@ -66,7 +69,13 @@ export default async function ManageSurveyPage({
   }
   const isOwner = level === 'owner'
 
-  const { questions, responses } = await loadSurveyResults(id)
+  const [{ questions, responses }, summaries] = await Promise.all([
+    loadSurveyResults(id),
+    prisma.surveySummary.findMany({ where: { question: { surveyId: id } } })
+  ])
+  const summaryOf = new Map(summaries.map(summary => [summary.questionId, summary]))
+  // KI-Zusammenfassung nur, wenn für diesen Fragebogen eingeschaltet und auf dem Server eingerichtet.
+  const aiEnabled = !!survey.aiSince && aiConfigured()
   const open = isSurveyOpen(survey)
   const origin = new URL(baseUrl()).origin
   const link = `${origin}/fragebogen/${id}`
@@ -156,7 +165,7 @@ export default async function ManageSurveyPage({
               {!q.text && q.hint && <p className="line-clamp-2 text-xs text-gray-500 dark:text-gray-400">{q.hint}</p>}
             </div>
           ) : (
-            <section key={q.id} className="space-y-2" data-testid="survey-result">
+            <section key={q.id} id={`frage-${q.id}`} className="scroll-mt-20 space-y-2" data-testid="survey-result">
               <h3 className="font-medium">
                 {numberOf(q.id) && `${numberOf(q.id)}. `}{q.text}
                 <span className="ml-2 text-xs font-normal text-gray-500 dark:text-gray-400">
@@ -276,6 +285,13 @@ export default async function ManageSurveyPage({
                 ) : (
                   <p className="text-sm text-gray-500 dark:text-gray-400">{q.multiline ? 'Mehrzeiliger' : 'Einzeiliger'} Freitext{responses.length > 0 ? ' · noch keine Antwort' : ''}</p>
                 )
+              )}
+              {q.kind === 'TEXT' && (
+                <SummaryPanel
+                  surveyId={id} questionId={q.id} texts={q.texts} enabled={aiEnabled}
+                  eligible={q.texts.filter(t => summaryAllowed(survey.aiSince, t.at)).length}
+                  summary={summaryOf.get(q.id) ?? null} result={frage === q.id ? ki : undefined}
+                />
               )}
             </section>
           ))}

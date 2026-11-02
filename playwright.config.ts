@@ -3,6 +3,7 @@ import { SUITE_TOOLS, TEST_SUITE_IDPS } from './tests/e2e/suite-server'
 import { MAIL_PORT } from './tests/e2e/mail-server'
 import { RSVP_ORIGIN } from './tests/e2e/rsvp-server'
 import { ZEITPLAN_ORIGIN } from './tests/e2e/zeitplan-server'
+import { AI_KEY, AI_PORT } from './tests/e2e/ai-server'
 import { createECDH, createHash } from 'node:crypto'
 
 // E2E-Tests gegen eine echte, frisch gebaute Instanz (next build + next start) mit eigener
@@ -78,6 +79,12 @@ const SERVER_ENV: Record<string, string> = {
   SURVEY_MIN_FILL_MS: '0',
   SURVEY_FORM_SECRET: 'nur-fuer-e2e-tests-fragebogen-token-schluessel',
   EMBED_ALLOWED_ORIGINS: `${EMBED_HOST}, ${SAME_SITE_HOST} https://*.ramonroeser.de javascript:alert(1) https://x.test;script-src *`,
+  // KI-Zusammenfassung gegen das Test-Doppel (tests/e2e/ai-server.ts), nie gegen OpenAI. Modell und Denk-Einstellung
+  // ausdrücklich leer bzw. fest, damit eine lokale .env die Voreinstellungen nicht verändert.
+  OPENAI_API_KEY: AI_KEY,
+  OPENAI_BASE_URL: `http://127.0.0.1:${AI_PORT}/v1`,
+  OPENAI_MODEL: '',
+  OPENAI_REASONING_EFFORT: 'none',
   TZ: 'Europe/Berlin'
 }
 

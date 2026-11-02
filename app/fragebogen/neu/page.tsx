@@ -4,6 +4,7 @@ import { canCreatePolls } from '../../lib/permissions'
 import { createSurvey } from '../../survey-actions'
 import QuestionsEditor from '../questions-editor'
 import IdentityFields from '../identity-fields'
+import AiFields from '../ai-fields'
 import { Card, hintClass, inputClass, labelClass, Main, PageHeader, SubmitButton, Notice } from '../../ui/kit'
 
 export const dynamic = 'force-dynamic'
@@ -37,6 +38,7 @@ export default async function NewSurveyPage({ searchParams }: { searchParams: Pr
               <p className={hintClass}>Steht über den Fragen, z.B. wozu das Feedback dient und wie lange das Ausfüllen dauert.</p>
             </div>
             <IdentityFields value="ANONYMOUS" />
+            <AiFields />
           </Card>
           <QuestionsEditor />
           <div className="flex justify-end">

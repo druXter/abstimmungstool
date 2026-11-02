@@ -239,3 +239,14 @@ export function liveJoinRules(ip: string, sessionId: string): ThrottleRule[] {
 export function surveyRules(ip: string, surveyId: string, networkLimit: number = IP_LIMITS.survey.network): ThrottleRule[] {
   return ipRules('survey:ip', ip, { address: Math.min(IP_LIMITS.survey.address, networkLimit), network: networkLimit }, 60 * MINUTE, `${surveyId}\u0000`)
 }
+
+/**
+ * KI-Zusammenfassung von Freitext-Antworten (summarizeSurveyQuestion): Jeder Aufruf kostet beim Anbieter. 20 pro Konto
+ * und Stunde, 50 pro Fragebogen und Tag - reicht für jede Frage mehrmals, deckelt die Kosten bei einem Fehler im Ablauf.
+ */
+export function summaryRules(userId: string, surveyId: string): ThrottleRule[] {
+  return [
+    { scope: 'ai:user', identifier: userId, limit: 20, windowMs: 60 * MINUTE },
+    { scope: 'ai:survey', identifier: surveyId, limit: 50, windowMs: 24 * 60 * MINUTE }
+  ]
+}

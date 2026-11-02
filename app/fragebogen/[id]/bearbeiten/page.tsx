@@ -7,6 +7,7 @@ import { updateSurvey } from '../../../survey-actions'
 import { ButtonLink, Card, hintClass, inputClass, labelClass, SubmitButton, Notice } from '../../../ui/kit'
 import QuestionsEditor from '../../questions-editor'
 import IdentityFields from '../../identity-fields'
+import AiFields from '../../ai-fields'
 import SurveyFrame from '../survey-frame'
 
 export const dynamic = 'force-dynamic'
@@ -84,6 +85,7 @@ export default async function EditSurveyPage({ params, searchParams }: { params:
               Übersicht - vor einer großen Veranstaltung im selben WLAN hier hochsetzen.
             </p>
           </div>
+          <AiFields since={survey.aiSince} />
           {/* Gesperrte Radiobuttons werden nicht mitgeschickt - updateSurvey lässt die Einstellung dann unverändert. */}
         </Card>
 

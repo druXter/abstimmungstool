@@ -2,7 +2,7 @@
 import Link from 'next/link'
 
 // ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
-// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, Live-Runden und Fragebögen auch eingebettet, 2026-10-14). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, Live-Runden und Fragebögen auch eingebettet, 2026-10-14; KI-Zusammenfassung über OpenAI, 2026-11-02). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -107,6 +107,19 @@ export default function DatenschutzPage() {
             Freitextfelder daher nichts, woran man dich erkennen soll, wenn du anonym bleiben möchtest. Zum Schutz vor
             automatisierten Massen-Abgaben enthält das Formular eine zufällige Einmal-Kennung; nach dem Absenden merken
             wir uns nur deren Hash, damit sie nicht ein zweites Mal verwendet werden kann (höchstens 24 Stunden).
+          </p>
+          <p className="mt-2">
+            <strong>KI-Zusammenfassung (nur wenn im Fragebogen eingeschaltet):</strong> Wer einen Fragebogen verwaltet,
+            kann die Antworten auf Freitext-Fragen von einer KI zu Themen zusammenfassen lassen. Ist das eingeschaltet,
+            steht im Fragebogen vor dem Ausfüllen ein Hinweis. Auf Knopfdruck schicken wir dann den Titel des
+            Fragebogens, die Frage und die Freitext-Antworten darauf an OpenAI (Punkt 10) - nur Antworten, die nach dem
+            Einschalten abgegeben oder geändert wurden, ohne Kennungen, Zeitpunkte oder andere Antworten. Das Ergebnis
+            (Überblick, Themen und welche Antworten dazugehören) speichern wir beim Fragebogen; es wird mit ihm gelöscht
+            und auch, sobald Antworten gelöscht werden. OpenAI verwendet die Daten nicht zum Training, speichert die
+            Anfrage nicht als Antwortverlauf und bewahrt sie nur bis zu 30 Tage zur Erkennung von Missbrauch auf.
+            Rechtsgrundlage ist unser berechtigtes Interesse und das der Veranstalter*innen an einer handhabbaren
+            Auswertung vieler Antworten (Art. 6 Abs. 1 lit. f DSGVO). Schreib in Freitextfelder keine Namen oder
+            persönlichen Angaben.
           </p>
           <p className="mt-2">
             <strong>Eingebettet in anderen Apps:</strong> Ein Fragebogen kann als eingebetteter Rahmen (iFrame) in einer
@@ -265,10 +278,11 @@ export default function DatenschutzPage() {
             Um das Erraten von Passwörtern und Zugangscodes, das massenhafte Auslösen von Mails und das automatisierte
             Abstimmen mit immer neuen Kennungen zu verhindern, zählen wir fehlgeschlagene Anmeldeversuche,
             Passwort-Reset-Anfragen, angeforderte Bestätigungslinks, eingegebene Zugangscodes, erste Stimmabgaben in
-            offenen Abstimmungen, eingegebene PINs und Beitritte bei Live-Runden sowie abgegebene Fragebögen. Dazu wird
+            offenen Abstimmungen, eingegebene PINs und Beitritte bei Live-Runden sowie abgegebene Fragebögen; außerdem
+            KI-Zusammenfassungen je Verwaltungskonto und Fragebogen (ohne IP-Adresse). Dazu wird
             deine <strong>IP-Adresse</strong> (bei IPv6 zusätzlich ihr Netzanteil, das /64-Präfix) ausgelesen und zusammen mit der eingegebenen E-Mail-Adresse bzw. der
             Kennung der Abstimmung <strong>nur als nicht umkehrbarer Hash</strong> für ein kurzes Zeitfenster
-            (15 Minuten bzw. 1 Stunde) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
+            (15 Minuten, 1 Stunde, bei KI-Zusammenfassungen bis 24 Stunden) gespeichert; veraltete Zähler werden nach spätestens 24 Stunden entfernt. Mit
             deiner Stimme wird die IP-Adresse nicht verknüpft. Rechtsgrundlage ist unser
             berechtigtes Interesse an der Sicherheit der Anwendung (Art. 6 Abs. 1 lit. f DSGVO).
           </p>
@@ -345,6 +359,14 @@ export default function DatenschutzPage() {
             der Empfang deines Namens und einer Kennung von rsvp-app beim Abstimmen mit Teilnehmendenkonto oder beim Beitritt
             zu einer Sitzung) erfolgt nur
             zwischen Tools, die der Betreiber selbst betreibt und freigegeben hat.
+          </p>
+          <p className="mt-2">
+            <strong>OpenAI (KI-Zusammenfassung, nur wenn eingeschaltet):</strong> Freitext-Antworten für die
+            KI-Zusammenfassung (Punkt 3) verarbeitet OpenAI Ireland Ltd. (1st Floor, The Liffey Trust Centre, 117–126
+            Sheriff Street Upper, Dublin 1, D01 YC43, Irland) als Auftragsverarbeiter nach Art. 28 DSGVO (Data Processing
+            Addendum von OpenAI). Die Verarbeitung kann auch bei OpenAI, L.L.C. in den USA stattfinden; dafür gelten die
+            Standardvertragsklauseln der EU-Kommission (Art. 46 Abs. 2 lit. c DSGVO). Mehr unter{' '}
+            <a href="https://openai.com/policies/data-processing-addendum/" className="underline">openai.com/policies/data-processing-addendum</a>.
           </p>
           <p className="mt-2">
             <strong>Hosting:</strong> Diese Anwendung wird auf einem vom Verantwortlichen selbst betriebenen und

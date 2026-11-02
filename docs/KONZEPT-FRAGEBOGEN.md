@@ -15,12 +15,13 @@ der Live-Runden (eigene Actions, eigener Editor, gleiche Verwaltung mit Reitern)
 
 | Modell | Inhalt |
 | --- | --- |
-| `Survey` | Titel, Beschreibung, Danke-Text, wer antworten darf (`SurveyIdentity`), Schließdatum/geschlossen, Besitz |
+| `Survey` | Titel, Beschreibung, Danke-Text, wer antworten darf (`SurveyIdentity`), Schließdatum/geschlossen, Besitz, KI-Zusammenfassung an seit (`aiSince`) |
 | `SurveyAccess` | gemeinsam verwalten (wie `LiveAccess`) |
 | `SurveyQuestion` | Position, Text, Hinweis, Art (`SurveyQuestionKind`), Pflicht; Skala: von/bis und Beschriftung der Enden; Freitext: mehrzeilig |
 | `SurveyOption` | Antwortmöglichkeiten bei Einfach-/Mehrfachauswahl |
 | `SurveyResponse` | eine ausgefüllte Runde; `voterKey` nur im Modus `COOKIE` (eindeutig pro Fragebogen), sonst leer |
 | `SurveyAnswer` | Antwort auf eine Frage: gewählte Option (eine Zeile je Option), Text oder Zahl |
+| `SurveySummary` | KI-Zusammenfassung einer Freitext-Frage: Überblick, Themen mit IDs der Antworten, Zahl der Antworten (seit 2026-11-02) |
 
 Fragearten: **Einfachauswahl** (Radiobuttons), **Mehrfachauswahl** (Checkboxen, optional höchstens n), **Freitext**
 (einzeilig bis 300 Zeichen, mehrzeilig bis 2000), **lineare Skala** (von 0 oder 1 bis 2–10, Beschriftung links/rechts)
@@ -95,6 +96,18 @@ gibt – sonst passten Antworten nicht mehr zu den Fragen. „Alle Antworten lö
 
 Auswertung: Auswahl als Anteil der Antwortenden der Frage, Skala als Verteilung mit Durchschnitt und Median,
 Freitext als Liste. Ergebnisse sieht nur die Verwaltung.
+
+**KI-Zusammenfassung (Idee L40, 2026-11-02):** Freitext-Antworten werden bei vielen Abgaben unlesbar. Ist die Funktion
+im Fragebogen eingeschaltet (`aiSince`), fasst ein Knopf unter jeder Freitext-Frage die Antworten über die OpenAI
+Responses API (`askAi` aus suite-kit) zu höchstens 8 Themen zusammen. Entscheidungen:
+
+* **Nur Antworten seit dem Einschalten**, und das Formular weist vorher darauf hin – wer früher geantwortet hat, wusste
+  nichts von der Weitergabe. Deshalb ein Zeitpunkt statt eines Schalters.
+* **Nummern statt Text zurück:** Die KI ordnet jedem Thema Antwortnummern zu, die Seite zeigt Anzahl und Zitate aus der
+  Datenbank. Erfundene Zitate sind so ausgeschlossen, gelöschte Antworten verschwinden von selbst.
+* **Auf Knopfdruck, gespeichert, gedrosselt** – nie beim Seitenaufruf, jeder Aufruf kostet. Löschen von Abgaben löscht
+  die Zusammenfassungen mit (Überblick und Beschreibungen könnten sie wiedergeben).
+* Nur Freitext-Fragen (nicht die Textfelder „Sonstiges: ___“ an Auswahlfragen, nicht Live-Runden).
 
 ## Schutz vor Manipulation (2026-10-14)
 

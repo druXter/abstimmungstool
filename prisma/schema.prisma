@@ -657,28 +657,32 @@ enum SurveyQuestionKind {
 }
 
 model Survey {
-  id          String           @id @default(cuid())
-  title       String
-  description String?
+  id             String           @id @default(cuid())
+  title          String
+  description    String?
   // Text nach dem Absenden, null = Standardtext.
-  thanksText  String?
+  thanksText     String?
   // Fragen nummerieren (questionNumbers in app/lib/survey.ts). Aus = gar keine Nummern, auch nicht in der Auswertung.
-  numbered    Boolean          @default(true)
+  numbered       Boolean          @default(true)
   // Höchstens so viele Abgaben pro Stunde je Netz (IPv4-Adresse bzw. IPv6-/64, surveyRules in app/lib/throttle.ts).
-  submitLimit Int              @default(200)
+  submitLimit    Int              @default(200)
   // Wie viele Abgaben die Drosselung abgelehnt hat - zeigt der Verwaltung, ob die Grenze echte Teilnehmende trifft.
-  throttledCount Int           @default(0)
-  ownerId     String
-  owner       User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  throttledCount Int              @default(0)
+  ownerId        String
+  owner          User             @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   // Gesperrt, sobald jemand geantwortet hat (wie Poll.voterIdentity).
-  identity    SurveyIdentity   @default(ANONYMOUS)
-  closesAt    DateTime?
-  closedAt    DateTime?
-  createdAt   DateTime         @default(now())
-  updatedAt   DateTime         @updatedAt
-  questions   SurveyQuestion[]
-  responses   SurveyResponse[]
-  access      SurveyAccess[]
+  identity       SurveyIdentity   @default(ANONYMOUS)
+  // KI-Zusammenfassung der Freitext-Antworten (app/lib/survey-summary.ts): eingeschaltet seit, null = aus. An OpenAI
+  // gehen nur Antworten, die seitdem abgegeben oder geändert wurden (SurveyResponse.updatedAt) - nur sie haben den
+  // Hinweis im Formular gesehen. Aus- und wieder Einschalten setzt den Zeitpunkt neu.
+  aiSince        DateTime?
+  closesAt       DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  questions      SurveyQuestion[]
+  responses      SurveyResponse[]
+  access         SurveyAccess[]
 
   @@index([ownerId])
 }
@@ -697,34 +701,51 @@ model SurveyAccess {
 }
 
 model SurveyQuestion {
-  id         String             @id @default(cuid())
-  surveyId   String
-  survey     Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  position   Int
-  text       String
+  id          String             @id @default(cuid())
+  surveyId    String
+  survey      Survey             @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  position    Int
+  text        String
   // Kleiner Hinweis unter der Frage (optional).
-  hint       String?
-  kind       SurveyQuestionKind
-  required   Boolean            @default(false)
+  hint        String?
+  kind        SurveyQuestionKind
+  required    Boolean            @default(false)
   // Titel nur für Screenreader und Auswertung, nicht sichtbar - die Frage schließt dann ohne Nummer und Trennlinie
   // an die vorige an (z.B. zwei Skalen-Raster, die wie eines aussehen sollen).
-  hideTitle  Boolean            @default(false)
+  hideTitle   Boolean            @default(false)
   // Nur MULTI: höchstens so viele Optionen, null = beliebig viele. Pflicht heißt beim Raster: jede Zeile beantworten.
-  maxChoices Int?
+  maxChoices  Int?
   // Nur TEXT: mehrzeiliges Feld (längere Antworten).
-  multiline  Boolean            @default(false)
+  multiline   Boolean            @default(false)
   // Nur SCALE und SCALE_GRID: Werte von scaleMin (0 oder 1) bis scaleMax (2-10), Beschriftung der Enden optional.
-  scaleMin   Int?
-  scaleMax   Int?
-  minLabel   String?
-  maxLabel   String?
+  scaleMin    Int?
+  scaleMax    Int?
+  minLabel    String?
+  maxLabel    String?
   // Nur SCALE_GRID: Ausweich-Antwort neben der Skala (z.B. "nicht genutzt"), zählt als beantwortet, aber nicht im
   // Mittelwert. null = keine.
   optOutLabel String?
-  options    SurveyOption[]
-  answers    SurveyAnswer[]
+  options     SurveyOption[]
+  answers     SurveyAnswer[]
+  summary     SurveySummary?
 
   @@unique([surveyId, position])
+}
+
+// KI-Zusammenfassung einer Freitext-Frage (app/lib/survey-summary.ts). Themen verweisen nur auf die IDs der
+// Antworten (SurveyAnswer), Zitate zeigt die Seite aus den echten Antworten - eine gelöschte Antwort verschwindet so
+// auch aus der Zusammenfassung. Werden Abgaben gelöscht, fällt die ganze Zusammenfassung weg (Überblick und
+// Beschreibungen könnten sie wiedergeben).
+model SurveySummary {
+  id          String         @id @default(cuid())
+  questionId  String         @unique
+  question    SurveyQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  overview    String
+  // JSON: [{ title, description, answerIds: string[] }], wie von readSurveySummary geprüft
+  themes      String
+  // So viele Antworten gingen an die KI (die neuesten, höchstens SUMMARY_MAX_ANSWERS).
+  answerCount Int
+  createdAt   DateTime       @default(now())
 }
 
 // Antwortmöglichkeit bei SINGLE/MULTI, beim Raster eine Spalte - oder mit isRow eine Zeile (Positionen je Art getrennt).

@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { aiConfigured } from 'suite-kit'
 import { prisma } from '../../lib/prisma'
 import { getVoterToken } from '../../lib/voter'
 import { answerField, isGrid, isSurveyOpen, OPT_OUT_VALUE, otherTextField, questionNumbers, scaleRowLabel, splitOptions, MAX_LONG_TEXT, MAX_SHORT_TEXT, scaleRange, surveyRsvpVoterKey, surveyVoterKey } from '../../lib/survey'
@@ -108,6 +109,12 @@ export default async function SurveyView({ survey, search, embed, lang }: { surv
       <div aria-hidden="true" className="absolute -left-[10000px] h-px w-px overflow-hidden">
         <label>{t.honeypot}<input type="text" name={HONEYPOT_FIELD} tabIndex={-1} autoComplete="off" defaultValue="" /></label>
       </div>
+      {/* KI-Zusammenfassung eingeschaltet (app/lib/survey-summary.ts): Hinweis vor dem Ausfüllen, nicht erst danach. */}
+      {survey.aiSince && aiConfigured() && survey.questions.some(q => q.kind === 'TEXT') && (
+        <p className="text-xs text-gray-600 dark:text-gray-400" data-testid="ai-notice">
+          {t.aiNotice} <a href="/datenschutz" target="_blank" rel="noopener" className="underline">{t.privacy}</a>
+        </p>
+      )}
       {survey.questions.map(q => {
         const name = answerField(q.id)
         const mineHere = given(q.id)

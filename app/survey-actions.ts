@@ -7,7 +7,9 @@ import { prisma } from './lib/prisma'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
 import { formString, normalizeEmail } from './lib/form'
-import { clientIp, reserve, surveyRules } from './lib/throttle'
+import { aiConfigured, askAi } from 'suite-kit'
+import { clientIp, reserve, summaryRules, surveyRules } from './lib/throttle'
+import { readSurveySummary, SUMMARY_MIN_ANSWERS, summaryAnswers, summaryTask } from './lib/survey-summary'
 import { getOrCreateVoterToken } from './lib/voter'
 import { verifyRsvpSurveyToken } from './lib/rsvp-verification'
 import { surveyLang, withLang } from './lib/survey-i18n'
@@ -155,6 +157,15 @@ function parseClosesAt(formData: FormData): Date | null {
   return closesAt && !Number.isNaN(closesAt.getTime()) ? closesAt : null
 }
 
+/**
+ * KI-Zusammenfassung (Häkchen `ai`): neu eingeschaltet = ab jetzt, schon an = Zeitpunkt bleibt, aus = null. Ohne
+ * OPENAI_API_KEY ist das Häkchen gesperrt und wird nicht mitgeschickt - dann bleibt die Einstellung, wie sie ist.
+ */
+function parseAiSince(formData: FormData, current: Date | null): Date | null {
+  if (!aiConfigured()) return current
+  return formData.get('ai') === 'on' ? current ?? new Date() : null
+}
+
 /** Der Fragebogen, wenn das eingeloggte Konto ihn mindestens auf `required` verwalten darf, sonst null. */
 async function manageableSurvey(surveyId: string, required: SurveyLevel = 'moderator') {
   const survey = await prisma.survey.findUnique({ where: { id: surveyId } })
@@ -176,7 +187,7 @@ export async function createSurvey(formData: FormData) {
 
   const survey = await prisma.$transaction(async tx => {
     const created = await tx.survey.create({
-      data: { title, description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null, identity: parseIdentity(formData), ownerId: user.id }
+      data: { title, description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null, identity: parseIdentity(formData), aiSince: parseAiSince(formData, null), ownerId: user.id }
     })
     await writeQuestions(tx, created.id, questions)
     return created
@@ -211,6 +222,7 @@ export async function updateSurvey(formData: FormData) {
         numbered: formData.get('numbered') === 'on',
         submitLimit: parseSubmitLimit(formData, survey.submitLimit),
         closesAt: parseClosesAt(formData),
+        aiSince: parseAiSince(formData, survey.aiSince),
         ...(answered ? {} : { identity: parseIdentity(formData, survey.identity) })
       }
     })
@@ -317,20 +329,61 @@ export async function reopenSurvey(formData: FormData) {
 export async function clearSurveyResponses(formData: FormData) {
   const survey = await manageableSurvey(formString(formData, 'surveyId', 50), 'owner')
   if (!survey) return
-  await prisma.surveyResponse.deleteMany({ where: { surveyId: survey.id } })
+  await prisma.$transaction([
+    prisma.surveyResponse.deleteMany({ where: { surveyId: survey.id } }),
+    prisma.surveySummary.deleteMany({ where: { question: { surveyId: survey.id } } })
+  ])
   redirect(manageUrl(survey.id, 'geleert=1'))
 }
 
 /**
  * Einzelne Abgaben löschen (z.B. nach einem Spam-Angriff, auch alle identischen auf einmal). Nur Owner und Admins.
- * Es werden nur Abgaben DIESES Fragebogens gelöscht, auch wenn das Formular andere IDs mitschickt.
+ * Es werden nur Abgaben DIESES Fragebogens gelöscht, auch wenn das Formular andere IDs mitschickt. Die
+ * KI-Zusammenfassungen des Fragebogens fallen mit weg (auch beim Löschen aller Antworten).
  */
 export async function deleteSurveyResponses(formData: FormData) {
   const survey = await manageableSurvey(formString(formData, 'surveyId', 50), 'owner')
   if (!survey) return
   const ids = formData.getAll('responseId').filter((v): v is string => typeof v === 'string' && v.length <= 50).slice(0, 5000)
   const { count } = await prisma.surveyResponse.deleteMany({ where: { surveyId: survey.id, id: { in: ids } } })
+  // KI-Zusammenfassungen könnten gelöschte Antworten in Überblick oder Beschreibung wiedergeben.
+  if (count > 0) await prisma.surveySummary.deleteMany({ where: { question: { surveyId: survey.id } } })
   redirect(manageUrl(survey.id, `entfernt=${count}#antworten`))
+}
+
+/**
+ * KI-Zusammenfassung einer Freitext-Frage (app/lib/survey-summary.ts) erstellen oder erneuern. Alle, die den
+ * Fragebogen verwalten; nur wenn die Funktion eingeschaltet und der Server eingerichtet ist. An OpenAI gehen nur der
+ * Titel, die Frage und die Antworten seit dem Einschalten (ohne Kennungen), gedrosselt je Konto und Fragebogen.
+ */
+export async function summarizeSurveyQuestion(formData: FormData) {
+  const survey = await manageableSurvey(formString(formData, 'surveyId', 50))
+  const user = await getCurrentUser()
+  if (!survey || !user) return
+  const questionId = formString(formData, 'questionId', 50)
+  const back = (result: string): never => redirect(`${manageUrl(survey.id, `ki=${result}&frage=${encodeURIComponent(questionId)}`)}#frage-${questionId}`)
+  if (!survey.aiSince || !aiConfigured()) back('aus')
+  const question = await prisma.surveyQuestion.findFirst({ where: { id: questionId, surveyId: survey.id, kind: 'TEXT' } })
+  if (!question) return
+
+  const rows = await prisma.surveyAnswer.findMany({
+    where: { questionId: question.id, text: { not: null }, response: { updatedAt: { gte: survey.aiSince! } } },
+    orderBy: { response: { updatedAt: 'desc' } },
+    select: { id: true, text: true }
+  })
+  const answers = summaryAnswers(rows.map(row => ({ id: row.id, text: row.text ?? '' })))
+  if (answers.length < SUMMARY_MIN_ANSWERS) back('wenig')
+  if (!(await reserve(summaryRules(user.id, survey.id)))) back('gedrosselt')
+
+  const reply = await askAi(summaryTask({ survey: survey.title, question: question.text, hint: question.hint }, answers), { label: 'KI-Zusammenfassung' })
+  const summary = reply === null ? null : readSurveySummary(reply, answers)
+  if (!summary) {
+    if (reply !== null) console.error('KI-Zusammenfassung: Antwort von OpenAI passt nicht zum Schema')
+    back('fehler')
+  }
+  const data = { overview: summary!.overview, themes: JSON.stringify(summary!.themes), answerCount: answers.length, createdAt: new Date() }
+  await prisma.surveySummary.upsert({ where: { questionId: question.id }, create: { questionId: question.id, ...data }, update: data })
+  back('fertig')
 }
 
 export async function deleteSurvey(formData: FormData) {

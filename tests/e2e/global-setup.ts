@@ -4,6 +4,7 @@ import { startMailServer } from './mail-server'
 import { startPushServer } from './push-server'
 import { startRsvpServer } from './rsvp-server'
 import { startZeitplanServer } from './zeitplan-server'
+import { startAiServer } from './ai-server'
 import { rmSync } from 'node:fs'
 import { BASE_URL } from '../../playwright.config'
 
@@ -11,7 +12,7 @@ import { BASE_URL } from '../../playwright.config'
  * Läuft nach dem Start des Servers (dessen Befehl hat die Datenbank bereits frisch angelegt).
  * Startet die Test-Doppel anderer Tools der Suite (tests/e2e/suite-server.ts) und einen
  * Mail- und einen Push-Dienst sowie rsvp-app (tests/e2e/mail-server.ts, push-server.ts,
- * rsvp-server.ts); die
+ * rsvp-server.ts) und OpenAI (ai-server.ts); die
  * zurückgegebene Funktion beendet sie am Ende.
  */
 export default async function globalSetup() {
@@ -25,10 +26,11 @@ export default async function globalSetup() {
   const pushServer = await startPushServer()
   const rsvpServer = await startRsvpServer()
   const zeitplanServer = await startZeitplanServer()
+  const aiServer = await startAiServer()
   await prisma.user.deleteMany()
   await prisma.loginThrottle.deleteMany()
   await prisma.$disconnect()
   return async () => {
-    for (const server of [...suiteServers, mailServer, pushServer, rsvpServer, zeitplanServer]) await new Promise<void>(resolve => server.close(() => resolve()))
+    for (const server of [...suiteServers, mailServer, pushServer, rsvpServer, zeitplanServer, aiServer]) await new Promise<void>(resolve => server.close(() => resolve()))
   }
 }

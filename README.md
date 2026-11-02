@@ -80,7 +80,8 @@ anlegt und verwaltet (siehe "Konten" unten).
   Spitzname, kein Konto), optional als Quiz mit Punkten, Rangliste und Siegertreppchen.
 * **Fragebögen** - siehe "Fragebögen" unten: mehrere Fragen mit Einfach-/Mehrfachauswahl, Freitext und
   linearer Skala zum Ausfüllen ohne Konto, anonym oder einmal pro Gerät, per Link oder **eingebettet per
-  iFrame** in andere Apps (z.B. Feedback in der Campus-App).
+  iFrame** in andere Apps (z.B. Feedback in der Campus-App). Optional fasst eine KI (OpenAI) die Freitext-Antworten
+  zu Themen zusammen.
 * **Sitzungen (Versammlungen)** - siehe "Sitzungen" unten: viele kurze Abstimmungen hintereinander für
   Mitgliederversammlung, Fachschaft oder StuPa, Mitglieder über einen Termin in rsvp-app, auf Wunsch nur
   Anwesende (Check-in), geheim oder namentlich, Beschlussfähigkeit live und Rednerliste - jede Funktion einzeln.
@@ -726,6 +727,22 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
 * **Grenze:** Anonym lässt sich mehrfaches Ausfüllen nicht verhindern, nur bremsen und im Nachhinein aufräumen: Wer viele
   IP-Adressen hat (z.B. viele Handys im Mobilfunk), kommt durch. Für verbindliche Ergebnisse persönliche Links oder
   Identität über rsvp-app nutzen (L8 Teil 2).
+* **KI-Zusammenfassung** (Idee L40, seit 2026-11-02, `app/lib/survey-summary.ts`, Aufruf über `askAi` aus suite-kit):
+  Unter jeder Freitext-Frage fasst „Mit KI zusammenfassen“ die Antworten zu höchstens 8 Themen zusammen - ein Überblick
+  in ein bis drei Sätzen, je Thema Titel, ein Satz und die zugehörigen Antworten (aufklappbar). Die KI bekommt die
+  Antworten nummeriert und ohne Kennungen und nennt je Thema nur Nummern; Anzahl und Zitate zeigt die Seite aus den
+  echten Antworten, das Modell kann also nichts „zitieren“, was niemand geschrieben hat.
+  * **Einschalten** je Fragebogen beim Anlegen oder unter „Bearbeiten“ (`Survey.aiSince`, Voreinstellung aus; ohne
+    `OPENAI_API_KEY` gesperrt). Das Formular zeigt dann vor dem Ausfüllen einen Hinweis (Deutsch und Englisch). An
+    OpenAI gehen nur Antworten, die **nach dem Einschalten** abgegeben oder geändert wurden - frühere haben den Hinweis
+    nie gesehen. Aus- und wieder Einschalten setzt den Zeitpunkt neu.
+  * Erst ab 3 solchen Antworten, höchstens die neuesten 400 (je auf 600 Zeichen gekürzt); dazu nur Titel, Frage und
+    Hinweis der Frage. OpenAI Responses API mit `store: false`, Modell `gpt-6-luna` (`OPENAI_MODEL`).
+  * Ergebnis gespeichert (`SurveySummary`, eine je Frage) mit Zeitpunkt und Zahl der Antworten; „Neu zusammenfassen“
+    erneuert es. Werden Abgaben gelöscht (einzeln, identische oder alle), fallen alle Zusammenfassungen des
+    Fragebogens weg - Überblick und Beschreibungen könnten gelöschte Antworten wiedergeben.
+  * Alle, die den Fragebogen verwalten (auch Freigaben); gedrosselt auf 20 je Konto und Stunde und 50 je Fragebogen und
+    Tag (`summaryRules`). Getestet in `tests/e2e/survey-ai.spec.ts` gegen ein Test-Doppel (`tests/e2e/ai-server.ts`).
 
 ### Fragebogen für Gäste aus rsvp-app (Modus `RSVP`)
 
@@ -1025,7 +1042,7 @@ einbettenden Seiten liefern kleine Server auf `localhost:3697-3699` aus) und die
 Reiter samt Token bei Alt-Abstimmungen, Einstellungen, Freigaben, Konto-Menü). Mails fängt ein kleiner
 Test-Mailserver ab (`tests/e2e/mail-server.ts`, Port 2525, ohne TLS/Anmeldung), der jede Mail
 nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an einen Test-Push-Dienst
-(`tests/e2e/push-server.ts`, Port 2641); die Sicherheits-Header prüft `headers.spec.ts`; der Push-Test prüft die VAPID-Signatur und entschlüsselt den
+(`tests/e2e/push-server.ts`, Port 2641), die KI-Zusammenfassung (`survey-ai.spec.ts`) an ein Test-Doppel der OpenAI-API (`tests/e2e/ai-server.ts`, Port 2645); die Sicherheits-Header prüft `headers.spec.ts`; der Push-Test prüft die VAPID-Signatur und entschlüsselt den
 Inhalt mit einer unabhängigen RFC-8291-Implementierung (Dev-Paket `http_ece`). Nicht automatisch
 getestet ist das Einschalten im Browser selbst: Headless-Chromium meldet Mitteilungen immer als
 verweigert.

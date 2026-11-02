@@ -257,7 +257,7 @@ export async function loadSurveyResults(surveyId: string) {
     prisma.surveyResponse.findMany({
       where: { surveyId },
       orderBy: { createdAt: 'asc' },
-      include: { answers: { select: { questionId: true, optionId: true, rowId: true, text: true, number: true, optOut: true } } }
+      include: { answers: { select: { id: true, questionId: true, optionId: true, rowId: true, text: true, number: true, optOut: true } } }
     })
   ])
 
@@ -305,7 +305,7 @@ export async function loadSurveyResults(surveyId: string) {
       rowOptOut,
       scale: q.kind === 'SCALE' || q.kind === 'SCALE_GRID' ? scaleStats(numbers(answers), min, max) : null,
       // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
-      texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ text: a.text, at: a.at }] : [])).reverse() : []
+      texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ id: a.id, text: a.text, at: a.at }] : [])).reverse() : []
     }
   })
   return { questions: results, responses }
