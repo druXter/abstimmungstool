@@ -8,7 +8,7 @@ import { revalidatePath } from 'next/cache'
 import { prisma } from './lib/prisma'
 import { generateToken, getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
-import { formString, normalizeEmail } from './lib/form'
+import { formString, formText, normalizeEmail } from './lib/form'
 import { changePresence, fetchRoster, forgetRoster } from './lib/assembly-coupling'
 import {
   bumpAssembly, checkPresence, currentMember, getAssemblyLevel, MAX_ASSEMBLY_TITLE, MAX_QUORUM, quorumState, YES_NO_ABSTAIN, type AssemblyLevel
@@ -78,7 +78,7 @@ export async function createAssemblyPoll(formData: FormData) {
   const kind = formString(formData, 'kind', 10) === 'choice' ? 'choice' : 'yesno'
   const labels = kind === 'yesno'
     ? YES_NO_ABSTAIN
-    : [...new Set(formString(formData, 'options', 10_000).split('\n').map(l => l.trim().slice(0, MAX_OPTION_LENGTH)).filter(Boolean))]
+    : [...new Set(formText(formData, 'options', 10_000).split('\n').map(l => l.trim().slice(0, MAX_OPTION_LENGTH)).filter(Boolean))]
   if (labels.length < 2 || labels.length > MAX_OPTIONS) redirect(manageUrl(assembly.id, 'fehler=optionen#neue-abstimmung'))
   const secret = formData.get('secret') === 'on'
   const multiple = kind === 'choice' && formData.get('multiple') === 'on'

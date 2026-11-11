@@ -23,7 +23,7 @@ import { POLL_PRESETS, presetOf } from './lib/poll-presets'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls, getPollLevel, isAtLeast } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
-import { formString, normalizeEmail } from './lib/form'
+import { formString, formText, normalizeEmail } from './lib/form'
 import { withVoted } from './lib/assembly'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
@@ -59,7 +59,7 @@ function parsePollSettings(formData: FormData) {
     requireVoterName: formData.get('requireVoterName') === 'on',
     maxVoters: Number.isInteger(maxVoters) && maxVoters >= 1 ? Math.min(maxVoters, MAX_VOTERS_LIMIT) : null,
     accessCode: formString(formData, 'accessCode', MAX_ACCESS_CODE_LENGTH) || null,
-    allowedEmails: normalizeAllowedEmails(formString(formData, 'allowedEmails', 20_000)),
+    allowedEmails: normalizeAllowedEmails(formText(formData, 'allowedEmails', 20_000)),
     quorum: Number.isInteger(quorum) && quorum >= 1 ? Math.min(quorum, MAX_VOTERS_LIMIT) : null,
     // Ohne Mail und Push fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
     notifyOwnerOnClose: isMailConfigured() || isPushConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined

@@ -3,7 +3,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { prisma } from './lib/prisma'
-import { formString } from './lib/form'
+import { formString, formText } from './lib/form'
 import { loadManageablePoll } from './lib/manage'
 import { isMailConfigured, sendVoterLinkEmail } from './lib/mail'
 import { voterKey } from './lib/voter-identity'
@@ -35,7 +35,7 @@ export async function manageVoterLinks(_prev: VoterLinkState, formData: FormData
   const result = await (async (): Promise<VoterLinkState> => {
     if (intent === 'create') {
       const count = Number.parseInt(formString(formData, 'count', 5), 10)
-      const listed = parseLinkList(formString(formData, 'names', 20_000))
+      const listed = parseLinkList(formText(formData, 'names', 20_000))
       const existing = await prisma.voterLink.count({ where: { pollId: poll.id } })
       const entries = listed.length > 0
         ? listed

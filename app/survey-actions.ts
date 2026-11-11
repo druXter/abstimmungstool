@@ -6,7 +6,7 @@ import { Prisma, type SurveyIdentity, type SurveyQuestionKind } from '@prisma/cl
 import { prisma } from './lib/prisma'
 import { getCurrentUser, requireUser } from './lib/auth'
 import { canCreatePolls } from './lib/permissions'
-import { formString, normalizeEmail } from './lib/form'
+import { formString, formText, normalizeEmail } from './lib/form'
 import { aiConfigured, askAi } from 'suite-kit'
 import { clientIp, reserve, summaryRules, surveyRules } from './lib/throttle'
 import { readSurveySummary, SUMMARY_MIN_ANSWERS, summaryAnswers, summaryTask } from './lib/survey-summary'
@@ -55,7 +55,8 @@ function parseQuestions(formData: FormData): QuestionInput[] {
   for (let i = 0; i < MAX_QUESTIONS; i++) {
     const kind = SURVEY_QUESTION_KINDS.find(k => k === formData.get(`s${i}_kind`)) ?? 'SINGLE'
     const text = formString(formData, `s${i}_text`, MAX_QUESTION_LENGTH)
-    const hint = formString(formData, `s${i}_hint`, kind === 'INFO' ? MAX_INFO_TEXT_LENGTH : MAX_HINT_LENGTH) || null
+    // Textblöcke (INFO) sind eine Textarea, Hinweise zu Fragen eine Zeile.
+    const hint = (kind === 'INFO' ? formText(formData, `s${i}_hint`, MAX_INFO_TEXT_LENGTH) : formString(formData, `s${i}_hint`, MAX_HINT_LENGTH)) || null
     if (kind === 'INFO') {
       if (text || hint) questions.push({ ...EMPTY_QUESTION, kind, text, hint })
       continue
@@ -187,7 +188,7 @@ export async function createSurvey(formData: FormData) {
 
   const survey = await prisma.$transaction(async tx => {
     const created = await tx.survey.create({
-      data: { title, description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null, identity: parseIdentity(formData), aiSince: parseAiSince(formData, null), ownerId: user.id }
+      data: { title, description: formText(formData, 'description', MAX_DESCRIPTION_LENGTH) || null, identity: parseIdentity(formData), aiSince: parseAiSince(formData, null), ownerId: user.id }
     })
     await writeQuestions(tx, created.id, questions)
     return created
@@ -217,8 +218,8 @@ export async function updateSurvey(formData: FormData) {
       where: { id: survey.id },
       data: {
         title,
-        description: formString(formData, 'description', MAX_DESCRIPTION_LENGTH) || null,
-        thanksText: formString(formData, 'thanksText', MAX_THANKS_LENGTH) || null,
+        description: formText(formData, 'description', MAX_DESCRIPTION_LENGTH) || null,
+        thanksText: formText(formData, 'thanksText', MAX_THANKS_LENGTH) || null,
         numbered: formData.get('numbered') === 'on',
         submitLimit: parseSubmitLimit(formData, survey.submitLimit),
         closesAt: parseClosesAt(formData),

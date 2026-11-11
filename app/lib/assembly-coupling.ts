@@ -7,6 +7,7 @@
 // Secret wie die übrige Kopplung (app/lib/rsvp-verification.ts).
 import { rsvpAppBaseUrl } from './rsvp-date'
 import { signTypedRsvpMessage, verifyTypedRsvpMessage } from './rsvp-verification'
+import { singleLine } from 'suite-kit/web'
 
 /** Pseudonym einer Zusage aus rsvp-app (base64url, HMAC) - wie bei den Fragebögen. */
 const SUBJECT = /^[A-Za-z0-9_-]{16,128}$/
@@ -119,7 +120,7 @@ export async function fetchAttendance(assembly: { id: string; rsvpEventId: strin
   if (!valid) return { state: 'unreachable' }
   return {
     state: 'ok', checkin, trackPresence,
-    people: (people as AttendancePerson[]).map(p => ({ sub: p.sub, name: p.name.trim().slice(0, MAX_MEMBER_NAME) || 'Ohne Namen', present: p.present, left: p.left }))
+    people: (people as AttendancePerson[]).map(p => ({ sub: p.sub, name: singleLine(p.name).slice(0, MAX_MEMBER_NAME) || 'Ohne Namen', present: p.present, left: p.left }))
   }
 }
 

@@ -1,7 +1,7 @@
 import type { SurveyIdentity, SurveyQuestionKind } from '@prisma/client'
 import { prisma } from './prisma'
 import type { CurrentUser } from './auth'
-import { formString } from './form'
+import { formString, formText } from './form'
 
 /**
  * Fragebogen (docs/KONZEPT-FRAGEBOGEN.md, schema.prisma Survey): Berechtigung, Grenzen, Einlesen
@@ -215,7 +215,7 @@ export function parseSurveyAnswers(questions: QuestionForForm[], formData: FormD
         given.push({ questionId: q.id, optionId, text: withText ? formString(formData, otherTextField(q.id, optionId), MAX_SHORT_TEXT) || null : null, number: null })
       }
     } else if (q.kind === 'TEXT') {
-      const text = formString(formData, name, q.multiline ? MAX_LONG_TEXT : MAX_SHORT_TEXT)
+      const text = q.multiline ? formText(formData, name, MAX_LONG_TEXT) : formString(formData, name, MAX_SHORT_TEXT)
       if (text) given.push({ questionId: q.id, optionId: null, text, number: null })
     } else {
       const value = scaleValue(formString(formData, name, 5))
