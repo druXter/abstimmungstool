@@ -7,11 +7,10 @@ import { BASE_URL, TEST_RSVP_SECRET } from '../../playwright.config'
 // rsvp-app spielen die Tests selbst: Sie signieren Klick-Tokens und Webhooks mit dem
 // gemeinsamen Test-Secret, genau im Format aus app/lib/rsvp-verification.ts ({ typ, aud, ..., iat, exp }).
 
-/** Klick-Token (`poll-access`) bzw. Zu-/Absage-Meldung (`poll-attendance`, mit eventId) im Format der Suite. */
-function signRsvp(payload: object): string {
+/** Klick-Token (`poll-access`) bzw. Zu-/Absage-Meldung (`poll-attendance`) im Format der Suite; Termin standardmäßig event-1. */
+function signRsvp(payload: object, typ: 'poll-access' | 'poll-attendance' = 'poll-access'): string {
   const iat = Math.floor(Date.now() / 1000)
-  const typ = 'eventId' in payload ? 'poll-attendance' : 'poll-access'
-  const part = Buffer.from(JSON.stringify({ typ, aud: new URL(BASE_URL).origin, ...payload, iat, exp: iat + 600 })).toString('base64url')
+  const part = Buffer.from(JSON.stringify({ typ, aud: new URL(BASE_URL).origin, eventId: 'event-1', ...payload, iat, exp: iat + 600 })).toString('base64url')
   return `${part}.${createHmac('sha256', TEST_RSVP_SECRET).update(part).digest('base64url')}`
 }
 
@@ -119,11 +118,61 @@ test.describe('Modus RSVP', () => {
     // Webhook der Absage entfernt die bereits gezählte Stimme.
     const response = await request.post('/api/rsvp-webhook', {
       headers: { 'content-type': 'text/plain' },
-      data: signRsvp({ email, pollId: poll.id, eventId: 'event-1', attending: false })
+      data: signRsvp({ email, pollId: poll.id, eventId: 'event-1', attending: false }, 'poll-attendance')
     })
     expect(response.ok()).toBe(true)
     expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
     expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
+  })
+
+  test('gebunden an einen Termin: Nachweise und Meldungen anderer Termine zählen nicht (rsvp-app Audit R-02/R-04)', async ({ page, request }) => {
+    const owner = await createAccount()
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
+    const vote = async (eventId: string, email: string) => {
+      await page.goto(`/${poll.id}?verify=${signRsvp({ email, pollId: poll.id, eventId, attending: true })}`)
+      await page.getByRole('radio', { name: 'Sushi' }).check()
+      await page.getByRole('button', { name: 'Abstimmen' }).click()
+      await expect(page.getByText('Sushi ✓')).toBeVisible()
+    }
+    const anna = uniqueEmail('anna')
+
+    // Anschauen bindet nicht; die erste Stimme bindet an ihren Termin
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email: anna, pollId: poll.id, eventId: 'fremd', attending: true })}`)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBeNull()
+    await vote('event-1', anna)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
+
+    // Nachweis eines anderen Termins: kein Abstimmen, Hinweis
+    await page.goto(`/${poll.id}?verify=${signRsvp({ email: uniqueEmail('fremd'), pollId: poll.id, eventId: 'fremd', attending: true })}`)
+    await expect(page.getByText('gehört zu einem anderen Termin')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
+
+    // Absage von einem anderen Termin löscht nichts und bindet nicht um
+    const foreign = await request.post('/api/rsvp-webhook', {
+      headers: { 'content-type': 'text/plain' },
+      data: signRsvp({ email: anna, pollId: poll.id, eventId: 'fremd', attending: false }, 'poll-attendance')
+    })
+    expect(await foreign.json()).toMatchObject({ note: 'other event, ignored' })
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(1)
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
+
+    // Positivkontrolle: dieselbe Absage vom gebundenen Termin entfernt die Stimme
+    await request.post('/api/rsvp-webhook', {
+      headers: { 'content-type': 'text/plain' },
+      data: signRsvp({ email: anna, pollId: poll.id, eventId: 'event-1', attending: false }, 'poll-attendance')
+    })
+    expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
+
+    // Die Besitzerin löst die Bindung, danach bindet der nächste Termin
+    await login(page, owner.email)
+    await page.goto(`/${poll.id}/verwalten`)
+    await expect(page.getByText('Verknüpft mit dem Termin')).toBeVisible()
+    page.once('dialog', dialog => dialog.accept())
+    await page.getByRole('button', { name: 'Verknüpfung lösen' }).click()
+    await expect(page.getByText('Die Verknüpfung ist gelöst')).toBeVisible()
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBeNull()
+    await vote('event-2', uniqueEmail('neu'))
+    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-2')
   })
 
   test('Token für eine andere Abstimmung gilt nicht', async ({ page }) => {

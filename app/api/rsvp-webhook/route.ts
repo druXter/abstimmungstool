@@ -4,6 +4,7 @@ import { readLimitedText } from 'suite-kit/web'
 import { prisma } from '../../lib/prisma'
 import { verifyRsvpWebhookPayload } from '../../lib/rsvp-verification'
 import { voterKey } from '../../lib/voter-identity'
+import { matchesRsvpEvent } from '../../lib/rsvp-binding'
 
 /**
  * Empfängt die aktive Zu-/Absage-Meldung von rsvp-app (Gegenstück zu dessen
@@ -19,9 +20,11 @@ import { voterKey } from '../../lib/voter-identity'
  * entfernen - eine neue Stimme entsteht erst durch einen tatsächlichen castVote-Aufruf
  * mit frischem, gültigem Token.
  *
- * Merkt sich außerdem beiläufig poll.rsvpEventId (falls noch nicht gesetzt), damit
- * beim Schließen dieser Abstimmung bekannt ist, welchem rsvp-app-Event das Ergebnis
- * gemeldet werden soll (siehe app/lib/rsvp-notify.ts).
+ * Bindet die Abstimmung beiläufig an den Termin (poll.rsvpEventId, falls noch nicht
+ * gesetzt), damit beim Schließen bekannt ist, welchem rsvp-app-Event das Ergebnis
+ * gemeldet werden soll (siehe app/lib/rsvp-notify.ts). Meldungen eines anderen Termins
+ * als des gebundenen werden verworfen - sie überschreiben die Bindung nicht und
+ * löschen keine Stimmen (app/lib/rsvp-binding.ts, rsvp-app docs/AUDIT-2026-11.md R-02).
  */
 /** Größere Meldungen verschickt rsvp-app nie; alles darüber wird gar nicht erst gelesen. */
 const MAX_BODY = 10_000
@@ -39,8 +42,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, note: 'poll not found, ignored' })
   }
 
-  if (poll.rsvpEventId !== message.eventId) {
-    await prisma.poll.update({ where: { id: poll.id }, data: { rsvpEventId: message.eventId } })
+  if (!(await matchesRsvpEvent(poll.id, message.eventId, { bind: true }))) {
+    return NextResponse.json({ ok: true, note: 'other event, ignored' })
   }
 
   if (!message.attending) {

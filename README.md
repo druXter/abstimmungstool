@@ -317,10 +317,16 @@ Payload: { "typ": "<Art>", "aud": "<Origin des Empfängers>", ...Felder, "iat": 
 Von rsvp-app an dieses Tool (`app/lib/rsvp-verification.ts`):
 
 * **`poll-access`** - Klick-Token (`?verify=...` am Abstimmungs-Link): `email`, `pollId` (Poll.id dieses Tools),
-  `attending`. `aud` ist der Origin des Abstimmungs-Links.
-* **`poll-attendance`** - Zu-/Absage (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): zusätzlich
-  `eventId` (Event.id in rsvp-app) - daraus lernt dieses Tool beiläufig `Poll.rsvpEventId`, um beim Schließen zu
-  wissen, wohin das Ergebnis gemeldet werden soll (siehe "Ergebnis-Meldung" unten).
+  `eventId` (Event.id in rsvp-app), `attending`. `aud` ist der Origin des Abstimmungs-Links.
+* **`poll-attendance`** - Zu-/Absage (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): `email`,
+  `pollId`, `eventId`, `attending`. rsvp-app meldet nur bestätigte Adressen.
+* **Bindung an einen Termin** (`Poll.rsvpEventId`, `app/lib/rsvp-binding.ts`): Den Abstimmungs-Link trägt in rsvp-app
+  die Verwaltung des Termins frei ein - zugestimmt hat damit nicht, wem die Abstimmung gehört. Deshalb bindet der
+  erste Termin, über den abgestimmt oder eine Zu-/Absage gemeldet wird, die Abstimmung (bedingtes Update); danach
+  gelten Klick-Token und Meldungen nur noch von diesem Termin, alle anderen werden verworfen (kein Abstimmen, keine
+  gelöschten Stimmen, keine Umbindung). Das Ergebnis geht beim Schließen an diesen Termin (siehe "Ergebnis-Meldung"
+  unten). Wer die Abstimmung besitzt, sieht die Bindung in der Verwaltung und kann sie lösen ("Verknüpfung lösen") -
+  dann bindet der nächste Termin. Hintergrund: rsvp-app `docs/AUDIT-2026-11.md`, R-02 und R-04.
 * **`survey-access`** - Fragebogen-Nachweis (`?verify=...` an einem Fragebogen im Modus `RSVP`): `surveyId`, `sub`
   (Pseudonym) - siehe "Fragebogen für Gäste aus rsvp-app".
 * **`assembly-*`** - Sitzungen, siehe "Sitzungen".
@@ -837,8 +843,8 @@ Ergebnissen der Sitzung). Der Zeitplan zeigt jeden Beschluss beim Tagesordnungsp
 
 ## Ergebnis-Meldung an rsvp-app
 
-Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (gelernt aus dem
-rsvp-webhook, siehe "Token-Format" oben), wird das Ergebnis aktiv an rsvp-app
+Schließt sich eine Abstimmung mit gesetztem `Poll.rsvpEventId` (der gebundene Termin,
+siehe "Bindung an einen Termin" oben), wird das Ergebnis aktiv an rsvp-app
 gemeldet (`app/lib/rsvp-notify.ts`, `notifyRsvpAppOfResult`) - sowohl beim manuellen
 Schließen (`closePoll`) als auch beim automatischen Schließen-Cronjob (siehe unten).
 Gewinner = alle Optionen mit der höchsten Stimmenzahl (kann mehrere bei Gleichstand

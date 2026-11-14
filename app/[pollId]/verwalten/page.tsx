@@ -1,7 +1,7 @@
 // app/[pollId]/verwalten/page.tsx
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
-import { claimPoll, reviewSuggestion } from '../../actions'
+import { claimPoll, reviewSuggestion, unlinkRsvpEvent } from '../../actions'
 import { baseUrl } from '../../lib/base-url'
 import PollResults from '../poll-results'
 import { loadResult, loadVoterNames } from '../../lib/results'
@@ -9,7 +9,7 @@ import { canCreatePolls } from '../../lib/permissions'
 import { manageUrl } from '../../lib/manage'
 import { pollStatus } from '../../lib/poll-status'
 import QrCode from '../../ui/qr-code'
-import { ButtonLink, Card, Stat, CopyableField, Notice, SubmitButton } from '../../ui/kit'
+import { ButtonLink, Card, ConfirmForm, Stat, CopyableField, Notice, SubmitButton, buttonClass } from '../../ui/kit'
 import FinalDateSection from './final-date-section'
 import PollFrame, { loadManagedPoll } from './poll-frame'
 
@@ -24,12 +24,12 @@ export default async function VerwaltenPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ token?: string; created?: string; claimed?: string; duplicated?: string; festgelegt?: string; terminFehler?: string }>
+  searchParams: Promise<{ token?: string; created?: string; claimed?: string; duplicated?: string; festgelegt?: string; terminFehler?: string; geloest?: string }>
 }) {
   const { pollId } = await params
-  const { token, created, claimed, duplicated, festgelegt, terminFehler } = await searchParams
+  const { token, created, claimed, duplicated, festgelegt, terminFehler, geloest } = await searchParams
   const loaded = await loadManagedPoll(pollId, token, '')
-  const { poll, user, legacy, legacyToken } = loaded
+  const { poll, user, legacy, legacyToken, isOwner } = loaded
 
   const [loadedResult, voterNames, pendingCount, links] = await Promise.all([
     loadResult(poll.id),
@@ -62,6 +62,7 @@ export default async function VerwaltenPage({
         )}
         {claimed === '1' && <Notice tone="success">Die Abstimmung gehört jetzt zu deinem Konto. Alte Verwaltungs-Links sind ungültig.</Notice>}
         {festgelegt === '1' && <Notice tone="success">Termin festgelegt. Die erreichbaren Abstimmenden wurden benachrichtigt.</Notice>}
+        {geloest === '1' && <Notice tone="info">Die Verknüpfung ist gelöst. Der nächste Termin in rsvp-app, über den abgestimmt wird, wird verknüpft.</Notice>}
         {duplicated === '1' && <Notice tone="success">Kopie angelegt - ohne Stimmen und ohne Schließdatum. Passe sie unter &quot;Einstellungen&quot; an.</Notice>}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -88,6 +89,32 @@ export default async function VerwaltenPage({
         </div>
 
         <FinalDateSection poll={poll} result={result} legacyToken={legacyToken} error={terminFehler} />
+
+        {(poll.voterIdentity === 'RSVP' || poll.rsvpEventId) && (
+          <Card className="space-y-2">
+            <h2 className="font-semibold">Termin in rsvp-app</h2>
+            {poll.rsvpEventId ? (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Verknüpft mit dem Termin <code className="text-xs">{poll.rsvpEventId}</code>. Nur über diesen Termin kann
+                  abgestimmt werden, und nur er bekommt das Ergebnis gemeldet.
+                </p>
+                {isOwner && (
+                  <ConfirmForm action={unlinkRsvpEvent} message="Verknüpfung lösen? Der nächste Termin, über den abgestimmt wird, wird verknüpft.">
+                    <input type="hidden" name="pollId" value={poll.id} />
+                    {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
+                    <button type="submit" className={buttonClass('secondary', 'sm')}>Verknüpfung lösen</button>
+                  </ConfirmForm>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Noch mit keinem Termin verknüpft. Der erste Termin, über den abgestimmt wird, wird verknüpft - danach gilt
+                nur noch er.
+              </p>
+            )}
+          </Card>
+        )}
 
         {pendingCount > 0 && <PendingSuggestions pollId={poll.id} legacyToken={legacyToken} />}
 

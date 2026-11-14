@@ -175,12 +175,12 @@ model Poll {
   // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
   // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus nur mit requireVoterName).
   showVoterNames           Boolean           @default(false)
-  // Wird NICHT beim Anlegen gesetzt, sondern beiläufig aus dem ersten empfangenen
-  // rsvp-webhook (app/api/rsvp-webhook/route.ts) übernommen, sobald jemand über
-  // rsvp-app für diese Abstimmung antwortet - siehe dort. Nötig, um bei Schließung zu
-  // wissen, welchem rsvp-app-Event das Ergebnis gemeldet werden soll (siehe
-  // app/lib/rsvp-notify.ts). Bleibt null, solange rsvp-app nie einen Webhook für diese
-  // Abstimmung geschickt hat (z.B. weil der Modus RSVP nie genutzt wurde).
+  // Der gebundene Termin in rsvp-app (app/lib/rsvp-binding.ts): Wird NICHT beim Anlegen
+  // gesetzt, sondern vom ersten Termin, über den abgestimmt (poll-access) oder eine
+  // Zu-/Absage gemeldet wird (poll-attendance). Danach zählen nur noch Nachrichten dieses
+  // Termins; lösen kann die Bindung nur, wer die Abstimmung besitzt (unlinkRsvpEvent).
+  // Bekommt beim Schließen das Ergebnis (app/lib/rsvp-notify.ts). Bleibt null, solange
+  // kein Termin die Abstimmung genutzt hat (z.B. weil der Modus RSVP nie genutzt wurde).
   rsvpEventId              String?
   allowMultipleChoices     Boolean           @default(false)
   // Nur im Modus COOKIE: Wer abstimmt, muss einen Namen angeben (Vote.voterName). Keine

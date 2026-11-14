@@ -10,12 +10,13 @@ import { baseUrl } from './base-url'
  * Prüfnachrichten auf beiden Seiten (tests/unit/rsvp-verification.test.ts hier).
  *
  * Von rsvp-app:
- * - `poll-access` (Klick-Token, an die Abstimmungsseite angehängt als `?verify=`): `email`, `pollId`, `attending`.
- *   Wird bei JEDEM Linkklick frisch ausgestellt und spiegelt daher immer den AKTUELLEN RSVP-Status wider - eine
- *   nachträglich erteilte Zusage schaltet sich damit von selbst frei.
- * - `poll-attendance` (POST an /api/rsvp-webhook): zusätzlich `eventId`. Aktiv von rsvp-app verschickt, sobald sich
- *   eine Zu-/Absage ändert - deckt den Fall ab, dass eine bereits abgegebene Stimme entfernt werden muss, obwohl die
- *   Person die Abstimmung selbst nie wieder aufruft.
+ * - `poll-access` (Klick-Token, an die Abstimmungsseite angehängt als `?verify=`): `email`, `pollId`, `eventId`,
+ *   `attending`. Wird bei JEDEM Linkklick frisch ausgestellt und spiegelt daher immer den AKTUELLEN RSVP-Status wider -
+ *   eine nachträglich erteilte Zusage schaltet sich damit von selbst frei.
+ * - `poll-attendance` (POST an /api/rsvp-webhook): `email`, `pollId`, `eventId`, `attending`. Aktiv von rsvp-app
+ *   verschickt, sobald sich eine Zu-/Absage ändert - deckt den Fall ab, dass eine bereits abgegebene Stimme entfernt
+ *   werden muss, obwohl die Person die Abstimmung selbst nie wieder aufruft.
+ *   Beide gelten nur für den Termin, an den die Abstimmung gebunden ist (Poll.rsvpEventId, app/lib/rsvp-binding.ts).
  * - `survey-access`, `assembly-*` (Fragebogen, Sitzungen).
  * An rsvp-app: `poll-result`, `poll-date-status`, `poll-date-set`, `assembly-*`.
  *
@@ -61,15 +62,16 @@ function signForRsvp(typ: string, fields: Record<string, unknown>, ttlSeconds: n
 /** Klick- und Webhook-Nachrichten stellt rsvp-app für 10 Minuten aus. */
 const RSVP_MESSAGE_MAX_TTL_SECONDS = 15 * 60
 
-export type VerifiedIdentity = { email: string; pollId: string; attending: boolean }
+export type VerifiedIdentity = { email: string; pollId: string; eventId: string; attending: boolean }
 
 export function verifyRsvpToken(token: string | undefined | null, expectedPollId: string): VerifiedIdentity | null {
   const payload = verifyFromRsvp(token, 'poll-access', RSVP_MESSAGE_MAX_TTL_SECONDS)
   if (!payload) return null
   if (typeof payload.email !== 'string' || !payload.email) return null
   if (typeof payload.pollId !== 'string' || payload.pollId !== expectedPollId) return null
+  if (typeof payload.eventId !== 'string' || !payload.eventId) return null
   if (typeof payload.attending !== 'boolean') return null
-  return { email: payload.email.toLowerCase(), pollId: payload.pollId, attending: payload.attending }
+  return { email: payload.email.toLowerCase(), pollId: payload.pollId, eventId: payload.eventId, attending: payload.attending }
 }
 
 export type RsvpWebhookMessage = { email: string; pollId: string; eventId: string; attending: boolean }
@@ -117,10 +119,10 @@ export function signResultWebhookPayload(payload: { eventId: string; pollId: str
  * gültigen Token zu erzeugen) - die echte Ausstellung gehört in rsvp-app, nicht
  * hierher. Bewusst nicht in einer Produktions-UI verlinkt.
  */
-export function signRsvpTokenForTesting(email: string, pollId: string, attending = true, ttlSeconds = 600): string {
+export function signRsvpTokenForTesting(email: string, pollId: string, eventId: string, attending = true, ttlSeconds = 600): string {
   const key = secret()
   if (!key) throw new Error('RSVP_VERIFICATION_SECRET nicht gesetzt (nur für rsvp-app-Testzwecke relevant)')
-  return signLinkMessage('poll-access', originOf(baseUrl())!, { email, pollId, attending }, key, { ttlSeconds })
+  return signLinkMessage('poll-access', originOf(baseUrl())!, { email, pollId, eventId, attending }, key, { ttlSeconds })
 }
 
 /**

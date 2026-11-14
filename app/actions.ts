@@ -588,6 +588,18 @@ export async function duplicatePoll(formData: FormData) {
 }
 
 /**
+ * Löst die Bindung an einen Termin in rsvp-app (Poll.rsvpEventId, app/lib/rsvp-binding.ts) - nur Owner und Admin.
+ * Danach bindet der nächste Termin, über den abgestimmt oder eine Zu-/Absage gemeldet wird. Stimmen bleiben.
+ */
+export async function unlinkRsvpEvent(formData: FormData) {
+  const ctx = await loadManageablePoll(formData, 'owner')
+  if (!ctx) return
+  await prisma.poll.update({ where: { id: ctx.poll.id }, data: { rsvpEventId: null } })
+  revalidatePath(`/${ctx.poll.id}`)
+  redirect(manageUrl(ctx.poll.id, ctx.token, 'geloest'))
+}
+
+/**
  * Löscht eine Abstimmung unwiderruflich inkl. aller Stimmen und Optionen - nur Owner und
  * Admin (bei Alt-Abstimmungen mit dem creatorToken), NICHT Moderator:innen mit Freigabe.
  * Manuelle Löschreihenfolge wegen Fremdschlüsseln (Vote → PollOption → Poll), gleiche

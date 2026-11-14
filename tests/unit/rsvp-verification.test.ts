@@ -23,7 +23,7 @@ function decode(token: string) {
 
 const now = () => Math.floor(Date.now() / 1000)
 const access = (overrides: Record<string, unknown> = {}) => ({
-  typ: 'poll-access', aud: VOTE, email: 'Anna@Example.test', pollId: 'poll-1', attending: true, iat: now(), exp: now() + 600, ...overrides
+  typ: 'poll-access', aud: VOTE, email: 'Anna@Example.test', pollId: 'poll-1', eventId: 'event-1', attending: true, iat: now(), exp: now() + 600, ...overrides
 })
 
 beforeEach(() => {
@@ -49,14 +49,20 @@ describe('feste Prüfnachrichten (gleich im Unit-Test von rsvp-app, tests/unit/p
 
   it('Klick-Token von rsvp-app wird angenommen', () => {
     vi.useFakeTimers({ now: AT })
-    const FIXED_ACCESS = 'eyJ0eXAiOiJwb2xsLWFjY2VzcyIsImF1ZCI6Imh0dHBzOi8vdm90ZS5leGFtcGxlLnRlc3QiLCJlbWFpbCI6ImFubmFAZXhhbXBsZS50ZXN0IiwicG9sbElkIjoicG9sbC0xIiwiYXR0ZW5kaW5nIjp0cnVlLCJpYXQiOjE3OTI4MzYwMDAsImV4cCI6MTc5MjgzNjYwMH0.pdxpIG9LATlTKa_74NxLzV3AbjEdU2A2aqcz7SwCJGs'
-    expect(verifyRsvpToken(FIXED_ACCESS, 'poll-1')).toEqual({ email: 'anna@example.test', pollId: 'poll-1', attending: true })
+    // Seit rsvp-app docs/AUDIT-2026-11.md R-04 mit eventId (gebundener Termin, app/lib/rsvp-binding.ts)
+    const FIXED_ACCESS = 'eyJ0eXAiOiJwb2xsLWFjY2VzcyIsImF1ZCI6Imh0dHBzOi8vdm90ZS5leGFtcGxlLnRlc3QiLCJlbWFpbCI6ImFubmFAZXhhbXBsZS50ZXN0IiwicG9sbElkIjoicG9sbC0xIiwiZXZlbnRJZCI6ImV2ZW50LTEiLCJhdHRlbmRpbmciOnRydWUsImlhdCI6MTc5MjgzNjAwMCwiZXhwIjoxNzkyODM2NjAwfQ.LgJ0nMk8odwSX_E0uZPObZIz_qVh6ynWH8HN5-Hayv4'
+    expect(verifyRsvpToken(FIXED_ACCESS, 'poll-1')).toEqual({ email: 'anna@example.test', pollId: 'poll-1', eventId: 'event-1', attending: true })
   })
 })
 
 describe('verifyRsvpToken (Klick-Token)', () => {
   it('Positivkontrolle; E-Mail klein geschrieben', () => {
-    expect(verifyRsvpToken(sign(access()), 'poll-1')).toEqual({ email: 'anna@example.test', pollId: 'poll-1', attending: true })
+    expect(verifyRsvpToken(sign(access()), 'poll-1')).toEqual({ email: 'anna@example.test', pollId: 'poll-1', eventId: 'event-1', attending: true })
+  })
+
+  it('ohne eventId (Nachricht von vor R-04) ungültig', () => {
+    expect(verifyRsvpToken(sign(access({ eventId: undefined })), 'poll-1')).toBeNull()
+    expect(verifyRsvpToken(sign(access({ eventId: '' })), 'poll-1')).toBeNull()
   })
 
   it('nur für genau diese Abstimmung, mit typ poll-access und uns als Empfänger', () => {
@@ -88,7 +94,7 @@ describe('verifyRsvpWebhookPayload (Zu-/Absage)', () => {
   })
 
   it('ein Klick-Token gilt nie als Zu-/Absage-Meldung', () => {
-    expect(verifyRsvpWebhookPayload(sign(access({ eventId: 'event-1' })))).toBeNull()
+    expect(verifyRsvpWebhookPayload(sign(access()))).toBeNull()
   })
 })
 

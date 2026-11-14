@@ -2,6 +2,7 @@
 import type { VoterIdentity } from '@prisma/client'
 import { getOrCreateVoterToken, getVoterToken } from './voter'
 import { verifyRsvpToken } from './rsvp-verification'
+import { matchesRsvpEvent } from './rsvp-binding'
 import { getCurrentUser } from './auth'
 import { getCurrentParticipant } from './participant'
 import { prisma } from './prisma'
@@ -37,6 +38,7 @@ export type Voter = {
  * Warum (noch) nicht abgestimmt werden kann bzw. was die Oberfläche dazu sagen soll.
  * - rsvp-missing:  Modus RSVP, aber kein gültiger Token (direkter Aufruf ohne rsvp-app)
  * - rsvp-declined: Modus RSVP, Person hat für den Termin abgesagt
+ * - rsvp-other-event: Modus RSVP, Nachweis von einem anderen Termin als dem gebundenen (app/lib/rsvp-binding.ts)
  * - account-missing: Modus ACCOUNT, niemand angemeldet
  * - link-missing:  Modus LINK, kein gültiger persönlicher Link
  * - email-missing: Modus EMAIL, Adresse in diesem Browser (noch) nicht bestätigt
@@ -51,7 +53,7 @@ export type Voter = {
  * - assembly-voted:       geheime Abstimmung einer Sitzung, schon abgestimmt (von einem anderen Gerät, wie link-used)
  */
 export type VoterBlock =
-  | 'rsvp-missing' | 'rsvp-declined' | 'account-missing' | 'link-missing' | 'link-used'
+  | 'rsvp-missing' | 'rsvp-declined' | 'rsvp-other-event' | 'account-missing' | 'link-missing' | 'link-used'
   | 'email-missing' | 'email-not-allowed'
   | 'assembly-missing' | 'assembly-absent' | 'assembly-unreachable' | 'assembly-voted'
 
@@ -116,6 +118,8 @@ export async function resolveVoter(
       // bewusst ohne Cookie-Fallback (siehe schema.prisma).
       const identity = verifyRsvpToken(input.verifyToken, poll.id)
       if (!identity) return { voter: null, block: 'rsvp-missing' }
+      // Nur der gebundene Termin zählt; die Stimmabgabe (create) bindet eine noch ungebundene Abstimmung.
+      if (!(await matchesRsvpEvent(poll.id, identity.eventId, { bind: create }))) return { voter: null, block: 'rsvp-other-event' }
       const voter: Voter = { kind: 'RSVP', key: voterKey('RSVP', identity.email), name: identity.email }
       return { voter, block: identity.attending ? null : 'rsvp-declined' }
     }

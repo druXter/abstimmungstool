@@ -182,6 +182,13 @@ export default async function PollPage({
           </Hint>
         )}
 
+        {!isClosed && block === 'rsvp-other-event' && (
+          <Hint>
+            Diese Abstimmung gehört zu einem anderen Termin in rsvp-app als dem, über den du gekommen bist. Stimmen
+            kannst du nur über den Termin abgeben, mit dem die Abstimmung verknüpft ist.
+          </Hint>
+        )}
+
         {!isClosed && block === 'account-missing' && (
           <Hint>
             Für diese Abstimmung brauchst du ein Konto, damit jede Person nur einmal abstimmt.
