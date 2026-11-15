@@ -9,6 +9,7 @@ import { inputTypeFor, toInputValue } from '../../../lib/date-options'
 import { buttonClass, ButtonLink, Card, formatShortDate, hintClass, inputClass, labelClass, SettingsSection, SubmitButton, Notice } from '../../../ui/kit'
 import DeletePollButton from '../delete-poll-button'
 import PollFrame, { loadManagedPoll } from '../poll-frame'
+import { pollStatus } from '../../../lib/poll-status'
 
 export const dynamic = 'force-dynamic'
 
@@ -50,6 +51,8 @@ export default async function BearbeitenPage({
       : Promise.resolve([])
   ])
   const locked = options.some(o => o._count.votes > 0)
+  // Beendet: was das Ergebnis berührt, bleibt (updatePoll ignoriert es ebenfalls, docs/AUDIT-2026-11.md V-06)
+  const ended = pollStatus(poll).state !== 'open'
   const closesAtValue = poll.closesAt ? toInputValue(poll.closesAt, 'DATETIME') : ''
 
   return (
@@ -58,6 +61,12 @@ export default async function BearbeitenPage({
         {saved === '1' && <Notice tone="success">Gespeichert.</Notice>}
         {shared === '1' && <Notice tone="success">Freigabe hinzugefügt.</Notice>}
         {shareError && Object.hasOwn(SHARE_ERRORS, shareError) && <Notice tone="error">{SHARE_ERRORS[shareError]}</Notice>}
+        {ended && (
+          <Notice tone="info">
+            Die Abstimmung ist beendet. Optionen, Mindestbeteiligung, Art, Grenzen und Enddatum bleiben deshalb, wie sie sind -
+            das Ergebnis soll sich nach dem Ende nicht mehr ändern.
+          </Notice>
+        )}
 
         <form action={updatePoll} className="space-y-3">
           <input type="hidden" name="pollId" value={poll.id} />
@@ -74,7 +83,7 @@ export default async function BearbeitenPage({
             </div>
             <div>
               <label htmlFor="poll-closes-at" className={labelClass}>Automatisch schließen am (optional)</label>
-              <input id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={closesAtValue} className={inputClass.replace('w-full', 'w-full sm:w-64')} />
+              <input id="poll-closes-at" type="datetime-local" name="closesAt" defaultValue={closesAtValue} disabled={ended} className={inputClass.replace('w-full', 'w-full sm:w-64')} />
             </div>
           </SettingsSection>
 
@@ -94,10 +103,11 @@ export default async function BearbeitenPage({
                       defaultValue={option.startsAt && poll.optionKind !== 'TEXT' ? toInputValue(option.startsAt, poll.optionKind) : option.label}
                       maxLength={200}
                       required
+                      disabled={ended}
                       aria-label={`Option ${option.label}`}
                       className={inputClass.replace('w-full', 'flex-1')}
                     />
-                    {hasVotes ? (
+                    {ended ? null : hasVotes ? (
                       <span className="text-xs text-gray-500 dark:text-gray-400 whitespace-nowrap" title="Optionen mit bereits abgegebenen Stimmen können nicht gelöscht werden">
                         {option._count.votes} Stimme{option._count.votes === 1 ? '' : 'n'} · gesperrt
                       </span>
@@ -111,14 +121,20 @@ export default async function BearbeitenPage({
                 )
               })}
             </div>
-            <p className={hintClass}>Optionen mit bereits abgegebenen Stimmen können umbenannt, aber nicht gelöscht werden.</p>
-            <div>
-              <p className={labelClass}>Weitere Optionen hinzufügen</p>
-              <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - optionCount, 0)} startCount={0} inputType={inputTypeFor(poll.optionKind)} />
-            </div>
+            {ended ? (
+              <p className={hintClass}>Die Abstimmung ist beendet - Optionen lassen sich nicht mehr ändern.</p>
+            ) : (
+              <>
+                <p className={hintClass}>Optionen mit bereits abgegebenen Stimmen können umbenannt, aber nicht gelöscht werden.</p>
+                <div>
+                  <p className={labelClass}>Weitere Optionen hinzufügen</p>
+                  <OptionsFieldList name="newOption" max={Math.max(MAX_OPTIONS - optionCount, 0)} startCount={0} inputType={inputTypeFor(poll.optionKind)} />
+                </div>
+              </>
+            )}
           </SettingsSection>
 
-          <PollSettingsFields poll={poll} locked={locked} open={abschnitt} />
+          <PollSettingsFields poll={poll} locked={locked} ended={ended} open={abschnitt} />
 
           <div className="sticky bottom-0 z-20 -mx-4 flex items-center justify-end gap-3 border-t border-gray-200 bg-white/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-xl sm:border dark:border-gray-700 dark:bg-gray-900/95">
             <ButtonLink href={manageUrl(poll.id, legacyToken)} variant="ghost">Abbrechen</ButtonLink>

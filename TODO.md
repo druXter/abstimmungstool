@@ -6,6 +6,42 @@ Nach jedem erledigten Punkt README und ggf. Datenschutzerklärung (`app/datensch
 
 ---
 
+## Sicherheitsprüfung November 2026
+
+Funde, Szenarien und Lösungsvorschläge in [docs/AUDIT-2026-11.md](docs/AUDIT-2026-11.md), je Fund ein Test in
+`tests/e2e/audit-2026-11.spec.ts` bzw. `tests/unit/audit-2026-11.test.ts`. Ein Punkt ist erledigt, wenn sein Test grün
+ist. Behoben am 2026-11-14; offen nur die Vertragsteile mit rsvp-app.
+
+- [x] **V-03** (mittel) Mehrheit „der Anwesenden/Mitglieder“: nie angenommen bei mehr Nein als Ja, Bezugsgröße 0 = unbekannt.
+- [x] **V-04** (mittel) Stimme nach dem Schließen: „offen“ in der Transaktion von `replaceVotes` erneut prüfen.
+- [x] **V-01 a** (mittel) `rsvp-webhook` und Ergebnis-Meldung nur für Abstimmungen im Modus RSVP (nie für Sitzungen).
+- [x] **V-11** (mittel) Geheime Wahl: bis zum Ende kein Zählstand, auch nicht für die Verwaltung (Übersicht, CSV, öffentliche Seite).
+- [x] **V-12** (niedrig) `/[pollId]/verwalten/export` weist Abstimmungen einer Sitzung ab.
+- [x] **V-05** (mittel) Namentliche Anzeige nach der ersten Stimme sperren (mindestens „aus → an“).
+- [x] **V-06** (niedrig) Nach dem Ende: Optionen, Mindestbeteiligung, Art und Grenzen nicht mehr änderbar.
+- [x] **V-07** (niedrig) Beschlussfähigkeit beim Schließen nicht prüfbar = „nicht feststellbar“, nicht „angenommen“.
+- [x] **V-10** (niedrig) `rsvp-webhook`: Absage entfernt Stimmen nur, solange die Abstimmung offen ist.
+- [x] **V-01 b, einseitiger Teil:** beim Lösen der Bindung lassen sich die Stimmen des Termins entfernen.
+- [x] **V-01 b** (mittel) **[rsvp-app]** Bindung an einen Termin bestätigt die Besitzerin, nicht die Reihenfolge
+      (rsvp-app meldet die Verknüpfung beim Speichern des Links, `poll-link`; Owner/Admin bestätigt, eigener Termin
+      des verknüpften Kontos bindet ohne Rückfrage).
+- [x] **V-02, einseitiger Teil:** Link in Mail und Seite nur vom gebundenen, neu angelegten oder von der Verwaltung
+      als eigenes bestätigten Event (`trustedEvent`).
+- [x] **V-02** (mittel) **[rsvp-app]** Terminübergabe nur an den gebundenen bzw. bestätigten Termin (`eventIds` in
+      `poll-date-*`), „neu anlegen“ auch, wenn ein fremdes Event auf die Abstimmung zeigt.
+- [x] **V-08** (niedrig) KI-Zusammenfassung: Ladezeitpunkt des Formulars zählt, nicht der des Absendens.
+- [x] **V-09** (Hinweis) `auskunft.js`: Stimmen über Stimmlink und Konto aufnehmen und beim Löschen anonymisieren.
+
+Aus „Beobachtungen ohne Fund“ (ohne Test):
+
+- [ ] Geheime Wahl: Stimmen ohne sprechende Zeilenreihenfolge ablegen (README nennt die Grenze inzwischen).
+- [ ] Sitzung: Löschen geschlossener Abstimmungen durch Konten mit Freigabe überdenken (Beschluss verschwindet ohne Spur).
+- [ ] README „Abstimmen mit Konto“: mehrere Konten = mehrere Stimmen, wie bei EMAIL beschrieben.
+- [ ] Ohne `SMTP_HOST`: Konto aus einer Einladung erst nach bestätigter Adresse für andere Tools bestätigen (wie rsvp-app).
+- [ ] Größe von Anfragen an die Abstimmungsseite begrenzen (heute 16 MB wie überall).
+
+---
+
 ## A. Schutz vor Mehrfachabstimmung
 
 ### A0. Grundlage: Identitätsmodell verallgemeinern (Voraussetzung für A1-A5)

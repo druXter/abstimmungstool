@@ -5,7 +5,7 @@ import { castVote } from '../../actions'
 import { requestToSpeak, selfPresence, withdrawSpeak } from '../../assembly-actions'
 import { resolveVoter } from '../../lib/voter-identity'
 import { loadResult, loadVoterNames } from '../../lib/results'
-import { verdictFor } from '../../lib/majority'
+import { verdictFor, quorumNote } from '../../lib/majority'
 import VerdictLine from '../verdict'
 import { fetchRoster } from '../../lib/assembly-coupling'
 import { currentMember, quorumState, SPEAKER_KIND_LABEL, speakerOrder } from '../../lib/assembly'
@@ -32,6 +32,7 @@ const NOTICES: Record<string, string> = {
   'anderer-termin': 'Diese Sitzung gehört zu einem anderen Termin. Bitte wende dich an die Sitzungsleitung.',
   auswahl: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Stimme wurde nicht gespeichert.',
   voll: 'Die Abstimmung nimmt keine weiteren Stimmen an.',
+  geschlossen: 'Die Abstimmung wurde geschlossen, bevor deine Stimme ankam - sie wurde nicht gezählt.',
   'presence-no-checkin': 'Der Termin hat keinen QR-Einlass - Einchecken geht hier nicht.',
   'presence-unknown': 'Deine Zusage ist in rsvp-app nicht (mehr) gültig.',
   'presence-unreachable': 'Die Anwesenheit lässt sich gerade nicht ändern. Bitte versuch es gleich noch einmal.',
@@ -219,7 +220,7 @@ export default async function AssemblyPage({ params, searchParams }: { params: P
                 </ul>
                 <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                   {[`${result.voters} abgestimmt`, poll.assemblyPresent !== null ? `${poll.assemblyPresent} anwesend` : null,
-                    poll.assemblyQuorumMet === true ? 'beschlussfähig' : poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null].filter(Boolean).join(' · ')}
+                    quorumNote(poll)].filter(Boolean).join(' · ')}
                 </p>
                 <VerdictLine verdict={verdictFor(poll, result.options)} />
               </article>

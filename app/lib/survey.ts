@@ -262,7 +262,7 @@ export async function loadSurveyResults(surveyId: string) {
   ])
 
   const results = questions.map(q => {
-    const answers = responses.flatMap(r => r.answers.filter(a => a.questionId === q.id).map(a => ({ ...a, at: r.updatedAt })))
+    const answers = responses.flatMap(r => r.answers.filter(a => a.questionId === q.id).map(a => ({ ...a, at: r.updatedAt, aiExcluded: r.aiExcluded })))
     const answered = new Set(responses.filter(r => r.answers.some(a => a.questionId === q.id)).map(r => r.id)).size
     // counts: je Option bzw. beim Raster je Feld (gridKey); rowAnswered: Antwortende je Rasterzeile.
     const counts = new Map<string, number>()
@@ -305,7 +305,7 @@ export async function loadSurveyResults(surveyId: string) {
       rowOptOut,
       scale: q.kind === 'SCALE' || q.kind === 'SCALE_GRID' ? scaleStats(numbers(answers), min, max) : null,
       // Neueste zuerst - beim Lesen von Feedback interessiert meist das Aktuelle.
-      texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ id: a.id, text: a.text, at: a.at }] : [])).reverse() : []
+      texts: q.kind === 'TEXT' ? answers.flatMap(a => (a.text ? [{ id: a.id, text: a.text, at: a.at, aiExcluded: a.aiExcluded }] : [])).reverse() : []
     }
   })
   return { questions: results, responses }

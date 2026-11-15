@@ -43,7 +43,8 @@ test('eindeutig: Verwaltung bestätigt, rsvp-app übernimmt, RSVP-Abstimmende be
   // Konto über den Verbund mit rsvp-app verknüpft: dessen Konto-ID geht mit.
   await prisma.externalIdentity.create({ data: { issuer: RSVP_ORIGIN, subject: `rsvp-${unique()}`, userId: owner.id } })
   const identity = await prisma.externalIdentity.findFirstOrThrow({ where: { userId: owner.id } })
-  const poll = await datePoll(owner.id, { voterIdentity: 'RSVP' })
+  // Über rsvp-app abgestimmt: die Abstimmung ist an diesen (bestätigten) Termin gebunden (app/lib/rsvp-binding.ts)
+  const poll = await datePoll(owner.id, { voterIdentity: 'RSVP', rsvpEventId: 'ev1' })
   const guests = [uniqueEmail('gast'), uniqueEmail('gast')]
   await vote(poll.id, poll.options[0].id, 'RSVP', guests[0])
   await vote(poll.id, poll.options[0].id, 'RSVP', guests[1])
@@ -66,9 +67,9 @@ test('eindeutig: Verwaltung bestätigt, rsvp-app übernimmt, RSVP-Abstimmende be
   expect(signatureValid(set.token)).toBe(true)
   expect(set.payload).toMatchObject({
     pollTitle: poll.title, startsAt: '2026-10-07T17:00:00.000Z', create: false, skipEmailHashes: [],
-    owner: { toolUserId: owner.id, rsvpUserId: identity.subject }
+    owner: { toolUserId: owner.id, rsvpUserId: identity.subject }, eventIds: ['ev1']
   })
-  expect(messages.some(m => m.payload.typ === 'poll-date-status')).toBe(true)
+  expect(messages.find(m => m.payload.typ === 'poll-date-status')?.payload).toMatchObject({ eventIds: ['ev1'] })
 
   const stored = await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })
   expect(stored.finalOptionId).toBe(poll.options[0].id)
@@ -137,9 +138,69 @@ test('rsvp-app nicht erreichbar: trotzdem festgelegt, Übergabe lässt sich wied
 
   setRsvpScenario({ events: [{ id: 'ev3', title: 'Treffen', datePending: true }], updated: [{ id: 'ev3', title: 'Treffen', url: `${RSVP_ORIGIN}/treffen` }] })
   await page.getByRole('button', { name: 'Erneut an rsvp-app übertragen' }).click()
-  await expect(page.getByText('In rsvp-app übernommen:')).toBeVisible()
+  // Nicht gebunden und nicht als eigenes bestätigt: rsvp-app übernimmt nichts, sein Link ging an niemanden (V-02)
+  await expect(page.getByText('Nicht übernommen, weil nicht mit dieser Abstimmung verknüpft: Treffen')).toBeVisible()
+  expect(pollDateMessages(poll.id).filter(m => m.payload.typ === 'poll-date-set').map(m => m.payload.eventIds)).toEqual([[], []])
   expect(pollDateMessages(poll.id).filter(m => m.payload.typ === 'poll-date-set')).toHaveLength(2)
   expect(mailsTo(voter)).toHaveLength(1)
+})
+
+test('Event ohne Bindung: übernimmt den Termin und sein Link geht an die Abstimmenden nur, wenn die Verwaltung es als ihres bestätigt (V-02)', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  const confirm = async (accept: boolean) => {
+    const poll = await datePoll(owner.id, { voterIdentity: 'EMAIL', closedAt: new Date() })
+    const voter = uniqueEmail('mail')
+    await vote(poll.id, poll.options[0].id, 'EMAIL', voter)
+    const url = `${RSVP_ORIGIN}/fest-${unique()}`
+    setRsvpScenario({ events: [{ id: 'ev-ohne', title: 'Fest', datePending: true }], updated: [{ id: 'ev-ohne', title: 'Fest', url }] })
+    await page.goto(`/${poll.id}/verwalten`)
+    await expect(page.getByText('rsvp-app-Event "Fest": zeigt auf diese Abstimmung, ist aber nicht mit ihr verknüpft')).toBeVisible()
+    if (accept) await page.getByLabel(/Das ist unser Event/).check()
+    await page.getByRole('button', { name: 'Termin bestätigen' }).click()
+    await page.waitForURL(/festgelegt=1/)
+    const set = pollDateMessages(poll.id).find(m => m.payload.typ === 'poll-date-set')!
+    return { mail: await waitForMail(voter), url, eventIds: set.payload.eventIds }
+  }
+
+  const accepted = await confirm(true)
+  expect(accepted.eventIds).toEqual(['ev-ohne'])
+  expect(accepted.mail).toContain(accepted.url)
+  await expect(page.getByText('In rsvp-app übernommen: Fest')).toBeVisible()
+
+  const ignored = await confirm(false)
+  expect(ignored.eventIds).toEqual([])
+  expect(ignored.mail).toContain('Termin steht fest')
+  expect(ignored.mail).not.toContain(ignored.url)
+  await expect(page.getByText('Nicht übernommen, weil nicht mit dieser Abstimmung verknüpft: Fest')).toBeVisible()
+})
+
+test('Event des verknüpften Kontos: gilt ohne Bindung als eigenes, ein neues ist trotz fremder Events möglich (V-02)', async ({ page }) => {
+  const owner = await createAccount()
+  await login(page, owner.email)
+  const poll = await datePoll(owner.id, { voterIdentity: 'EMAIL', closedAt: new Date() })
+  const voter = uniqueEmail('mail')
+  await vote(poll.id, poll.options[0].id, 'EMAIL', voter)
+  const url = `${RSVP_ORIGIN}/eigenes-${unique()}`
+  setRsvpScenario({
+    events: [{ id: 'ev-eigen', title: 'Unser Fest', datePending: true, own: true }, { id: 'ev-fremd', title: 'Unser Fest', datePending: true }],
+    updated: [{ id: 'ev-eigen', title: 'Unser Fest', url }, { id: 'ev-fremd', title: 'Unser Fest', url: `${RSVP_ORIGIN}/fremd` }]
+  })
+  await page.goto(`/${poll.id}/verwalten`)
+  await expect(page.getByText('übernimmt den Termin, seine Zusagenden werden benachrichtigt.')).toHaveCount(1)
+  await expect(page.getByLabel(/Das ist unser Event/)).toHaveCount(1)
+  await page.getByRole('button', { name: 'Termin bestätigen' }).click()
+  await page.waitForURL(/festgelegt=1/)
+  const mail = await waitForMail(voter)
+  expect(mail).toContain(url)
+  expect(mail).not.toContain(`${RSVP_ORIGIN}/fremd`)
+
+  // Nur fremde Events, aber ein verknüpftes Konto: "neu anlegen" wird trotzdem angeboten
+  const second = await datePoll(owner.id, { voterIdentity: 'EMAIL', closedAt: new Date() })
+  await vote(second.id, second.options[0].id, 'EMAIL', uniqueEmail('mail'))
+  setRsvpScenario({ canCreate: true, events: [{ id: 'ev-fremd', title: 'Unser Fest', datePending: true }] })
+  await page.goto(`/${second.id}/verwalten`)
+  await expect(page.getByLabel(/In rsvp-app ein neues Event anlegen/)).toBeChecked()
 })
 
 test('Festlegen nur einmal, nur Gewinner, nur Verwaltende', async ({ page, browser }) => {

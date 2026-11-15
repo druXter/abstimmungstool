@@ -46,12 +46,22 @@ describe('decide', () => {
     expect(decide('SIMPLE', counts(10, 0), snap(20, 30, false)).outcome).toBe('no-quorum')
     expect(decide('SIMPLE', counts(10, 0), snap(20, 30, null)).outcome).toBe('adopted')
   })
+  it('Quorum eingestellt, Anwesenheit beim Schließen nicht feststellbar: kein Beschluss (V-07)', () => {
+    expect(decide('SIMPLE', counts(10, 0), { ...snap(null, 30, null), quorum: 10 }).outcome).toBe('quorum-unknown')
+    expect(decide('SIMPLE', counts(10, 0), { ...snap(null, 30, null), quorum: null }).outcome).toBe('adopted')
+  })
   it('unbekannte Bezugsgröße: nicht bestimmbar statt geraten', () => {
     expect(decide('ABSOLUTE_PRESENT', counts(10, 0), snap(null)).outcome).toBe('unknown')
     expect(decide('TWO_THIRDS_MEMBERS', counts(10, 0), snap(20, null)).outcome).toBe('unknown')
   })
-  it('ohne Ja nie angenommen, auch bei Bezugsgröße 0', () => {
-    expect(decide('ABSOLUTE_PRESENT', counts(0, 0), snap(0)).outcome).toBe('rejected')
+  it('Bezugsgröße 0 (niemand eingecheckt) ist unbekannt, nie angenommen (V-03)', () => {
+    expect(decide('ABSOLUTE_PRESENT', counts(0, 0), snap(0)).outcome).toBe('unknown')
+    expect(decide('ABSOLUTE_PRESENT', counts(1, 0), snap(0)).outcome).toBe('unknown')
+  })
+  it('Bezugsgröße Anwesende/Mitglieder ist nie kleiner als die Zahl der Stimmen (V-03)', () => {
+    const verdict = decide('ABSOLUTE_PRESENT', counts(4, 6), snap(4))
+    expect(verdict).toMatchObject({ outcome: 'rejected', base: 10, needed: 6 })
+    expect(decide('ABSOLUTE_PRESENT', counts(6, 4), snap(4)).outcome).toBe('adopted')
   })
 })
 

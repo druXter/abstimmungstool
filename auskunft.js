@@ -10,10 +10,14 @@
 // Für alle Tools auf einmal: suite-kit/scripts/auskunft.sh
 //
 // Gefunden wird über die Adresse (ohne Groß-/Kleinschreibung): Verwaltungskonto, Stimmen mit dieser Adresse als
-// Schlüssel (Modus EMAIL und RSVP - dort ist die Adresse auch der angezeigte Name), Bestätigungen (EmailVoter),
+// Schlüssel (Modus EMAIL und RSVP - dort ist die Adresse auch der angezeigte Name), Stimmen über einen persönlichen
+// Stimmlink mit dieser Adresse und Stimmen des Verwaltungskontos (Modus Konto), Bestätigungen (EmailVoter),
 // persönliche Stimmlinks mit Adresse, Freigabelisten (allowedEmails) und alte Verwaltungslinks (creatorEmail).
+// Geheime Stimmen (geheime Wahl, Sitzung) sind keiner Person zuzuordnen und fehlen deshalb.
 // Löschen: Stimmen werden anonymisiert statt gelöscht (Schlüssel zufällig, ohne Namen) - so bleiben Ergebnisse und
-// Beschlüsse, wie sie waren, aber niemand kann sie der Person mehr zuordnen. Bestätigungen werden gelöscht, die
+// Beschlüsse, wie sie waren, aber niemand kann sie der Person mehr zuordnen. Stimmen über Stimmlink und Konto
+// verlieren nur den Namen: Ihr Schlüssel bleibt, sonst könnten Link bzw. Konto in einer laufenden Abstimmung ein
+// zweites Mal abstimmen; der Stimmlink verliert dafür Adresse und Bezeichnung. Bestätigungen werden gelöscht, die
 // Adresse verschwindet aus Stimmlinks, Freigabelisten und Verwaltungslinks. Teilnehmendenkonten aus dem Verbund
 // kennen hier keine Adresse (nur Kennung und Name) - sie findet das Skript in rsvp-app. Verwaltungskonten löscht es
 // nie, nur einen Hinweis.
@@ -50,16 +54,19 @@ async function collect(email) {
       _count: { select: { ownedPolls: true, surveys: true, liveSessions: true, assemblies: true, sessions: true, pushSubscriptions: true } }
     }
   });
-  const keys = [`email:${email}`, `rsvp:${email}`];
-  const votes = (await prisma.vote.findMany({
-    where: { OR: [{ voterKey: { startsWith: 'email:' } }, { voterKey: { startsWith: 'rsvp:' } }, { voterName: { not: null } }] },
-    include: { poll: { select: { title: true } }, option: { select: { label: true } } }
-  })).filter(v => keys.includes(v.voterKey.toLowerCase()) || same(v.voterName, email));
-  const emailVoters = await prisma.emailVoter.findMany({
-    where: { id: { in: await idsByEmail(prisma.emailVoter, email) } }, include: { poll: { select: { title: true } } }
-  });
   const voterLinks = await prisma.voterLink.findMany({
     where: { id: { in: await idsByEmail(prisma.voterLink, email) } }, include: { poll: { select: { title: true } } }
+  });
+  const keys = [`email:${email}`, `rsvp:${email}`];
+  // Schlüssel, die bleiben müssen (siehe oben): Stimmlinks mit dieser Adresse und Verwaltungskonten
+  const keptKeys = [...voterLinks.map(l => `link:${l.id}`), ...users.map(u => `account:${u.id}`)];
+  const votes = (await prisma.vote.findMany({
+    where: { OR: [{ voterKey: { startsWith: 'email:' } }, { voterKey: { startsWith: 'rsvp:' } }, { voterKey: { in: keptKeys } }, { voterName: { not: null } }] },
+    include: { poll: { select: { title: true } }, option: { select: { label: true } } }
+  })).filter(v => keys.includes(v.voterKey.toLowerCase()) || keptKeys.includes(v.voterKey) || same(v.voterName, email))
+    .map(v => ({ ...v, keepKey: keptKeys.includes(v.voterKey) }));
+  const emailVoters = await prisma.emailVoter.findMany({
+    where: { id: { in: await idsByEmail(prisma.emailVoter, email) } }, include: { poll: { select: { title: true } } }
   });
   const allowedIn = (await prisma.poll.findMany({ where: { allowedEmails: { not: null } }, select: { id: true, title: true, allowedEmails: true } }))
     .filter(p => allowedLines(p.allowedEmails).some(line => same(line, email)));
@@ -79,7 +86,8 @@ async function main() {
   const confirmed = flags.includes('--ja');
   const found = await collect(email);
   const hints = ['Teilnehmendenkonten (Abstimmen mit Konto aus rsvp-app) tragen hier keine Adresse - sie stehen in der Auskunft von rsvp-app.'];
-  if (found.users.length) hints.push('Verwaltungskonto vorhanden: wird nicht automatisch gelöscht (daran hängen Abstimmungen). Löschen über „Konten“ einer Admin-Person.');
+  if (found.users.length) hints.push('Verwaltungskonto vorhanden: wird nicht automatisch gelöscht (daran hängen Abstimmungen). Löschen über „Konten“ einer Admin-Person - erst dann sind Stimmen „mit Konto“ ganz von der Person gelöst.');
+  hints.push('Stimmen bei geheimer Wahl und in Sitzungen mit geheimer Abstimmung sind keiner Person zuzuordnen und stehen deshalb nicht in der Auskunft.');
 
   if (!erase) {
     console.log(JSON.stringify({
@@ -109,9 +117,10 @@ async function main() {
     const anonymous = new Map();
     const keyFor = pollId => anonymous.get(pollId) ?? anonymous.set(pollId, `geloescht:${randomBytes(16).toString('base64url')}`).get(pollId);
     await prisma.$transaction([
-      ...found.votes.map(v => prisma.vote.update({ where: { id: v.id }, data: { voterKey: keyFor(v.pollId), voterName: null } })),
+      ...found.votes.map(v => prisma.vote.update({ where: { id: v.id }, data: v.keepKey ? { voterName: null } : { voterKey: keyFor(v.pollId), voterName: null } })),
       prisma.emailVoter.deleteMany({ where: { id: { in: found.emailVoters.map(v => v.id) } } }),
-      prisma.voterLink.updateMany({ where: { id: { in: found.voterLinks.map(l => l.id) } }, data: { email: null } }),
+      // Die Bezeichnung ist meist der Name - sie hängt über den Schlüssel an der Stimme
+      prisma.voterLink.updateMany({ where: { id: { in: found.voterLinks.map(l => l.id) } }, data: { email: null, label: 'gelöscht' } }),
       // Leer hieße „jede Adresse“ - dann bleibt ein Eintrag, der auf niemanden passt
       ...found.allowedIn.map(p => prisma.poll.update({
         where: { id: p.id }, data: { allowedEmails: allowedLines(p.allowedEmails).filter(line => !same(line, email) && line.trim()).join('\n') || NOBODY }

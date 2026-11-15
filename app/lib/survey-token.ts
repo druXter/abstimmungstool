@@ -44,7 +44,8 @@ export function issueFormToken(surveyId: string): string {
   return `${issuedAt}.${nonce}.${sign(surveyId, issuedAt, nonce)}`
 }
 
-export type TokenCheck = { ok: true; nonce: string } | { ok: false; reason: 'ungueltig' | 'zu-schnell' }
+/** issuedAt = Zeitpunkt, zu dem das Formular geladen wurde (signiert) - z.B. ob es den KI-Hinweis schon zeigte. */
+export type TokenCheck = { ok: true; nonce: string; issuedAt: Date } | { ok: false; reason: 'ungueltig' | 'zu-schnell' }
 
 /** Prüft Signatur und Alter (verbraucht das Token NICHT, siehe consumeFormToken). */
 export function checkFormToken(surveyId: string, token: unknown, now = Date.now()): TokenCheck {
@@ -57,7 +58,7 @@ export function checkFormToken(surveyId: string, token: unknown, now = Date.now(
   const age = now - Number(issuedAt)
   if (age < 0 || age > MAX_AGE_MS) return { ok: false, reason: 'ungueltig' }
   if (age < minFillMs()) return { ok: false, reason: 'zu-schnell' }
-  return { ok: true, nonce }
+  return { ok: true, nonce, issuedAt: new Date(Number(issuedAt)) }
 }
 
 /** Verbraucht die Nonce atomar (reserve mit Grenze 1). false = schon einmal benutzt. */

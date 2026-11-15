@@ -116,7 +116,8 @@ test('Quorum während der Abstimmung: es fehlen noch …', async ({ page }) => {
 test('Ergebnis-Meldung an rsvp-app: nicht beschlussfähig bzw. Punkte - bei "nur Verwaltung" gar nicht', async ({ request }) => {
   const owner = await createAccount()
   const cron = () => request.get(`/api/cron/close-expired-polls?secret=${TEST_CRON_SECRET}`)
-  const expired = { rsvpEventId: 'ev-rsvp', closesAt: new Date(Date.now() - 1000) }
+  // Ergebnis-Meldungen gibt es nur im Modus RSVP (an den gebundenen Termin, app/lib/rsvp-notify.ts)
+  const expired = { voterIdentity: 'RSVP' as const, rsvpEventId: 'ev-rsvp', closesAt: new Date(Date.now() - 1000) }
 
   const quorum = await createPoll(owner.id, { ...expired, quorum: 3 })
   await addVote(quorum.id, quorum.options[0].id, `rq-${quorum.id}`)

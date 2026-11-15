@@ -289,7 +289,7 @@ export default async function ManageSurveyPage({
               {q.kind === 'TEXT' && (
                 <SummaryPanel
                   surveyId={id} questionId={q.id} texts={q.texts} enabled={aiEnabled}
-                  eligible={q.texts.filter(t => summaryAllowed(survey.aiSince, t.at)).length}
+                  eligible={q.texts.filter(t => summaryAllowed(survey.aiSince, t.at, t.aiExcluded)).length}
                   summary={summaryOf.get(q.id) ?? null} result={frage === q.id ? ki : undefined}
                 />
               )}

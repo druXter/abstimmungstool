@@ -27,12 +27,12 @@ export type MajorityRule = keyof typeof MAJORITY_RULES
 export const MAJORITY_HINTS: Record<MajorityRule, string> = {
   SIMPLE: 'mehr Ja als Nein, Enthaltungen zählen nicht',
   ABSOLUTE_CAST: 'mehr als die Hälfte aller Stimmen, Enthaltungen zählen wie Nein',
-  ABSOLUTE_PRESENT: 'mehr als die Hälfte der Anwesenden beim Schließen',
-  ABSOLUTE_MEMBERS: 'mehr als die Hälfte der Mitglieder',
+  ABSOLUTE_PRESENT: 'mehr als die Hälfte der Anwesenden beim Schließen (mindestens aller, die abgestimmt haben)',
+  ABSOLUTE_MEMBERS: 'mehr als die Hälfte der Mitglieder (mindestens aller, die abgestimmt haben)',
   TWO_THIRDS_VALID: 'mindestens doppelt so viele Ja wie Nein, Enthaltungen zählen nicht',
   TWO_THIRDS_CAST: 'mindestens zwei Drittel aller Stimmen, Enthaltungen zählen wie Nein',
-  TWO_THIRDS_PRESENT: 'mindestens zwei Drittel der Anwesenden beim Schließen',
-  TWO_THIRDS_MEMBERS: 'mindestens zwei Drittel der Mitglieder'
+  TWO_THIRDS_PRESENT: 'mindestens zwei Drittel der Anwesenden beim Schließen (mindestens aller, die abgestimmt haben)',
+  TWO_THIRDS_MEMBERS: 'mindestens zwei Drittel der Mitglieder (mindestens aller, die abgestimmt haben)'
 }
 
 export function parseMajorityRule(value: unknown): MajorityRule | null {
@@ -52,12 +52,13 @@ export function yesNoCounts(options: { label: string; votes: number }[]): YesNoC
 
 /**
  * adopted/rejected nach der Regel; no-quorum, wenn die Sitzung beim Schließen nicht beschlussfähig war (dann gibt es
- * keinen Beschluss, egal wie abgestimmt wurde); unknown, wenn die Bezugsgröße fehlt (rsvp-app beim Schließen nicht
- * erreichbar bzw. keine Zahl der Mitglieder).
+ * keinen Beschluss, egal wie abgestimmt wurde); quorum-unknown, wenn die Sitzung ein Quorum hat, die Anwesenheit beim
+ * Schließen aber nicht feststellbar war (rsvp-app nicht erreichbar); unknown, wenn die Bezugsgröße fehlt (rsvp-app
+ * beim Schließen nicht erreichbar, niemand eingecheckt bzw. keine Zahl der Mitglieder).
  */
 export type Verdict = {
   rule: MajorityRule
-  outcome: 'adopted' | 'rejected' | 'no-quorum' | 'unknown'
+  outcome: 'adopted' | 'rejected' | 'no-quorum' | 'quorum-unknown' | 'unknown'
   yes: number
   /** Bezugsgröße (Ja + Nein, alle Stimmen, Anwesende, Mitglieder); null = unbekannt. */
   base: number | null
@@ -70,19 +71,29 @@ export function neededYes(share: 'half' | 'twoThirds', base: number): number {
   return share === 'half' ? Math.floor(base / 2) + 1 : Math.ceil((2 * base) / 3)
 }
 
+/**
+ * `quorum` = beim Schließen eingestelltes Quorum (Poll.assemblyQuorum; null = keins bzw. vor dieser Spalte
+ * geschlossen). Mit Quorum und `quorumMet: null` war die Beschlussfähigkeit nicht feststellbar - dann kein Beschluss.
+ */
 export function decide(
   rule: MajorityRule,
   counts: YesNoCounts,
-  snapshot: { present: number | null; members: number | null; quorumMet: boolean | null }
+  snapshot: { present: number | null; members: number | null; quorumMet: boolean | null; quorum?: number | null }
 ): Verdict {
   const { share, base: baseKind } = MAJORITY_RULES[rule]
+  const cast = counts.yes + counts.no + counts.abstain
+  // Anwesende bzw. Mitglieder: Wer abgestimmt hat, war da bzw. ist Mitglied - die Bezugsgröße ist nie kleiner als die
+  // Zahl der Stimmen (sonst gälte ein Antrag mit mehr Nein als Ja als angenommen, wenn nach der Stimmabgabe Leute
+  // gehen oder die Zahl der Mitglieder zu klein eingetragen ist). 0 heißt: niemand eingecheckt - unbekannt.
+  const snapshotBase = baseKind === 'present' ? snapshot.present : baseKind === 'members' ? snapshot.members : null
   const base = baseKind === 'valid' ? counts.yes + counts.no
-    : baseKind === 'cast' ? counts.yes + counts.no + counts.abstain
-    : baseKind === 'present' ? snapshot.present
-    : snapshot.members
+    : baseKind === 'cast' ? cast
+    : snapshotBase === null || snapshotBase <= 0 ? null
+    : Math.max(snapshotBase, cast)
   const needed = share === 'simple' ? counts.no + 1 : base === null ? null : neededYes(share, base)
   const verdict = { rule, yes: counts.yes, base, needed }
   if (snapshot.quorumMet === false) return { ...verdict, outcome: 'no-quorum' }
+  if (snapshot.quorumMet === null && snapshot.quorum != null) return { ...verdict, outcome: 'quorum-unknown' }
   if (needed === null) return { ...verdict, outcome: 'unknown' }
   // Ohne eine einzige Ja-Stimme ist nichts angenommen (auch nicht bei Bezugsgröße 0)
   return { ...verdict, outcome: counts.yes > 0 && counts.yes >= needed ? 'adopted' : 'rejected' }
@@ -92,6 +103,7 @@ export const OUTCOME_LABEL: Record<Verdict['outcome'], string> = {
   adopted: 'angenommen',
   rejected: 'abgelehnt',
   'no-quorum': 'kein Beschluss (nicht beschlussfähig)',
+  'quorum-unknown': 'kein Beschluss (Beschlussfähigkeit nicht feststellbar)',
   unknown: 'Mehrheit nicht bestimmbar'
 }
 
@@ -105,11 +117,17 @@ export function verdictDetail(verdict: Verdict): string {
 
 /** Ergebnis einer geschlossenen Abstimmung, sofern sie eine Regel hat und Ja/Nein/Enthaltung ist. */
 export function verdictFor(
-  poll: { assemblyMajority: string | null; assemblyPresent: number | null; assemblyMembers: number | null; assemblyQuorumMet: boolean | null },
+  poll: { assemblyMajority: string | null; assemblyPresent: number | null; assemblyMembers: number | null; assemblyQuorumMet: boolean | null; assemblyQuorum?: number | null },
   options: { label: string; votes: number }[]
 ): Verdict | null {
   const rule = parseMajorityRule(poll.assemblyMajority)
   const counts = yesNoCounts(options)
   if (!rule || !counts) return null
-  return decide(rule, counts, { present: poll.assemblyPresent, members: poll.assemblyMembers, quorumMet: poll.assemblyQuorumMet })
+  return decide(rule, counts, { present: poll.assemblyPresent, members: poll.assemblyMembers, quorumMet: poll.assemblyQuorumMet, quorum: poll.assemblyQuorum })
+}
+
+/** "beschlussfähig", "nicht beschlussfähig", "Beschlussfähigkeit unbekannt" (Quorum, aber rsvp-app beim Schließen nicht erreichbar) oder null. */
+export function quorumNote(poll: { assemblyQuorumMet: boolean | null; assemblyQuorum?: number | null }): string | null {
+  if (poll.assemblyQuorumMet !== null) return poll.assemblyQuorumMet ? 'beschlussfähig' : 'nicht beschlussfähig'
+  return poll.assemblyQuorum != null ? 'Beschlussfähigkeit unbekannt' : null
 }

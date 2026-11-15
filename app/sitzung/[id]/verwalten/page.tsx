@@ -19,7 +19,7 @@ import AgendaList from '../../agenda'
 import AttendanceList from '../../attendance-list'
 import VerdictLine from '../../verdict'
 import { MajoritySelect } from '../../settings-fields'
-import { MAJORITY_RULES, parseMajorityRule, verdictFor } from '../../../lib/majority'
+import { MAJORITY_RULES, parseMajorityRule, verdictFor, quorumNote } from '../../../lib/majority'
 
 export const dynamic = 'force-dynamic'
 
@@ -63,7 +63,7 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
     include: {
       owner: { select: { email: true } },
       access: { select: { id: true, user: { select: { email: true, name: true } } }, orderBy: { createdAt: 'asc' } },
-      polls: { orderBy: { createdAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true } },
+      polls: { orderBy: { createdAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true, assemblyQuorum: true } },
       speakers: { where: { doneAt: null }, include: { member: { select: { name: true } } } },
       members: { select: { sub: true } }
     }
@@ -267,7 +267,7 @@ export default async function ManageAssemblyPage({ params, searchParams }: { par
                       </ul>
                       <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                         {[`${result.voters} abgestimmt`, poll.assemblyPresent !== null ? `${poll.assemblyPresent} anwesend` : null,
-                          poll.assemblyQuorumMet === true ? 'beschlussfähig' : poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null].filter(Boolean).join(' · ')}
+                          quorumNote(poll)].filter(Boolean).join(' · ')}
                       </p>
                       <VerdictLine verdict={verdictFor(poll, result.options)} />
                     </li>

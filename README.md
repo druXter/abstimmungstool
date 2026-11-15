@@ -202,9 +202,14 @@ Abgewiesene Stimmen (Höchstzahl, Drosselung) melden sich per Hinweis auf der Se
   Zeitstempel (`createdAt` = 1970), damit sie sich nicht über Zeitpunkte zuordnen lässt.
   Folgen: Nach einer Neuausstellung kann eine schon abgegebene Stimme nicht mehr geändert
   werden (sie zählt aber, ein zweites Abstimmen ist gesperrt), und Links mit Stimme lassen
-  sich nicht widerrufen. **Ehrliche Grenzen:** Wer die Links verteilt, kennt die Tokens und
-  könnte damit nachsehen, wie eine Person gestimmt hat. Und wer Datenbank **und**
-  Server-/Proxy-Logs (Zeitpunkte der Aufrufe mit `?k=`) hat, könnte Zeitpunkte abgleichen.
+  sich nicht widerrufen. **Kein Zwischenstand** bis zum Ende (`tallySealed` in `app/lib/results.ts`): Verwaltungsseite,
+  CSV-Export und öffentliche Seite zeigen bis dahin nur, wie viele abgestimmt haben - unabhängig von der eingestellten
+  Sichtbarkeit. Sonst ließe sich neben der Beteiligung je Link nach jeder einzelnen Stimme ablesen, welche Option
+  dazugekommen ist. **Ehrliche Grenzen:** Wer die Links verteilt, kennt die Tokens und
+  könnte damit nachsehen, wie eine Person gestimmt hat. Wer Datenbank **und**
+  Server-/Proxy-Logs (Zeitpunkte der Aufrufe mit `?k=`) hat, könnte Zeitpunkte abgleichen. Und SQLite legt Zeilen in
+  der Reihenfolge ab, in der sie entstehen - wer die Datenbankdatei (oder mehrere Sicherungen während einer Wahl)
+  hat, sieht die Reihenfolge der Stimmen.
 * Gesperrt wie der Modus selbst, sobald abgestimmt wurde.
 
 ## Abstimmen mit bestätigter E-Mail-Adresse (Modus `EMAIL`)
@@ -320,13 +325,24 @@ Von rsvp-app an dieses Tool (`app/lib/rsvp-verification.ts`):
   `eventId` (Event.id in rsvp-app), `attending`. `aud` ist der Origin des Abstimmungs-Links.
 * **`poll-attendance`** - Zu-/Absage (`POST /api/rsvp-webhook`, Body = der Token selbst, `text/plain`): `email`,
   `pollId`, `eventId`, `attending`. rsvp-app meldet nur bestätigte Adressen.
+* **`poll-link`** - beim Speichern eines Abstimmungs-Links in rsvp-app (`POST /api/rsvp-poll-link`, höchstens 5
+  Minuten gültig): `pollId`, `eventId`, `eventTitle`, `owner: { rsvpUserId, toolUserId|null }` (Event-Owner dort und,
+  falls über den Verbund verknüpft, sein Konto hier). Antwort `{ ok, state: "linked" | "pending" | "not-needed" }`;
+  rsvp-app speichert den Link in jedem Fall.
 * **Bindung an einen Termin** (`Poll.rsvpEventId`, `app/lib/rsvp-binding.ts`): Den Abstimmungs-Link trägt in rsvp-app
-  die Verwaltung des Termins frei ein - zugestimmt hat damit nicht, wem die Abstimmung gehört. Deshalb bindet der
-  erste Termin, über den abgestimmt oder eine Zu-/Absage gemeldet wird, die Abstimmung (bedingtes Update); danach
-  gelten Klick-Token und Meldungen nur noch von diesem Termin, alle anderen werden verworfen (kein Abstimmen, keine
+  die Verwaltung des Termins frei ein - zugestimmt hat damit nicht, wem die Abstimmung gehört. Gebunden wird deshalb
+  nur eine Abstimmung im Modus `RSVP` (nie eine in einem anderen Modus oder einer Sitzung - Meldungen dafür werden
+  verworfen, ein Ergebnis geht nicht hinaus), und welcher Termin gilt, **entscheidet die Besitzerin**: Jeder Termin,
+  der sich meldet (`poll-link`, Klick, Zu-/Absage), wird nur vorgemerkt (`RsvpEventCandidate`, höchstens 20 je
+  Abstimmung). Die Verwaltungsseite zeigt Titel und Kennung, die Besitzerin bestätigt ihn („Das ist unser Termin“)
+  oder verwirft ihn. Ohne Rückfrage bindet nur `poll-link` eines Termins, der ihrem über den Suite-Verbund verknüpften
+  Konto gehört. Bis dahin kann niemand abstimmen (die Seite sagt „noch kein Termin bestätigt“). Danach gelten
+  Klick-Token und Meldungen nur noch von diesem Termin, alle anderen werden verworfen (kein Abstimmen, keine
   gelöschten Stimmen, keine Umbindung). Das Ergebnis geht beim Schließen an diesen Termin (siehe "Ergebnis-Meldung"
-  unten). Wer die Abstimmung besitzt, sieht die Bindung in der Verwaltung und kann sie lösen ("Verknüpfung lösen") -
-  dann bindet der nächste Termin. Hintergrund: rsvp-app `docs/AUDIT-2026-11.md`, R-02 und R-04.
+  unten). Lösen kann die Bindung, wer die Abstimmung besitzt („Verknüpfung lösen“, auf Wunsch mit den Stimmen über
+  diesen Termin) - danach gilt wieder erst ein bestätigter Termin. Nach dem Ende entfernt eine Absage keine Stimme
+  mehr - das Ergebnis ist verkündet und gemeldet. Hintergrund: rsvp-app `docs/AUDIT-2026-11.md`, R-02 und R-04, und
+  hier V-01/V-10.
 * **`survey-access`** - Fragebogen-Nachweis (`?verify=...` an einem Fragebogen im Modus `RSVP`): `surveyId`, `sub`
   (Pseudonym) - siehe "Fragebogen für Gäste aus rsvp-app".
 * **`assembly-*`** - Sitzungen, siehe "Sitzungen".
@@ -518,14 +534,17 @@ E-Mail, siehe `app/[pollId]/poll-results.tsx`). Standardmäßig aus. Im Modus `C
 es Namen nur mit Pflicht-Namensfeld (siehe "Hürden"), sonst bleibt der Schalter ohne Wirkung.
 Der Ersteller/die Erstellerin und alle Konten mit Verwaltungs-Berechtigung (Freigabe) sehen
 die Namen auf der Verwaltungsseite immer, unabhängig von diesem Schalter. Das Abstimmformular
-weist in allen Modi mit Namen darauf hin, wer sie sieht.
+weist in allen Modi mit Namen darauf hin, wer sie sieht. Nach der ersten Stimme lässt sich die öffentliche
+namentliche Anzeige nur noch abschalten: Wer mit „öffentlich bleibt das Ergebnis anonym“ abgestimmt hat, erscheint
+nie mit Namen - auch nicht, wenn danach der Schalter oder die Sichtbarkeit („nur Verwaltung“ → öffentlich) wechselt.
 
 ## Verwaltung & Komfort
 
 * **CSV-Export** (`app/[pollId]/verwalten/export/route.ts`): für alle, die die Abstimmung
   verwalten dürfen (bei Alt-Abstimmungen mit `?token=`). Semikolon, UTF-8 mit BOM (öffnet sich
   in einem deutschen Excel direkt). Enthält Zählstand, Teilnehmende, Ergebnis und - nur wenn
-  die Stimmen Namen tragen - wer was gewählt hat. Textzellen, die mit `= + - @`, Tab oder Zeilenumbruch beginnen,
+  die Stimmen Namen tragen - wer was gewählt hat. Bei geheimer Wahl vor dem Ende nur die Beteiligung; Abstimmungen
+  einer Sitzung haben ihren eigenen Export (nur geschlossene). Textzellen, die mit `= + - @`, Tab oder Zeilenumbruch beginnen,
   bekommen ein `'` vorangestellt (Schutz vor CSV-/Formel-Injection über frei eingegebene Namen; Format aller Tools,
   `csvResponse` aus `suite-kit/web`).
 * **QR-Code** zum Abstimmungslink, im Browser erzeugt (`app/ui/qr-code.tsx`, Paket `qrcode`). Links und Codes
@@ -541,6 +560,11 @@ weist in allen Modi mit Namen darauf hin, wer sie sieht.
 * **Mindestbeteiligung** (`Poll.quorum`): Während der Abstimmung steht "es fehlen noch N",
   danach bei Verfehlen "nicht beschlussfähig" (Seiten, CSV, Mail, rsvp-app). Die Auswertung liegt
   an einer Stelle (`app/lib/results.ts`).
+* **Nach dem Ende** (geschlossen oder Enddatum erreicht) bleibt unter „Einstellungen“ alles, was das Ergebnis
+  berührt: Optionen, Mindestbeteiligung, Art, Grenzen, Höchstzahl und Enddatum (das Formular sperrt die Felder,
+  `updatePoll` ignoriert sie auch in einem von Hand gebauten Formular). Titel, Beschreibung, Sichtbarkeit und
+  Benachrichtigung lassen sich weiter ändern. Eine Stimme, die erst nach dem Schließen ankommt (z.B. während der
+  Abfrage der Anwesenheit bei rsvp-app), wird nicht mehr gespeichert („geschlossen, bevor deine Stimme ankam“).
 
 ## Live-Runden (wie Kahoot)
 
@@ -740,8 +764,10 @@ Eine eigene Art neben Abstimmung und Live-Runde (`Survey` mit `SurveyQuestion`/`
   echten Antworten, das Modell kann also nichts „zitieren“, was niemand geschrieben hat.
   * **Einschalten** je Fragebogen beim Anlegen oder unter „Bearbeiten“ (`Survey.aiSince`, Voreinstellung aus; ohne
     `OPENAI_API_KEY` gesperrt). Das Formular zeigt dann vor dem Ausfüllen einen Hinweis (Deutsch und Englisch). An
-    OpenAI gehen nur Antworten, die **nach dem Einschalten** abgegeben oder geändert wurden - frühere haben den Hinweis
-    nie gesehen. Aus- und wieder Einschalten setzt den Zeitpunkt neu.
+    OpenAI gehen nur Antworten, die **nach dem Einschalten** abgegeben oder geändert wurden, und zwar aus einem
+    Formular, das **nach dem Einschalten geladen** wurde (Ladezeitpunkt aus dem signierten Formular-Token,
+    `SurveyResponse.aiExcluded`) - alle anderen haben den Hinweis nie gesehen. Aus- und wieder Einschalten setzt den
+    Zeitpunkt neu.
   * Erst ab 3 solchen Antworten, höchstens die neuesten 400 (je auf 600 Zeichen gekürzt); dazu nur Titel, Frage und
     Hinweis der Frage. OpenAI Responses API mit `store: false`, Modell `gpt-6-luna` (`OPENAI_MODEL`).
   * Ergebnis gespeichert (`SurveySummary`, eine je Frage) mit Zeitpunkt und Zahl der Antworten; „Neu zusammenfassen“
@@ -803,7 +829,11 @@ offen, Ergebnis nach dem Schließen. **Mehrheiten** (Idee L33, Konzept Abschnitt
 eine Regel wählen (Vorauswahl in den Einstellungen) - einfache Mehrheit, absolute Mehrheit oder zwei Drittel der
 abgegebenen Stimmen, der Anwesenden oder der Mitglieder (Zahl aus den Einstellungen, sonst die Zusagen). Das Ergebnis
 zeigt dann „angenommen“ oder „abgelehnt“ mit der Rechnung, bei fehlender Beschlussfähigkeit „kein Beschluss“ - in
-Leitung, Mitgliederansicht, Tafel, CSV und im Protokoll des Zeitplans. Wahlen haben keine Regel. Mitglieder stimmen direkt auf `/sitzung/<id>` ab, die Seite aktualisiert sich
+Leitung, Mitgliederansicht, Tafel, CSV und im Protokoll des Zeitplans. Wahlen haben keine Regel. Bezugsgröße
+„Anwesende“ bzw. „Mitglieder“ ist nie kleiner als die Zahl der abgegebenen Stimmen (wer abgestimmt hat, war da - sonst
+gälte ein Antrag mit mehr Nein als Ja als angenommen, wenn danach Leute gehen); ist niemand eingecheckt, ist die
+Mehrheit „nicht bestimmbar“. Hat die Sitzung ein Quorum und antwortet rsvp-app beim Schließen nicht, steht „kein
+Beschluss (Beschlussfähigkeit nicht feststellbar)“ (`Poll.assemblyQuorum` hält das Quorum beim Schließen fest). Mitglieder stimmen direkt auf `/sitzung/<id>` ab, die Seite aktualisiert sich
 selbst (`Assembly.version`, `/api/sitzung/<id>/stand`). **Geheim:** Schlüssel aus Cookie-Token und Abstimmung (wie
 die geheime Wahl mit Stimmlinks), keine Zeitstempel; die Teilnahme steht in `AssemblyMember.votedPolls` (eine
 Änderung der Zeile, keine neue Zeile - so verrät die Reihenfolge nichts). Wer danach von einem anderen Gerät
@@ -871,11 +901,15 @@ Bei Abstimmungen mit Terminoptionen (Tage oder Termine mit Uhrzeit) und "Termin 
    Abstimmende erreichbar sind. `confirmPollDate` prüft alles serverseitig und legt nur einmal fest
    (bedingtes Update auf `finalizedAt`).
 3. **Übergabe an rsvp-app** (`app/lib/rsvp-date.ts`, braucht `RSVP_APP_BASE_URL` und
-   `RSVP_VERIFICATION_SECRET`): Events dort, deren Abstimmungslink auf genau diese Abstimmung zeigt
-   und deren Datum noch offen ist ("Datum noch offen" in rsvp-app), übernehmen den Termin, und
-   rsvp-app benachrichtigt deren Zusagende. Gibt es keins, kann rsvp-app ein neues Event anlegen -
-   nur für den Owner der Abstimmung und nur, wenn dessen Konto über den Suite-Verbund mit einem
-   rsvp-app-Konto verknüpft ist (dann Häkchen "neues Event anlegen", gehört dort diesem Konto).
+   `RSVP_VERIFICATION_SECRET`): Events dort, deren Abstimmungslink auf genau diese Abstimmung zeigt,
+   deren Datum noch offen ist ("Datum noch offen" in rsvp-app) und die **die Besitzerin bestätigt
+   hat**, übernehmen den Termin, und rsvp-app benachrichtigt deren Zusagende. Bestätigt sind der
+   gebundene Termin, Events, die sie beim Festlegen ankreuzt („Das ist unser Event“), und Events, die
+   dort ihrem verknüpften Konto gehören (V-02). Alle anderen bleiben unverändert, ihr Link geht an
+   niemanden. Gibt es kein bestätigtes, kann rsvp-app ein neues Event anlegen - auch wenn fremde Events
+   auf die Abstimmung zeigen, aber nur für den Owner der Abstimmung und nur, wenn dessen Konto über den
+   Suite-Verbund mit einem rsvp-app-Konto verknüpft ist (dann Häkchen "neues Event anlegen", gehört
+   dort diesem Konto).
    Ist rsvp-app nicht erreichbar, wird trotzdem festgelegt; die Übergabe lässt sich danach
    wiederholen (ohne erneute Benachrichtigung).
 4. **Benachrichtigung der Abstimmenden** mit dem Termin (und ggf. dem Link zum rsvp-app-Event):
@@ -890,8 +924,11 @@ Die öffentliche Abstimmungsseite zeigt danach "Termin steht fest" (mit Link zum
 Vertrag (`POST <RSVP_APP_BASE_URL>/api/poll-date`, Body = signierter Token wie beim "Token-Format"
 oben, 5 Minuten gültig; `aud`, `iat` und `exp` ergänzt das Format):
 
-* `{ typ: "poll-date-status", pollId, owner: { toolUserId, rsvpUserId|null } }` → `{ ok, events: [{ id, title, datePending }], canCreate }`
-* `{ typ: "poll-date-set", pollId, pollTitle, startsAt (ISO), owner, create, skipEmailHashes: [sha256-hex] }` → `{ ok, updated: [{ id, title, url }], created: { id, title, url, adminUrl } | null, unchanged: [{ id, title }] }`
+* `{ typ: "poll-date-status", pollId, owner: { toolUserId, rsvpUserId|null }, eventIds: [id] }` → `{ ok, events: [{ id, title, datePending, trusted }], canCreate }`
+* `{ typ: "poll-date-set", pollId, pollTitle, startsAt (ISO), owner, create, skipEmailHashes: [sha256-hex], eventIds: [id] }` → `{ ok, updated: [{ id, title, url, trusted }], created: { id, title, url, adminUrl } | null, unchanged: [{ id, title }], ignored: [{ id, title }] }`
+
+`eventIds` sind die bestätigten Events (gebundener Termin und angekreuzte, höchstens 20); `trusted` sagt, ob ein Event
+bestätigt oder ein eigenes ist. `updated` und `unchanged` enthalten nur solche, `ignored` die übrigen.
 
 `rsvpUserId` ist die Konto-ID in rsvp-app aus einer Verbund-Verknüpfung hier (`ExternalIdentity` mit
 rsvp-app als Anbieter); rsvp-app prüft außerdem seine eigene Verknüpfung in Gegenrichtung. Beide Seiten
@@ -992,7 +1029,7 @@ Für alle Tools auf einmal: `suite-kit/scripts/auskunft.sh <adresse> [--loeschen
 `~/auskunft/`). Gefunden wird ohne Groß-/Kleinschreibung; Tokens, Hashes und Push-Schlüssel stehen nie in der Ausgabe.
 Verwaltungskonten löscht das Skript nie (daran hängen Inhalte), es nennt sie in den Hinweisen.
 
-Findet Verwaltungskonto, Stimmen mit der Adresse als Schlüssel (Modus EMAIL und RSVP), Bestätigungen, Stimmlinks, Freigabelisten und alte Verwaltungslinks. Löschen anonymisiert Stimmen (Ergebnisse bleiben), löscht Bestätigungen und entfernt die Adresse aus Stimmlinks, Freigabelisten (nie leer - sonst dürfte jede Adresse) und Verwaltungslinks.
+Findet Verwaltungskonto, Stimmen mit der Adresse als Schlüssel (Modus EMAIL und RSVP), Stimmen über einen Stimmlink mit dieser Adresse und Stimmen des Verwaltungskontos (Modus Konto), Bestätigungen, Stimmlinks, Freigabelisten und alte Verwaltungslinks. Geheime Stimmen sind niemandem zuzuordnen und fehlen. Löschen anonymisiert Stimmen (Ergebnisse bleiben; Stimmen über Stimmlink und Konto verlieren den Namen, der Schlüssel bleibt, damit nicht ein zweites Mal abgestimmt werden kann), löscht Bestätigungen und entfernt Adresse und Bezeichnung aus Stimmlinks, die Adresse aus Freigabelisten (nie leer - sonst dürfte jede Adresse) und Verwaltungslinks.
 
 ## Setup
 
@@ -1052,6 +1089,12 @@ nach `.e2e/mails.jsonl` schreibt. Push-Mitteilungen (`push.spec.ts`) gehen an ei
 Inhalt mit einer unabhängigen RFC-8291-Implementierung (Dev-Paket `http_ece`). Nicht automatisch
 getestet ist das Einschalten im Browser selbst: Headless-Chromium meldet Mitteilungen immer als
 verweigert.
+
+**Sicherheitsprüfung November 2026:** [docs/AUDIT-2026-11.md](docs/AUDIT-2026-11.md) - 12 Funde (6 mittel, 5 niedrig,
+1 Hinweis), am 2026-11-14 behoben. Je Fund ein Test mit der Kennung V-01 … im Titel in
+`tests/e2e/audit-2026-11.spec.ts` und `tests/unit/audit-2026-11.test.ts`; sie waren vor der Behebung rot und bleiben
+als Regressionstests. Die Vertragsteile von V-01 b und V-02 kamen am 2026-11-15 zusammen mit rsvp-app dazu
+(`poll-link`, `eventIds`); Häkchenliste in `TODO.md`.
 
 Der Lauf baut die App frisch (`next build`) und startet sie auf `127.0.0.1:3601` mit einer
 eigenen Datenbank (`prisma/test.db`, wird bei jedem Lauf neu angelegt) - nie gegen die

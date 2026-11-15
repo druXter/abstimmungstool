@@ -20,11 +20,13 @@ import { matchesRsvpEvent } from '../../lib/rsvp-binding'
  * entfernen - eine neue Stimme entsteht erst durch einen tatsächlichen castVote-Aufruf
  * mit frischem, gültigem Token.
  *
- * Bindet die Abstimmung beiläufig an den Termin (poll.rsvpEventId, falls noch nicht
- * gesetzt), damit beim Schließen bekannt ist, welchem rsvp-app-Event das Ergebnis
- * gemeldet werden soll (siehe app/lib/rsvp-notify.ts). Meldungen eines anderen Termins
- * als des gebundenen werden verworfen - sie überschreiben die Bindung nicht und
- * löschen keine Stimmen (app/lib/rsvp-binding.ts, rsvp-app docs/AUDIT-2026-11.md R-02).
+ * Gilt nur für den gebundenen Termin (poll.rsvpEventId, app/lib/rsvp-binding.ts). Meldungen eines anderen Termins
+ * werden verworfen - sie binden nicht und löschen keine Stimmen (rsvp-app docs/AUDIT-2026-11.md R-02). Ist die
+ * Abstimmung noch nicht gebunden, wird der Termin nur vorgemerkt; die Besitzerin bestätigt ihn (V-01 b). Abstimmungen
+ * in einem anderen Modus als RSVP werden nie gebunden (V-01 a).
+ *
+ * Nach dem Ende entfernt eine Absage nichts mehr - das Ergebnis ist verkündet und an rsvp-app gemeldet und darf sich
+ * nicht nachträglich ändern (wie bei Stimmlinks, app/voter-link-actions.ts; docs/AUDIT-2026-11.md, V-10).
  */
 /** Größere Meldungen verschickt rsvp-app nie; alles darüber wird gar nicht erst gelesen. */
 const MAX_BODY = 10_000
@@ -42,12 +44,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true, note: 'poll not found, ignored' })
   }
 
-  if (!(await matchesRsvpEvent(poll.id, message.eventId, { bind: true }))) {
+  if ((await matchesRsvpEvent(poll.id, message.eventId)) !== 'match') {
     return NextResponse.json({ ok: true, note: 'other event, ignored' })
   }
 
   if (!message.attending) {
-    await prisma.vote.deleteMany({ where: { pollId: poll.id, voterKey: voterKey('RSVP', message.email) } })
+    // Bedingung über die Relation: auch ein Schließen genau zwischen Laden und Löschen lässt die Stimme stehen.
+    await prisma.vote.deleteMany({
+      where: {
+        pollId: poll.id, voterKey: voterKey('RSVP', message.email),
+        poll: { closedAt: null, OR: [{ closesAt: null }, { closesAt: { gt: new Date() } }] }
+      }
+    })
   }
 
   return NextResponse.json({ ok: true })

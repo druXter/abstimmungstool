@@ -286,9 +286,13 @@ export async function submitSurvey(formData: FormData): Promise<void> {
     return true
   }
 
+  // Hinweis auf die KI-Zusammenfassung nur, wenn sie beim Laden des Formulars schon an war - sonst geht diese Antwort
+  // nie an die KI, auch wenn sie danach abgeschickt wird (docs/AUDIT-2026-11.md, V-08).
+  const aiExcluded = !survey.aiSince || token.issuedAt < survey.aiSince
+
   if (survey.identity === 'ANONYMOUS') {
     if (await throttled()) redirect(to('hinweis=gedrosselt'))
-    await prisma.surveyResponse.create({ data: { surveyId: survey.id, answers: { create: parsed.rows } } })
+    await prisma.surveyResponse.create({ data: { surveyId: survey.id, aiExcluded, answers: { create: parsed.rows } } })
   } else {
     const voterKey = rsvp ? surveyRsvpVoterKey(rsvp.sub) : surveyVoterKey(await getOrCreateVoterToken())
     const existing = await prisma.surveyResponse.findUnique({ where: { surveyId_voterKey: { surveyId: survey.id, voterKey } }, select: { id: true } })
@@ -297,8 +301,8 @@ export async function submitSurvey(formData: FormData): Promise<void> {
       // upsert statt create: Ein Doppelklick (zwei gleichzeitige erste Abgaben) ergibt trotzdem nur eine Antwort.
       const response = await tx.surveyResponse.upsert({
         where: { surveyId_voterKey: { surveyId: survey.id, voterKey } },
-        create: { surveyId: survey.id, voterKey },
-        update: { updatedAt: new Date() }
+        create: { surveyId: survey.id, voterKey, aiExcluded },
+        update: { updatedAt: new Date(), aiExcluded }
       })
       await tx.surveyAnswer.deleteMany({ where: { responseId: response.id } })
       await tx.surveyAnswer.createMany({ data: parsed.rows.map(row => ({ ...row, responseId: response.id })) })
@@ -368,7 +372,7 @@ export async function summarizeSurveyQuestion(formData: FormData) {
   if (!question) return
 
   const rows = await prisma.surveyAnswer.findMany({
-    where: { questionId: question.id, text: { not: null }, response: { updatedAt: { gte: survey.aiSince! } } },
+    where: { questionId: question.id, text: { not: null }, response: { updatedAt: { gte: survey.aiSince! }, aiExcluded: false } },
     orderBy: { response: { updatedAt: 'desc' } },
     select: { id: true, text: true }
   })

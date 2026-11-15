@@ -2,9 +2,9 @@
 import { Badge, type Tone } from '../ui/kit'
 import { OUTCOME_LABEL, verdictDetail, type Verdict } from '../lib/majority'
 
-const TONE: Record<Verdict['outcome'], Tone> = { adopted: 'green', rejected: 'red', 'no-quorum': 'amber', unknown: 'gray' }
+const TONE: Record<Verdict['outcome'], Tone> = { adopted: 'green', rejected: 'red', 'no-quorum': 'amber', 'quorum-unknown': 'amber', unknown: 'gray' }
 const BOARD_TONE: Record<Verdict['outcome'], string> = {
-  adopted: 'text-green-400', rejected: 'text-red-400', 'no-quorum': 'text-amber-300', unknown: 'text-slate-300'
+  adopted: 'text-green-400', rejected: 'text-red-400', 'no-quorum': 'text-amber-300', 'quorum-unknown': 'text-amber-300', unknown: 'text-slate-300'
 }
 
 /**

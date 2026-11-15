@@ -64,15 +64,20 @@ const checkbox = 'h-4 w-4 mt-0.5 shrink-0'
 /**
  * Die Einstellungen einer Abstimmung als einklappbare Abschnitte der Einstellungen-Seite (Gegenstück:
  * parsePollSettings/parseVoterIdentity in app/actions.ts). Zugeklappte Abschnitte werden mitgeschickt.
- * `locked`: Es gibt schon Stimmen, Art und Stimmmodus stehen dann fest (updatePoll ignoriert sie ebenfalls).
+ * `locked`: Es gibt schon Stimmen, Art und Stimmmodus stehen dann fest, die namentliche Anzeige lässt sich nur noch
+ * abschalten (updatePoll ignoriert sie ebenfalls). `ended`: beendet - auch Grenzen, Mindestbeteiligung und Höchstzahl
+ * stehen fest (docs/AUDIT-2026-11.md, V-05/V-06).
  * `open`: Abschnitt, der aufgeklappt beginnt (z.B. aus dem Hinweis nach dem Anlegen).
  */
-export default function PollSettingsFields({ poll, locked = false, open }: { poll: Settings; locked?: boolean; open?: string }) {
+export default function PollSettingsFields({ poll, locked = false, ended = false, open }: { poll: Settings; locked?: boolean; ended?: boolean; open?: string }) {
   const identity = poll.voterIdentity
   // Ein (künftig) nicht mehr angebotener Modus einer bestehenden Abstimmung bleibt sichtbar.
   const offered = offeredIdentities()
   const kinds = offered.includes(identity) ? offered : [...offered, identity]
-  const lockedNote = locked ? ' · gesperrt' : ''
+  const typeLocked = locked || ended
+  const lockedNote = typeLocked ? ' · gesperrt' : ''
+  // Öffentlich mit Namen nur, wenn es beim Abstimmen schon so angekündigt war (siehe updatePoll)
+  const namesLocked = locked && !(poll.showVoterNames && poll.resultsVisibility !== 'MANAGERS')
 
   return (
     <>
@@ -82,10 +87,10 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
       >
         <fieldset className="space-y-2">
           <legend className="sr-only">Art der Abstimmung</legend>
-          {locked && <p className="text-sm text-gray-600 dark:text-gray-400">Es wurde schon abgestimmt - die Art lässt sich nicht mehr ändern.</p>}
+          {typeLocked && <p className="text-sm text-gray-600 dark:text-gray-400">{ended ? 'Die Abstimmung ist beendet' : 'Es wurde schon abgestimmt'} - die Art lässt sich nicht mehr ändern.</p>}
           {POLL_TYPES.map(type => (
-            <label key={type} className={`${radioRow} ${locked ? 'opacity-70' : 'cursor-pointer'}`}>
-              <input type="radio" name="pollType" value={type} defaultChecked={type === poll.pollType} disabled={locked} className={checkbox} />
+            <label key={type} className={`${radioRow} ${typeLocked ? 'opacity-70' : 'cursor-pointer'}`}>
+              <input type="radio" name="pollType" value={type} defaultChecked={type === poll.pollType} disabled={typeLocked} className={checkbox} />
               <span>
                 <span className="block text-sm font-medium">{POLL_TYPE_LABELS[type].title}</span>
                 <span className="block text-xs text-gray-500 dark:text-gray-400">{POLL_TYPE_LABELS[type].text}</span>
@@ -95,7 +100,7 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
           <div className="ml-6 flex items-center gap-2 text-sm">
             <label htmlFor="poll-points-budget">Punkte pro Person (nur bei &quot;Punkte verteilen&quot;)</label>
             <input
-              id="poll-points-budget" type="number" name="pointsBudget" min={1} max={MAX_POINTS_BUDGET} disabled={locked}
+              id="poll-points-budget" type="number" name="pointsBudget" min={1} max={MAX_POINTS_BUDGET} disabled={typeLocked}
               defaultValue={poll.pointsBudget ?? DEFAULT_POINTS_BUDGET} className={smallInput}
             />
           </div>
@@ -103,14 +108,14 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
 
         <div className="border-t border-gray-100 pt-4 dark:border-gray-700">
           <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll.allowMultipleChoices} className="h-4 w-4" />
+            <input type="checkbox" name="allowMultipleChoices" defaultChecked={poll.allowMultipleChoices} disabled={ended} className="h-4 w-4" />
             <span className="text-sm font-medium">Mehrfachauswahl erlauben (mehrere Optionen gleichzeitig wählbar, nur bei &quot;Auswahl&quot;)</span>
           </label>
           <div className="ml-6 mt-2 flex flex-wrap items-center gap-2 text-sm">
             <label htmlFor="poll-min-choices">mindestens</label>
-            <input id="poll-min-choices" type="number" name="minChoices" min={1} max={25} defaultValue={poll.minChoices ?? ''} placeholder="1" className={smallInput} />
+            <input id="poll-min-choices" type="number" name="minChoices" min={1} max={25} defaultValue={poll.minChoices ?? ''} placeholder="1" disabled={ended} className={smallInput} />
             <label htmlFor="poll-max-choices">höchstens</label>
-            <input id="poll-max-choices" type="number" name="maxChoices" min={1} max={25} defaultValue={poll.maxChoices ?? ''} placeholder="alle" className={smallInput} />
+            <input id="poll-max-choices" type="number" name="maxChoices" min={1} max={25} defaultValue={poll.maxChoices ?? ''} placeholder="alle" disabled={ended} className={smallInput} />
             <span className="text-xs text-gray-500 dark:text-gray-400">Optionen pro Stimme (optional, nur bei Mehrfachauswahl)</span>
           </div>
         </div>
@@ -155,7 +160,7 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
                   <span>
                     <span className="block text-sm">Geheime Wahl: nur Teilnahme speichern, nicht wer was gewählt hat</span>
                     <span className="block text-xs text-gray-500 dark:text-gray-400">
-                      Die Verwaltung sieht dann nur, wer schon abgestimmt hat. Ehrliche Grenze: Wer die Links verteilt, kennt sie
+                      Die Verwaltung sieht dann nur, wer schon abgestimmt hat; den Zwischenstand sieht bis zum Ende niemand. Ehrliche Grenze: Wer die Links verteilt, kennt sie
                       und könnte mit einem Link nachsehen, wie diese Person gestimmt hat. Nach der ersten Stimme nicht mehr änderbar.
                     </span>
                   </span>
@@ -194,19 +199,20 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
             Wer die Abstimmung verwaltet, sieht das Ergebnis immer. Bei &quot;nur Verwaltung&quot; wird es auch nicht an rsvp-app gemeldet.
           </p>
         </div>
-        <label className={`${radioRow} cursor-pointer`}>
-          <input type="checkbox" name="showVoterNames" defaultChecked={poll.showVoterNames} className={checkbox} />
+        <label className={`${radioRow} ${namesLocked && !poll.showVoterNames ? 'opacity-70' : 'cursor-pointer'}`}>
+          <input type="checkbox" name="showVoterNames" defaultChecked={poll.showVoterNames} disabled={namesLocked && !poll.showVoterNames} className={checkbox} />
           <span>
             <span className="block text-sm font-medium">Abstimmende namentlich anzeigen (auf der öffentlichen Ergebnisseite)</span>
             <span className="block text-xs text-gray-500 dark:text-gray-400">
               Zeigt bei jeder Option, wer dafür gestimmt hat (je nach Art der Stimmabgabe Name oder E-Mail). Bei
               &quot;Offen für alle&quot; ohne verlangten Namen gibt es keine Namen - dort bleibt das Ergebnis anonym.
+              {namesLocked && ' Es wurde schon mit dem Hinweis „öffentlich bleibt das Ergebnis anonym“ abgestimmt - öffentlich erscheinen deshalb keine Namen mehr, auch nicht nach einem Wechsel der Sichtbarkeit.'}
             </span>
           </span>
         </label>
         <div>
           <label htmlFor="poll-quorum" className={labelClass}>Mindestbeteiligung (Quorum)</label>
-          <input id="poll-quorum" type="number" name="quorum" min={1} max={10000} defaultValue={poll.quorum ?? ''} placeholder="keine" className={mediumInput} />
+          <input id="poll-quorum" type="number" name="quorum" min={1} max={10000} defaultValue={poll.quorum ?? ''} placeholder="keine" disabled={ended} className={mediumInput} />
           <p className={hintClass}>Das Ergebnis gilt erst ab so vielen Teilnehmenden, sonst heißt es &quot;nicht beschlussfähig&quot;.</p>
         </div>
         {poll.optionKind !== 'TEXT' && (
@@ -248,7 +254,7 @@ export default function PollSettingsFields({ poll, locked = false, open }: { pol
         </div>
         <div>
           <label htmlFor="poll-max-voters" className={labelClass}>Höchstzahl an Teilnehmenden</label>
-          <input id="poll-max-voters" type="number" name="maxVoters" min={1} max={10000} defaultValue={poll.maxVoters ?? ''} placeholder="unbegrenzt" className={mediumInput} />
+          <input id="poll-max-voters" type="number" name="maxVoters" min={1} max={10000} defaultValue={poll.maxVoters ?? ''} placeholder="unbegrenzt" disabled={ended} className={mediumInput} />
           <p className={hintClass}>Danach kann niemand mehr neu abstimmen; wer schon abgestimmt hat, kann seine Auswahl weiter ändern.</p>
         </div>
         <div>

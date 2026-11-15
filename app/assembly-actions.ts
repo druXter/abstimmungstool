@@ -106,7 +106,7 @@ async function closeWithSnapshot(assembly: { id: string; rsvpEventId: string | n
   const state = quorumState(assembly, await fetchRoster(assembly, { fresh: true }))
   await prisma.poll.updateMany({
     where: { id: { in: pollIds }, assemblyId: assembly.id, closedAt: null },
-    data: { closedAt: new Date(), assemblyPresent: state.present, assemblyQuorumMet: state.met, assemblyMembers: assembly.memberCount ?? state.members }
+    data: { closedAt: new Date(), assemblyPresent: state.present, assemblyQuorum: assembly.quorum, assemblyQuorumMet: state.met, assemblyMembers: assembly.memberCount ?? state.members }
   })
 }
 

@@ -13,17 +13,18 @@ import { rsvpAppBaseUrl } from './rsvp-date'
  * Schließen-Cronjob (app/api/cron/close-expired-polls/route.ts).
  *
  * No-op ohne poll.rsvpEventId (noch nie ein rsvp-webhook für diese Abstimmung
- * empfangen, siehe app/api/rsvp-webhook/route.ts - z.B. weil der Modus RSVP nie
- * genutzt wurde) oder ohne konfiguriertes RSVP_APP_BASE_URL/
+ * empfangen, siehe app/api/rsvp-webhook/route.ts), in einem anderen Modus als RSVP oder ohne konfiguriertes RSVP_APP_BASE_URL/
  * RSVP_VERIFICATION_SECRET. Gewinner siehe app/lib/results.ts. Ebenfalls no-op bei
  * Poll.resultsVisibility = MANAGERS, weil das Ergebnis dann nicht öffentlich ist. Bewusst
  * best-effort mit kurzem Timeout, wie das Gegenstück in rsvp-app - ein nicht
  * erreichbares rsvp-app darf das Schließen der Abstimmung selbst nie verhindern.
  */
 export async function notifyRsvpAppOfResult(pollId: string): Promise<void> {
-  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, title: true, rsvpEventId: true, closedAt: true, resultsVisibility: true } })
-  // "Nur Verwaltung": Auf der Event-Seite in rsvp-app stünde das Ergebnis sonst öffentlich.
+  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, title: true, rsvpEventId: true, closedAt: true, resultsVisibility: true, voterIdentity: true, assemblyId: true } })
+  // "Nur Verwaltung": Auf der Event-Seite in rsvp-app stünde das Ergebnis sonst öffentlich. Nur Abstimmungen im Modus
+  // RSVP gehören zu einem Termin (app/lib/rsvp-binding.ts, docs/AUDIT-2026-11.md V-01).
   if (!poll || !poll.rsvpEventId || !poll.closedAt || poll.resultsVisibility === 'MANAGERS') return
+  if (poll.voterIdentity !== 'RSVP' || poll.assemblyId) return
 
   const base = rsvpAppBaseUrl()
   if (!base) return

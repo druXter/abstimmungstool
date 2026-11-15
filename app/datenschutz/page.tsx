@@ -2,7 +2,7 @@
 import Link from 'next/link'
 
 // ENTWURF: Beschreibt, was dieses Tool tatsächlich speichert und verarbeitet (Stand: Konten/
-// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, Live-Runden und Fragebögen auch eingebettet, 2026-10-14; KI-Zusammenfassung über OpenAI, 2026-11-02). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
+// Föderation, Teilnehmendenkonten aus rsvp-app, alle Stimmmodi COOKIE/LINK/EMAIL/ACCOUNT/RSVP, Live-Runden und Fragebögen auch eingebettet, 2026-10-14; KI-Zusammenfassung über OpenAI, 2026-11-02; Sicherheitsprüfung, 2026-11-14; Termin-Bestätigung mit rsvp-app, 2026-11-15). Er ersetzt keine Rechtsberatung - vor dem Einsatz mit
 // Externen bitte einmal juristisch/durch die Datenschutzbeauftragten prüfen lassen und
 // bei jeder Änderung der Datenverarbeitung (neue Felder, neue Verbindungen zu anderen
 // Tools der Suite, Speicherfristen) mitpflegen.
@@ -113,7 +113,8 @@ export default function DatenschutzPage() {
             kann die Antworten auf Freitext-Fragen von einer KI zu Themen zusammenfassen lassen. Ist das eingeschaltet,
             steht im Fragebogen vor dem Ausfüllen ein Hinweis. Auf Knopfdruck schicken wir dann den Titel des
             Fragebogens, die Frage und die Freitext-Antworten darauf an OpenAI (Punkt 10) - nur Antworten, die nach dem
-            Einschalten abgegeben oder geändert wurden, ohne Kennungen, Zeitpunkte oder andere Antworten. Das Ergebnis
+            Einschalten abgegeben oder geändert wurden und deren Formular den Hinweis schon gezeigt hat (also nach dem
+            Einschalten geladen wurde), ohne Kennungen, Zeitpunkte oder andere Antworten. Das Ergebnis
             (Überblick, Themen und welche Antworten dazugehören) speichern wir beim Fragebogen; es wird mit ihm gelöscht
             und auch, sobald Antworten gelöscht werden. OpenAI verwendet die Daten nicht zum Training, speichert die
             Anfrage nicht als Antwortverlauf und bewahrt sie nur bis zu 30 Tage zur Erkennung von Missbrauch auf.
@@ -169,21 +170,24 @@ export default function DatenschutzPage() {
             nicht umkehrbaren Hash. Zu jedem Link merken wir uns, ob damit schon abgestimmt wurde (für die
             Beteiligungsübersicht der Verwaltung). Normalerweise hängt deine Stimme an deinem Link, die Verwaltung
             sieht also, wofür du gestimmt hast. Bei einer <strong>geheimen Wahl</strong> speichern wir nur, dass
-            abgestimmt wurde; die Stimme selbst lässt sich ohne deinen Link keiner Person zuordnen. Wer die Links
-            verteilt, kennt sie allerdings und könnte mit deinem Link nachsehen.
+            abgestimmt wurde; die Stimme selbst lässt sich ohne deinen Link keiner Person zuordnen, und einen
+            Zwischenstand zeigen wir bis zum Ende niemandem, auch der Verwaltung nicht. Wer die Links verteilt, kennt
+            sie allerdings und könnte mit deinem Link nachsehen.
           </p>
           <p className="mt-2">
             Die E-Mail-Adressen bzw. Namen sehen die Ersteller:in und Personen mit Verwaltungs-Freigabe auf der Verwaltungsseite.
             Nur wenn die Ersteller:in die Option &quot;Abstimmende namentlich anzeigen&quot; aktiviert, sind sie auch
-            auf der öffentlichen Ergebnisseite sichtbar. Die Abstimmungsseite weist dich darauf hin.
+            auf der öffentlichen Ergebnisseite sichtbar. Die Abstimmungsseite weist dich darauf hin; wer mit dem Hinweis
+            &quot;öffentlich bleibt das Ergebnis anonym&quot; abgestimmt hat, erscheint auch später nicht öffentlich mit
+            Namen.
           </p>
           <p className="mt-2">
             <strong>Terminabstimmungen:</strong> Legt die Verwaltung nach einer Terminabstimmung den Termin fest,
             informieren wir alle Abstimmenden, die wir erreichen können (Push-Mitteilung bei Konten mit eingeschalteten
             Mitteilungen, sonst eine Mail an die bestätigte bzw. beim Stimmlink hinterlegte Adresse; bei anonymer
             Abstimmung niemanden). Ist die Abstimmung mit rsvp-app verbunden, melden wir dorthin den Termin, den Titel
-            und die Konto-Kennung der Person, der die Abstimmung gehört (damit dort ggf. ein Event für sie entsteht),
-            sowie nicht umkehrbare Prüfwerte (SHA-256-Hashes) der Adressen, die wir selbst informieren - nur damit
+            und die Konto-Kennung der Person, der die Abstimmung gehört (damit dort ggf. ein Event für sie entsteht), die
+            Kennungen der rsvp-app-Events, die sie als ihre bestätigt hat, sowie nicht umkehrbare Prüfwerte (SHA-256-Hashes) der Adressen, die wir selbst informieren - nur damit
             niemand dieselbe Nachricht doppelt bekommt.
           </p>
           <p className="mt-2">

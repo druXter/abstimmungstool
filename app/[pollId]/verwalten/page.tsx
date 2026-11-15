@@ -1,10 +1,10 @@
 // app/[pollId]/verwalten/page.tsx
 import Link from 'next/link'
 import { prisma } from '../../lib/prisma'
-import { claimPoll, reviewSuggestion, unlinkRsvpEvent } from '../../actions'
+import { claimPoll, confirmRsvpEvent, dismissRsvpEvent, reviewSuggestion, unlinkRsvpEvent } from '../../actions'
 import { baseUrl } from '../../lib/base-url'
 import PollResults from '../poll-results'
-import { loadResult, loadVoterNames } from '../../lib/results'
+import { loadResult, loadVoterNames, tallySealed } from '../../lib/results'
 import { canCreatePolls } from '../../lib/permissions'
 import { manageUrl } from '../../lib/manage'
 import { pollStatus } from '../../lib/poll-status'
@@ -24,19 +24,23 @@ export default async function VerwaltenPage({
   searchParams
 }: {
   params: Promise<{ pollId: string }>
-  searchParams: Promise<{ token?: string; created?: string; claimed?: string; duplicated?: string; festgelegt?: string; terminFehler?: string; geloest?: string }>
+  searchParams: Promise<{ token?: string; created?: string; claimed?: string; duplicated?: string; festgelegt?: string; terminFehler?: string; geloest?: string; verknuepft?: string }>
 }) {
   const { pollId } = await params
-  const { token, created, claimed, duplicated, festgelegt, terminFehler, geloest } = await searchParams
+  const { token, created, claimed, duplicated, festgelegt, terminFehler, geloest, verknuepft } = await searchParams
   const loaded = await loadManagedPoll(pollId, token, '')
   const { poll, user, legacy, legacyToken, isOwner } = loaded
 
-  const [loadedResult, voterNames, pendingCount, links] = await Promise.all([
+  const [loadedResult, voterNames, pendingCount, links, rsvpCandidates] = await Promise.all([
     loadResult(poll.id),
     // Wer verwaltet, sieht Namen immer (sofern die Art der Stimmabgabe welche liefert) - öffentlich nur mit showVoterNames.
     loadVoterNames(poll.id),
     prisma.pollOption.count({ where: { pollId: poll.id, approved: false } }),
-    poll.voterIdentity === 'LINK' ? prisma.voterLink.findMany({ where: { pollId: poll.id }, select: { hasVoted: true } }) : Promise.resolve(null)
+    poll.voterIdentity === 'LINK' ? prisma.voterLink.findMany({ where: { pollId: poll.id }, select: { hasVoted: true } }) : Promise.resolve(null),
+    // Termine aus rsvp-app, die auf die Abstimmung zeigen und auf Bestätigung warten (app/lib/rsvp-binding.ts)
+    poll.voterIdentity === 'RSVP' && !poll.rsvpEventId && !poll.assemblyId
+      ? prisma.rsvpEventCandidate.findMany({ where: { pollId: poll.id }, orderBy: { createdAt: 'asc' }, select: { eventId: true, eventTitle: true } })
+      : Promise.resolve([])
   ])
   // Siehe app/[pollId]/page.tsx für die Begründung, warum die Prozent-Basis in PollResults die Anzahl
   // abstimmender Personen ist, nicht die Summe der Stimmen.
@@ -48,7 +52,9 @@ export default async function VerwaltenPage({
   const ended = status.state !== 'open'
   const publicLink = `${baseUrl()}/${poll.id}`
   const tokenQuery = legacyToken ? `?token=${encodeURIComponent(legacyToken)}` : ''
-  const leader = voters > 0 && result.winners.length > 0 ? result.winners : null
+  // Geheime Wahl: bis zum Ende kein Zwischenstand, auch hier nicht (app/lib/results.ts tallySealed, V-11)
+  const sealed = tallySealed(poll, ended)
+  const leader = !sealed && voters > 0 && result.winners.length > 0 ? result.winners : null
   const votedLinks = links ? links.filter(l => l.hasVoted).length : 0
 
   return (
@@ -62,7 +68,8 @@ export default async function VerwaltenPage({
         )}
         {claimed === '1' && <Notice tone="success">Die Abstimmung gehört jetzt zu deinem Konto. Alte Verwaltungs-Links sind ungültig.</Notice>}
         {festgelegt === '1' && <Notice tone="success">Termin festgelegt. Die erreichbaren Abstimmenden wurden benachrichtigt.</Notice>}
-        {geloest === '1' && <Notice tone="info">Die Verknüpfung ist gelöst. Der nächste Termin in rsvp-app, über den abgestimmt wird, wird verknüpft.</Notice>}
+        {geloest === '1' && <Notice tone="info">Die Verknüpfung ist gelöst. Abgestimmt werden kann erst wieder über einen Termin, den du bestätigst.</Notice>}
+        {verknuepft === '1' && poll.rsvpEventId && <Notice tone="success">Der Termin ist bestätigt. Über ihn kann jetzt abgestimmt werden.</Notice>}
         {duplicated === '1' && <Notice tone="success">Kopie angelegt - ohne Stimmen und ohne Schließdatum. Passe sie unter &quot;Einstellungen&quot; an.</Notice>}
 
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -83,7 +90,7 @@ export default async function VerwaltenPage({
             label={ended ? 'Ergebnis' : 'Vorne'} testId="stat-leader"
             value={<span className="block truncate text-lg" title={leader?.map(w => w.label).join(', ')}>{leader ? (leader.length > 1 ? `${leader.length} gleichauf` : leader[0].label) : '–'}</span>}
             tone={ended && !result.quorumMet ? 'red' : undefined}
-            hint={ended && !result.quorumMet ? 'nicht beschlussfähig' : leader && leader.length > 1 ? leader.map(w => w.label).join(', ') : undefined}
+            hint={sealed ? 'geheime Wahl - erst nach dem Ende' : ended && !result.quorumMet ? 'nicht beschlussfähig' : leader && leader.length > 1 ? leader.map(w => w.label).join(', ') : undefined}
           />
           <Stat label="Stand" value={<span className="text-lg">{status.badge}</span>} hint={status.text} testId="stat-status" />
         </div>
@@ -95,23 +102,67 @@ export default async function VerwaltenPage({
             <h2 className="font-semibold">Termin in rsvp-app</h2>
             {poll.rsvpEventId ? (
               <>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Verknüpft mit dem Termin <code className="text-xs">{poll.rsvpEventId}</code>. Nur über diesen Termin kann
-                  abgestimmt werden, und nur er bekommt das Ergebnis gemeldet.
+                <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="rsvp-link">
+                  Verknüpft mit dem Termin {poll.rsvpEventTitle && <strong>{poll.rsvpEventTitle}</strong>}{' '}
+                  <code className="text-xs">{poll.rsvpEventId}</code>. Nur über diesen Termin kann abgestimmt werden, und
+                  nur er bekommt das Ergebnis gemeldet.
                 </p>
                 {isOwner && (
-                  <ConfirmForm action={unlinkRsvpEvent} message="Verknüpfung lösen? Der nächste Termin, über den abgestimmt wird, wird verknüpft.">
+                  <ConfirmForm action={unlinkRsvpEvent} message="Verknüpfung lösen? Abgestimmt werden kann danach erst wieder über einen Termin, den du bestätigst.">
                     <input type="hidden" name="pollId" value={poll.id} />
                     {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
+                    {!ended && voters > 0 && (
+                      <label className="mb-2 flex items-center gap-2 text-sm cursor-pointer">
+                        <input type="checkbox" name="deleteVotes" className="h-4 w-4" />
+                        Stimmen über diesen Termin entfernen (falls es der falsche Termin war)
+                      </label>
+                    )}
                     <button type="submit" className={buttonClass('secondary', 'sm')}>Verknüpfung lösen</button>
                   </ConfirmForm>
                 )}
               </>
             ) : (
-              <p className="text-sm text-gray-600 dark:text-gray-400">
-                Noch mit keinem Termin verknüpft. Der erste Termin, über den abgestimmt wird, wird verknüpft - danach gilt
-                nur noch er.
-              </p>
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  Noch mit keinem Termin verknüpft - abstimmen kann noch niemand. Trag den Link dieser Abstimmung in
+                  rsvp-app bei deinem Termin ein und bestätige ihn hier. Gehört der Termin deinem dort verknüpften Konto,
+                  gilt er ohne Rückfrage.
+                </p>
+                {rsvpCandidates.length > 0 && (
+                  <ul className="space-y-2" data-testid="rsvp-candidates">
+                    {rsvpCandidates.map(c => (
+                      <li key={c.eventId} className="rounded-lg border border-gray-200 p-3 text-sm dark:border-gray-700">
+                        <p>
+                          Termin {c.eventTitle ? <strong>{c.eventTitle}</strong> : 'ohne Titel'} <code className="text-xs">{c.eventId}</code> zeigt
+                          auf diese Abstimmung.
+                        </p>
+                        {isOwner ? (
+                          <div className="mt-2 flex flex-wrap gap-2">
+                            <ConfirmForm action={confirmRsvpEvent} message="Diesen Termin bestätigen? Nur seine Gäste können dann abstimmen, und er bekommt das Ergebnis gemeldet.">
+                              <input type="hidden" name="pollId" value={poll.id} />
+                              <input type="hidden" name="eventId" value={c.eventId} />
+                              {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
+                              <button type="submit" className={buttonClass('primary', 'sm')}>Das ist unser Termin</button>
+                            </ConfirmForm>
+                            <form action={dismissRsvpEvent}>
+                              <input type="hidden" name="pollId" value={poll.id} />
+                              <input type="hidden" name="eventId" value={c.eventId} />
+                              {legacyToken && <input type="hidden" name="creatorToken" value={legacyToken} />}
+                              <button type="submit" className={buttonClass('secondary', 'sm')}>Verwerfen</button>
+                            </form>
+                          </div>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {rsvpCandidates.length > 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400">
+                    In rsvp-app kann jede Verwaltung eines Termins den Link dieser Abstimmung eintragen, auch mit demselben
+                    Titel. Die Kennung steht dort in der Adresse der Termin-Verwaltung. Bestätige nur deinen eigenen.
+                  </p>
+                )}
+              </>
             )}
           </Card>
         )}
@@ -147,9 +198,16 @@ export default async function VerwaltenPage({
               <h2 className="font-semibold">
                 Ergebnis ({voters} Person{voters === 1 ? '' : 'en'}{poll.maxVoters !== null ? ` von höchstens ${poll.maxVoters}` : ''})
               </h2>
-              <a href={`/${poll.id}/verwalten/export${tokenQuery}`} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">CSV-Export ↓</a>
+              {!sealed && <a href={`/${poll.id}/verwalten/export${tokenQuery}`} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">CSV-Export ↓</a>}
             </div>
-            <PollResults result={result} names={voterNames} showVoterNames closed={ended} />
+            {sealed ? (
+              <p className="text-sm text-gray-600 dark:text-gray-400" data-testid="sealed-result">
+                Geheime Wahl: Den Zwischenstand sieht bis zum Ende niemand, auch die Verwaltung nicht - sonst ließe sich
+                neben der Beteiligung je Stimmlink ablesen, wer wofür gestimmt hat. Bisher {voters === 1 ? 'hat 1 Person' : `haben ${voters} Personen`} abgestimmt.
+              </p>
+            ) : (
+              <PollResults result={result} names={voterNames} showVoterNames closed={ended} />
+            )}
             {hasVoterNames && !poll.showVoterNames && (
               <p className="text-xs text-gray-500 dark:text-gray-400 mt-3">
                 Die Namen oben siehst nur du (und wer die Abstimmung verwaltet). Auf der öffentlichen Seite sind sie

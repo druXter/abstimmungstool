@@ -77,7 +77,7 @@ test.describe('Modus COOKIE (Standard)', () => {
 test.describe('Modus RSVP', () => {
   test('ohne Token kein Abstimmen - auch nicht per direkt abgeschicktem Formular', async ({ page }) => {
     const owner = await createAccount()
-    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP', rsvpEventId: 'event-1' })
     await page.goto(`/${poll.id}`)
     await expect(page.getByText('nur über den entsprechenden Link/Button in rsvp-app erreichbar')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
@@ -96,7 +96,7 @@ test.describe('Modus RSVP', () => {
 
   test('mit Token abstimmen, namentlich anzeigen, Absage entfernt die Stimme', async ({ page, request }) => {
     const owner = await createAccount()
-    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP', showVoterNames: true })
+    const poll = await createPoll(owner.id, { voterIdentity: 'RSVP', showVoterNames: true, rsvpEventId: 'event-1' })
     const email = uniqueEmail('gast')
 
     await page.goto(`/${poll.id}?verify=${signRsvp({ email: email.toUpperCase(), pollId: poll.id, attending: true })}`)
@@ -125,25 +125,44 @@ test.describe('Modus RSVP', () => {
     expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
   })
 
-  test('gebunden an einen Termin: Nachweise und Meldungen anderer Termine zählen nicht (rsvp-app Audit R-02/R-04)', async ({ page, request }) => {
+  test('Termin gilt erst nach Bestätigung durch die Besitzerin, danach zählen Nachweise und Meldungen anderer Termine nicht (V-01 b, rsvp-app Audit R-02/R-04)', async ({ page, request }) => {
     const owner = await createAccount()
     const poll = await createPoll(owner.id, { voterIdentity: 'RSVP' })
+    const bound = async () => (await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId
+    const visit = (eventId: string, email: string) => page.goto(`/${poll.id}?verify=${signRsvp({ email, pollId: poll.id, eventId, attending: true })}`)
     const vote = async (eventId: string, email: string) => {
-      await page.goto(`/${poll.id}?verify=${signRsvp({ email, pollId: poll.id, eventId, attending: true })}`)
+      await visit(eventId, email)
       await page.getByRole('radio', { name: 'Sushi' }).check()
       await page.getByRole('button', { name: 'Abstimmen' }).click()
       await expect(page.getByText('Sushi ✓')).toBeVisible()
     }
+    const unconfirmed = page.getByText('Für diese Abstimmung ist noch kein Termin in rsvp-app bestätigt')
     const anna = uniqueEmail('anna')
 
-    // Anschauen bindet nicht; die erste Stimme bindet an ihren Termin
-    await page.goto(`/${poll.id}?verify=${signRsvp({ email: anna, pollId: poll.id, eventId: 'fremd', attending: true })}`)
-    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBeNull()
+    // Ungebunden: Weder der erste Klick noch die erste Zusage-Meldung binden - beide Termine sind nur vorgemerkt
+    await visit('fremd', anna)
+    await expect(unconfirmed).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
+    const attendance = await request.post('/api/rsvp-webhook', {
+      headers: { 'content-type': 'text/plain' },
+      data: signRsvp({ email: anna, pollId: poll.id, eventId: 'event-1', attending: true }, 'poll-attendance')
+    })
+    expect(await attendance.json()).toMatchObject({ note: 'other event, ignored' })
+    expect(await bound()).toBeNull()
+
+    // Die Besitzerin sieht beide und bestätigt ihren Termin
+    await login(page, owner.email)
+    await page.goto(`/${poll.id}/verwalten`)
+    const candidates = page.getByTestId('rsvp-candidates')
+    await expect(candidates.getByText('fremd', { exact: true })).toBeVisible()
+    page.once('dialog', dialog => dialog.accept())
+    await candidates.locator('li', { hasText: 'event-1' }).getByRole('button', { name: 'Das ist unser Termin' }).click()
+    await expect(page.getByText('Der Termin ist bestätigt')).toBeVisible()
+    expect(await bound()).toBe('event-1')
     await vote('event-1', anna)
-    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
 
     // Nachweis eines anderen Termins: kein Abstimmen, Hinweis
-    await page.goto(`/${poll.id}?verify=${signRsvp({ email: uniqueEmail('fremd'), pollId: poll.id, eventId: 'fremd', attending: true })}`)
+    await visit('fremd', uniqueEmail('fremd'))
     await expect(page.getByText('gehört zu einem anderen Termin')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Abstimmen' })).toHaveCount(0)
 
@@ -154,7 +173,7 @@ test.describe('Modus RSVP', () => {
     })
     expect(await foreign.json()).toMatchObject({ note: 'other event, ignored' })
     expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(1)
-    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-1')
+    expect(await bound()).toBe('event-1')
 
     // Positivkontrolle: dieselbe Absage vom gebundenen Termin entfernt die Stimme
     await request.post('/api/rsvp-webhook', {
@@ -163,16 +182,16 @@ test.describe('Modus RSVP', () => {
     })
     expect(await prisma.vote.count({ where: { pollId: poll.id } })).toBe(0)
 
-    // Die Besitzerin löst die Bindung, danach bindet der nächste Termin
-    await login(page, owner.email)
+    // Die Besitzerin löst die Bindung - danach bindet kein Termin von selbst
     await page.goto(`/${poll.id}/verwalten`)
     await expect(page.getByText('Verknüpft mit dem Termin')).toBeVisible()
     page.once('dialog', dialog => dialog.accept())
     await page.getByRole('button', { name: 'Verknüpfung lösen' }).click()
     await expect(page.getByText('Die Verknüpfung ist gelöst')).toBeVisible()
-    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBeNull()
-    await vote('event-2', uniqueEmail('neu'))
-    expect((await prisma.poll.findUniqueOrThrow({ where: { id: poll.id } })).rsvpEventId).toBe('event-2')
+    expect(await bound()).toBeNull()
+    await visit('event-2', uniqueEmail('neu'))
+    await expect(unconfirmed).toBeVisible()
+    expect(await bound()).toBeNull()
   })
 
   test('Token für eine andere Abstimmung gilt nicht', async ({ page }) => {

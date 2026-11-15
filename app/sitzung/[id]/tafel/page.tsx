@@ -4,7 +4,7 @@ import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { prisma } from '../../../lib/prisma'
 import { loadResult, loadVoterNames } from '../../../lib/results'
-import { OUTCOME_LABEL, verdictFor } from '../../../lib/majority'
+import { OUTCOME_LABEL, verdictFor, quorumNote } from '../../../lib/majority'
 import VerdictLine from '../../verdict'
 import { fetchRoster } from '../../../lib/assembly-coupling'
 import { quorumState, speakerOrder } from '../../../lib/assembly'
@@ -39,7 +39,7 @@ export default async function AssemblyBoardPage({ params, searchParams }: { para
   const assembly = await prisma.assembly.findUnique({
     where: { id },
     include: {
-      polls: { orderBy: { closedAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true } },
+      polls: { orderBy: { closedAt: 'desc' }, select: { id: true, title: true, closedAt: true, createdAt: true, secretBallot: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true, assemblyQuorum: true } },
       speakers: { where: { doneAt: null }, include: { member: { select: { name: true } } } }
     }
   })
@@ -167,7 +167,7 @@ export default async function AssemblyBoardPage({ params, searchParams }: { para
                   </ul>
                   <p className="mt-[1.5vh] text-[0.75em] text-slate-400">
                     {[`${latest.result.voters} abgestimmt`, latest.poll.assemblyPresent !== null ? `${latest.poll.assemblyPresent} anwesend` : null,
-                      latest.poll.assemblyQuorumMet === true ? 'beschlussfähig' : latest.poll.assemblyQuorumMet === false ? 'nicht beschlussfähig' : null,
+                      quorumNote(latest.poll),
                       latest.poll.secretBallot ? 'geheim' : 'namentlich'].filter(Boolean).join(' · ')}
                   </p>
                   <VerdictLine verdict={verdictFor(latest.poll, latest.result.options)} board />

@@ -8,10 +8,10 @@ import { inputTypeFor } from '../lib/date-options'
 import { resolveVoter } from '../lib/voter-identity'
 import { hasPollAccess, MAX_ACCESS_CODE_LENGTH } from '../lib/access-code'
 import PollResults from './poll-results'
-import { choiceLimits, loadResult, loadVoterNames, resultsVisible } from '../lib/results'
+import { choiceLimits, loadResult, loadVoterNames, resultsVisible, tallySealed } from '../lib/results'
 import BallotInputs from './ballot-inputs'
 import { finalDateLabel } from '../lib/final-date'
-import { parseTransfer } from '../lib/rsvp-date'
+import { parseTransfer, trustedEvent } from '../lib/rsvp-date'
 import { POLL_TYPE_LABELS } from '../lib/poll-types'
 import { participantIdps } from '../lib/participant'
 import { idpLabel } from '../lib/suite'
@@ -28,6 +28,7 @@ export const dynamic = 'force-dynamic'
 const NOTICES: Record<string, { tone: 'success' | 'warning' | 'error'; text: string }> = {
   gedrosselt: { tone: 'warning', text: 'Von deinem Netzwerk aus haben in der letzten Stunde sehr viele neue Personen abgestimmt. Bitte versuche es später noch einmal.' },
   voll: { tone: 'warning', text: 'Die Höchstzahl an Teilnehmenden ist inzwischen erreicht - deine Stimme wurde nicht gezählt.' },
+  geschlossen: { tone: 'warning', text: 'Die Abstimmung wurde geschlossen, bevor deine Stimme ankam - sie wurde nicht gezählt.' },
   'code-falsch': { tone: 'error', text: 'Der Zugangscode stimmt nicht.' },
   'code-gesperrt': { tone: 'error', text: 'Zu viele Versuche. Bitte warte eine Viertelstunde und versuche es dann erneut.' },
   auswahl: { tone: 'error', text: 'Bitte halte dich an die angegebene Anzahl von Optionen - deine Auswahl wurde nicht gespeichert.' },
@@ -113,7 +114,7 @@ export default async function PollPage({
   const isClosed = !!poll.closedAt || (poll.closesAt !== null && poll.closesAt < new Date())
   // Terminabstimmung festgelegt: Link auf das rsvp-app-Event, falls eins den Termin übernommen hat.
   const transfer = parseTransfer(poll.rsvpTransfer)
-  const finalEventUrl = transfer?.created?.url ?? transfer?.updated?.[0]?.url ?? null
+  const finalEventUrl = trustedEvent(transfer)?.url ?? null
 
   // Wer hier abstimmt (und ob überhaupt), entscheidet allein resolveVoter anhand von
   // poll.voterIdentity - siehe app/lib/voter-identity.ts.
@@ -128,7 +129,9 @@ export default async function PollPage({
   const isFull = poll.maxVoters !== null && distinctVoters >= poll.maxVoters && !hasVoted
   const canVote = !isClosed && !block && !isFull
   const asksForName = poll.voterIdentity === 'COOKIE' && poll.requireVoterName
-  const showResults = resultsVisible(poll.resultsVisibility, { hasVoted, closed: isClosed })
+  // Geheime Wahl: kein Zwischenstand, egal welche Sichtbarkeit eingestellt ist (sonst läse die Verwaltung ihn hier)
+  const sealed = tallySealed(poll, isClosed)
+  const showResults = !sealed && resultsVisible(poll.resultsVisibility, { hasVoted, closed: isClosed })
   const limits = choiceLimits(poll)
   const secretLinks = poll.voterIdentity === 'LINK' && poll.secretBallot
   const namesVisible = (poll.voterIdentity !== 'COOKIE' && !secretLinks) || asksForName
@@ -179,6 +182,13 @@ export default async function PollPage({
           <Hint>
             Du hast für den zugehörigen Termin abgesagt und kannst daher hier nicht (mehr) abstimmen.
             Sag erneut zu, um wieder abstimmen zu können.
+          </Hint>
+        )}
+
+        {!isClosed && block === 'rsvp-unconfirmed' && (
+          <Hint>
+            Für diese Abstimmung ist noch kein Termin in rsvp-app bestätigt. Die Verwaltung der Abstimmung sieht den
+            Termin, über den du gekommen bist, und kann ihn bestätigen - danach kannst du über ihn abstimmen.
           </Hint>
         )}
 
@@ -386,11 +396,19 @@ export default async function PollPage({
           <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm text-sm text-gray-600 dark:text-gray-400">
             <h2 className="font-semibold text-gray-900 dark:text-gray-100 mb-2">Ergebnis</h2>
             <p>
-              {poll.resultsVisibility === 'AFTER_VOTE' && 'Das Ergebnis siehst du, sobald du abgestimmt hast.'}
-              {poll.resultsVisibility === 'AFTER_CLOSE' && 'Das Ergebnis wird nach dem Ende der Abstimmung angezeigt.'}
+              {sealed && poll.resultsVisibility !== 'MANAGERS' && 'Geheime Wahl: Das Ergebnis wird erst nach dem Ende angezeigt - einen Zwischenstand sieht niemand, auch die Verwaltung nicht.'}
+              {!sealed && poll.resultsVisibility === 'AFTER_VOTE' && 'Das Ergebnis siehst du, sobald du abgestimmt hast.'}
+              {!sealed && poll.resultsVisibility === 'AFTER_CLOSE' && 'Das Ergebnis wird nach dem Ende der Abstimmung angezeigt.'}
               {poll.resultsVisibility === 'MANAGERS' && 'Das Ergebnis sieht nur, wer die Abstimmung verwaltet.'}
               {' '}Bisher {distinctVoters === 1 ? 'hat 1 Person' : `haben ${distinctVoters} Personen`} abgestimmt.
             </p>
+            {sealed && hasVoted && (
+              // Nur die eigene Auswahl - sie steht ohnehin im Formular darüber, der Zwischenstand bleibt verborgen
+              <p className="mt-2 text-gray-800 dark:text-gray-200" data-testid="own-vote">
+                Deine Stimme ist gespeichert:{' '}
+                {result.options.filter(o => Object.hasOwn(myVotes, o.id)).map(o => `${o.label} ✓`).join(', ')}
+              </p>
+            )}
           </div>
         )}
 

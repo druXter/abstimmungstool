@@ -1,5 +1,6 @@
 // app/lib/rsvp-verification.ts
 import { signLinkMessage, verifyLinkMessage } from 'suite-kit'
+import { singleLine } from 'suite-kit/web'
 import { baseUrl } from './base-url'
 
 /**
@@ -147,4 +148,32 @@ export function verifyTypedRsvpMessage(token: string | undefined | null, typ: st
 export function signTypedRsvpMessage(payload: { typ: string } & Record<string, unknown>, ttlSeconds: number): string | null {
   const { typ, ...fields } = payload
   return signForRsvp(typ, fields, ttlSeconds)
+}
+
+const LINK_ID = /^[A-Za-z0-9_-]{1,100}$/
+
+export type PollLinkMessage = {
+  pollId: string
+  eventId: string
+  eventTitle: string
+  owner: { rsvpUserId: string | null; toolUserId: string | null }
+}
+
+/**
+ * Meldung von rsvp-app beim Speichern eines Abstimmungs-Links (`poll-link`, POST /api/rsvp-poll-link): dieser Termin
+ * zeigt auf die Abstimmung. `owner` nennt den Event-Owner dort und - falls über den Verbund verknüpft - sein Konto hier
+ * (app/lib/rsvp-binding.ts, docs/AUDIT-2026-11.md V-01 b). Höchstens 5 Minuten gültig. null bei jedem Problem.
+ */
+export function verifyPollLink(token: string | undefined | null): PollLinkMessage | null {
+  const payload = verifyFromRsvp(token, 'poll-link', 5 * 60)
+  if (!payload) return null
+  const { pollId, eventId, eventTitle, owner } = payload
+  if (typeof pollId !== 'string' || !LINK_ID.test(pollId)) return null
+  if (typeof eventId !== 'string' || !LINK_ID.test(eventId)) return null
+  if (typeof eventTitle !== 'string' || eventTitle.length > 200) return null
+  if (!owner || typeof owner !== 'object') return null
+  const { rsvpUserId, toolUserId } = owner as Record<string, unknown>
+  const id = (value: unknown) => value === null || (typeof value === 'string' && LINK_ID.test(value))
+  if (!id(rsvpUserId) || !id(toolUserId)) return null
+  return { pollId, eventId, eventTitle: singleLine(eventTitle).slice(0, 200), owner: { rsvpUserId: rsvpUserId as string | null, toolUserId: toolUserId as string | null } }
 }

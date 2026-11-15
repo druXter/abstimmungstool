@@ -3,7 +3,8 @@ import { csvResponse } from 'suite-kit/web'
 import { prisma } from '../../../lib/prisma'
 import { getCurrentUser } from '../../../lib/auth'
 import { getPollLevel } from '../../../lib/permissions'
-import { loadResult, type PollResult } from '../../../lib/results'
+import { loadResult, tallySealed, type PollResult } from '../../../lib/results'
+import { pollStatus } from '../../../lib/poll-status'
 import { formatVoteValue } from '../../../lib/poll-types'
 import { resultSummary } from '../../../lib/poll-closed'
 
@@ -15,11 +16,17 @@ import { resultSummary } from '../../../lib/poll-closed'
  * Teil 1: Zählstand pro Option. Teil 2 (nur wenn Stimmen Namen tragen, also nicht im
  * Cookie-Modus ohne Pflichtnamen und nicht bei geheimer Wahl): wer was gewählt hat - das
  * sieht die Verwaltung ohnehin auf ihrer Seite.
+ *
+ * Nicht für Abstimmungen einer Sitzung: Die zeigen bis zum Schließen keinen Zwischenstand, ihre Beschlüsse exportiert
+ * /sitzung/<id>/verwalten/export (docs/AUDIT-2026-11.md, V-12). Geheime Wahl vor dem Ende: nur die Beteiligung (V-11).
  */
 export async function GET(request: Request, { params }: { params: Promise<{ pollId: string }> }) {
   const { pollId } = await params
-  const poll = await prisma.poll.findUnique({ where: { id: pollId }, select: { id: true, ownerId: true, creatorToken: true, title: true } })
-  if (!poll) return new Response('Not found', { status: 404 })
+  const poll = await prisma.poll.findUnique({
+    where: { id: pollId },
+    select: { id: true, ownerId: true, creatorToken: true, title: true, assemblyId: true, secretBallot: true, closedAt: true, closesAt: true }
+  })
+  if (!poll || poll.assemblyId) return new Response('Not found', { status: 404 })
 
   const token = new URL(request.url).searchParams.get('token')
   const level = await getPollLevel(poll, { user: await getCurrentUser(), token })
@@ -27,6 +34,14 @@ export async function GET(request: Request, { params }: { params: Promise<{ poll
 
   const result = await loadResult(poll.id)
   if (!result) return new Response('Not found', { status: 404 })
+
+  if (tallySealed(poll, pollStatus(poll).state !== 'open')) {
+    return csvResponse([
+      ['Abstimmung', poll.title],
+      ['Teilnehmende', String(result.voters)],
+      ['Ergebnis', 'geheime Wahl - erst nach dem Ende']
+    ], `abstimmung-${poll.id}.csv`)
+  }
 
   const rows: string[][] = [
     ['Abstimmung', poll.title],

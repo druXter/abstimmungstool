@@ -116,7 +116,10 @@ export function parseStoredThemes(json: string): SummaryTheme[] {
   }
 }
 
-/** Darf diese Antwort an die KI? Nur wenn sie nach dem Einschalten abgegeben oder geändert wurde (Hinweis gesehen). */
-export function summaryAllowed(aiSince: Date | null, answeredAt: Date): boolean {
-  return aiSince !== null && answeredAt >= aiSince
+/**
+ * Darf diese Antwort an die KI? Nur wenn sie nach dem Einschalten abgegeben oder geändert wurde und das Formular dabei
+ * den Hinweis zeigte (`aiExcluded`: vor dem Einschalten geladen, docs/AUDIT-2026-11.md V-08).
+ */
+export function summaryAllowed(aiSince: Date | null, answeredAt: Date, aiExcluded = false): boolean {
+  return aiSince !== null && answeredAt >= aiSince && !aiExcluded
 }

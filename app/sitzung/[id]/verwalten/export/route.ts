@@ -23,7 +23,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
     const result = await loadResult(poll.id)
     if (!result) continue
     const names = poll.secretBallot ? {} : await loadVoterNames(poll.id)
-    const quorum = poll.assemblyQuorumMet === null ? '' : poll.assemblyQuorumMet ? 'ja' : 'nein'
+    const quorum = poll.assemblyQuorumMet === null ? (poll.assemblyQuorum === null ? '' : 'unbekannt') : poll.assemblyQuorumMet ? 'ja' : 'nein'
     const verdict = verdictFor(poll, result.options)
     for (const option of result.options) {
       rows.push([

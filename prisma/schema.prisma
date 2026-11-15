@@ -157,35 +157,38 @@ model LoginThrottle {
 // castVote's "Stimmen dieser Identität für diesen Poll ersetzen"-Logik (siehe dort) -
 // bei false wird dabei serverseitig auf höchstens eine Option gekappt.
 model Poll {
-  id                       String            @id @default(cuid())
+  id                       String               @id @default(cuid())
   title                    String
   description              String?
   // Besitzendes Konto. null nur bei Alt-Abstimmungen aus der Zeit ohne Konten (dort
   // gilt weiter creatorToken). Wird beim Löschen eines Kontos vorher umgehängt (siehe
   // deleteUser), die SetNull-Regel ist nur das Sicherheitsnetz.
   ownerId                  String?
-  owner                    User?             @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+  owner                    User?                @relation("PollOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   access                   PollAccess[]
-  creatorToken             String            @unique @default(uuid())
+  creatorToken             String               @unique @default(uuid())
   // Nur noch bei Alt-Abstimmungen befüllt (früher: Verwaltungs-Link per Mail). Neue
   // Abstimmungen schreiben dieses Feld nicht mehr - die E-Mail des Kontos genügt.
   creatorEmail             String?
-  voterIdentity            VoterIdentity     @default(COOKIE)
+  voterIdentity            VoterIdentity        @default(COOKIE)
   // Zeigt auf der öffentlichen Ergebnisseite zusätzlich, WER für welche Option gestimmt
   // hat (Vote.voterName), statt nur der aggregierten Zahlen - siehe [pollId]/page.tsx. Hat
   // nur bei Stimmen mit Namen eine sichtbare Wirkung (im Cookie-Modus nur mit requireVoterName).
-  showVoterNames           Boolean           @default(false)
-  // Der gebundene Termin in rsvp-app (app/lib/rsvp-binding.ts): Wird NICHT beim Anlegen
-  // gesetzt, sondern vom ersten Termin, über den abgestimmt (poll-access) oder eine
-  // Zu-/Absage gemeldet wird (poll-attendance). Danach zählen nur noch Nachrichten dieses
-  // Termins; lösen kann die Bindung nur, wer die Abstimmung besitzt (unlinkRsvpEvent).
-  // Bekommt beim Schließen das Ergebnis (app/lib/rsvp-notify.ts). Bleibt null, solange
-  // kein Termin die Abstimmung genutzt hat (z.B. weil der Modus RSVP nie genutzt wurde).
+  showVoterNames           Boolean              @default(false)
+  // Der gebundene Termin in rsvp-app (app/lib/rsvp-binding.ts), nur im Modus RSVP: Wird NICHT
+  // beim Anlegen gesetzt und nicht vom ersten Termin, der sich meldet, sondern von der
+  // Besitzerin bestätigt (aus RsvpEventCandidate) - ohne Rückfrage nur, wenn der Termin ihrem
+  // über den Verbund verknüpften Konto gehört (docs/AUDIT-2026-11.md, V-01 b). Danach zählen
+  // nur Nachrichten dieses Termins; lösen kann die Bindung nur, wer die Abstimmung besitzt
+  // (unlinkRsvpEvent). Bekommt beim Schließen das Ergebnis (app/lib/rsvp-notify.ts).
   rsvpEventId              String?
-  allowMultipleChoices     Boolean           @default(false)
+  // Titel des gebundenen Termins, wie rsvp-app ihn gemeldet hat (nur zur Anzeige).
+  rsvpEventTitle           String?
+  rsvpCandidates           RsvpEventCandidate[]
+  allowMultipleChoices     Boolean              @default(false)
   // Nur im Modus COOKIE: Wer abstimmt, muss einen Namen angeben (Vote.voterName). Keine
   // echte Identität - nur soziale Kontrolle, zusammen mit showVoterNames sichtbar.
-  requireVoterName         Boolean           @default(false)
+  requireVoterName         Boolean              @default(false)
   // Höchstzahl an Teilnehmenden (verschiedene voterKeys). Wer schon abgestimmt hat, kann
   // seine Auswahl weiter ändern; neue Personen werden abgewiesen. null = unbegrenzt.
   maxVoters                Int?
@@ -205,7 +208,7 @@ model Poll {
   // app/lib/voter-links.ts. Gesperrt, sobald abgestimmt wurde (wie voterIdentity).
   // Ebenso im Modus ASSEMBLY (Sitzung): Schlüssel aus dem Mitglieds-Cookie, Teilnahme in
   // AssemblyMember.votedPolls - siehe app/lib/assembly.ts.
-  secretBallot             Boolean           @default(false)
+  secretBallot             Boolean              @default(false)
   // Nur im Modus EMAIL: wer sich bestätigen darf, eine Angabe pro Zeile - "@verein.de" für
   // eine ganze Domain, sonst eine einzelne Adresse. null = jede Adresse. Siehe
   // app/lib/email-voters.ts; wird auch beim Abstimmen erneut geprüft.
@@ -215,22 +218,22 @@ model Poll {
   quorum                   Int?
   // Beim Schließen (manuell oder per Cron) das Ergebnis dem besitzenden Konto mitteilen
   // (Mail bzw. Push, app/lib/poll-closed.ts). Nur mit SMTP_HOST bzw. VAPID_* wirksam.
-  notifyOwnerOnClose       Boolean           @default(false)
+  notifyOwnerOnClose       Boolean              @default(false)
   // Wann die öffentliche Seite das Ergebnis zeigt (siehe ResultsVisibility). Die Verwaltung
   // sieht es immer.
-  resultsVisibility        ResultsVisibility @default(ALWAYS)
+  resultsVisibility        ResultsVisibility    @default(ALWAYS)
   // Nur bei allowMultipleChoices: wie viele Optionen eine Stimmabgabe mindestens/höchstens
   // umfassen muss ("wähle 1 bis 3"). null = keine Grenze. Geprüft in castVote.
   minChoices               Int?
   maxChoices               Int?
   // Art der Optionen: Freitext oder Termine (siehe OptionKind). Steht nach dem Anlegen fest.
-  optionKind               OptionKind        @default(TEXT)
+  optionKind               OptionKind           @default(TEXT)
   // Terminabstimmung (nur bei optionKind DATE/DATETIME): Nach dem Ende legt die Verwaltung
   // den Termin fest - bei eindeutigem Ergebnis bestätigen, bei Gleichstand zwischen den
   // gleichauf liegenden wählen, nie vollautomatisch (app/lib/final-date.ts). Danach werden
   // die erreichbaren Abstimmenden benachrichtigt und der Termin an rsvp-app übergeben
   // (app/lib/rsvp-date.ts).
-  confirmDate              Boolean           @default(false)
+  confirmDate              Boolean              @default(false)
   // Ergebnis der Festlegung: gewählte Option, endgültiger Zeitpunkt (bei Tagen mit der
   // dabei angegebenen Uhrzeit) und wann. finalizedAt ist zugleich die Sperre gegen doppeltes
   // Festlegen (bedingtes Update).
@@ -242,25 +245,27 @@ model Poll {
   rsvpTransfer             String?
   // Art der Abstimmung (siehe PollType). Gesperrt, sobald abgestimmt wurde - die
   // gespeicherten Vote.value-Werte bedeuten je Art etwas anderes.
-  pollType                 PollType          @default(CHOICE)
+  pollType                 PollType             @default(CHOICE)
   // Nur bei POINTS: so viele Punkte verteilt jede Person (höchstens).
   pointsBudget             Int?
   // Teilnehmende dürfen Optionen vorschlagen (app/actions.ts suggestOption); bei
   // voterOptionsNeedApproval erst sichtbar, wenn die Verwaltung sie freigibt (PollOption.approved).
-  allowVoterOptions        Boolean           @default(false)
-  voterOptionsNeedApproval Boolean           @default(true)
+  allowVoterOptions        Boolean              @default(false)
+  voterOptionsNeedApproval Boolean              @default(true)
   closesAt                 DateTime?
   closedAt                 DateTime?
-  createdAt                DateTime          @default(now())
+  createdAt                DateTime             @default(now())
   options                  PollOption[]
   votes                    Vote[]
   voterLinks               VoterLink[]
   emailVoters              EmailVoter[]
   // Abstimmung einer Sitzung (docs/KONZEPT-SITZUNG.md, voterIdentity ASSEMBLY). Beim Schließen festgehalten: wie viele
-  // anwesend waren und ob die Sitzung beschlussfähig war (null = nicht bekannt bzw. kein Quorum eingestellt).
+  // anwesend waren, welches Quorum galt (null = keins) und ob die Sitzung beschlussfähig war (null = kein Quorum
+  // eingestellt bzw. - mit assemblyQuorum - nicht feststellbar, app/lib/majority.ts).
   assemblyId               String?
-  assembly                 Assembly?         @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
+  assembly                 Assembly?            @relation(fields: [assemblyId], references: [id], onDelete: Cascade)
   assemblyPresent          Int?
+  assemblyQuorum           Int?
   assemblyQuorumMet        Boolean?
   // Mehrheitsregel (Idee L33, app/lib/majority.ts, null = keine) und beim Schließen festgehalten: Zahl der Mitglieder
   // für Regeln "der Mitglieder" (Assembly.memberCount, sonst die Zusagen in rsvp-app; null = nicht bekannt).
@@ -768,13 +773,16 @@ model SurveyOption {
 // COOKIE und RSVP - eindeutig pro Fragebogen; bei ANONYMOUS null (SQLite erlaubt mehrere NULL in einem
 // Unique-Index).
 model SurveyResponse {
-  id        String         @id @default(cuid())
-  surveyId  String
-  survey    Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
-  voterKey  String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
-  answers   SurveyAnswer[]
+  id         String         @id @default(cuid())
+  surveyId   String
+  survey     Survey         @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  voterKey   String?
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+  // Abgeschickt aus einem Formular, das vor dem Einschalten der KI geladen wurde (ohne Hinweis): geht nie an die KI
+  // (app/survey-actions.ts, docs/AUDIT-2026-11.md V-08). Eine spätere Abgabe aus einem frischen Formular hebt das auf.
+  aiExcluded Boolean        @default(false)
+  answers    SurveyAnswer[]
 
   @@unique([surveyId, voterKey])
 }
@@ -894,4 +902,20 @@ model AssemblySpeaker {
   doneAt     DateTime?
 
   @@index([assemblyId])
+}
+
+// Ein Termin in rsvp-app, der auf eine Abstimmung im Modus RSVP zeigt, aber (noch) nicht an sie
+// gebunden ist: gemeldet beim Speichern des Links dort (`poll-link`, /api/rsvp-poll-link) oder beim
+// ersten Klick bzw. der ersten Zu-/Absage über ihn. Die Besitzerin bestätigt einen davon auf der
+// Verwaltungsseite (confirmRsvpEvent) oder verwirft ihn. Höchstens 20 je Abstimmung
+// (app/lib/rsvp-binding.ts). Keine personenbezogenen Daten, nur Kennung und Titel des Termins.
+model RsvpEventCandidate {
+  id         String   @id @default(cuid())
+  pollId     String
+  poll       Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  eventId    String
+  eventTitle String?
+  createdAt  DateTime @default(now())
+
+  @@unique([pollId, eventId])
 }

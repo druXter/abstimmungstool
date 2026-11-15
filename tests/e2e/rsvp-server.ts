@@ -25,6 +25,8 @@ export type RosterScenario = {
   trackPresence?: boolean
   /** HTTP-Status für POST /api/assembly/presence (z.B. 503 = nicht erreichbar, 409 = kein QR-Einlass). */
   presenceStatus?: number
+  /** Antwort auf POST /api/assembly/roster erst nach so vielen Millisekunden (langsames rsvp-app, docs/AUDIT-2026-11.md V-04). */
+  delayMs?: number
 }
 
 function readRosters(): Record<string, RosterScenario> {
@@ -118,10 +120,20 @@ function rosterResponse(body: string): { status: number; body: string } {
   }
 }
 
+/** Verzögerung der Anwesenheits-Antwort für diese Sitzung (RosterScenario.delayMs), sonst 0. */
+function rosterDelay(body: string): number {
+  try {
+    return readRosters()[(decode(body) as { assemblyId: string }).assemblyId]?.delayMs ?? 0
+  } catch {
+    return 0
+  }
+}
+
 export type RsvpScenario = {
   /** HTTP-Status für poll-date (z.B. 503 = nicht erreichbar/defekt). */
   status?: number
-  events?: { id: string; title: string; datePending: boolean }[]
+  /** `own`: gehört dem verknüpften Konto der Besitzerin - gilt wie dort ohne eventIds als bestätigt. */
+  events?: { id: string; title: string; datePending: boolean; own?: boolean }[]
   canCreate?: boolean
   updated?: { id: string; title: string; url: string }[]
   created?: { id: string; title: string; url: string; adminUrl: string } | null
@@ -143,18 +155,26 @@ export function startRsvpServer(): Promise<Server> {
       const handler = ({ '/api/assembly/roster': rosterResponse, '/api/assembly/attendance': attendanceResponse, '/api/assembly/presence': presenceResponse } as Record<string, (b: string) => { status: number; body: string }>)[request.url ?? '']
       if (handler) {
         const answer = handler(body)
-        return response.writeHead(answer.status, { 'Content-Type': 'text/plain' }).end(answer.body)
+        const send = () => response.writeHead(answer.status, { 'Content-Type': 'text/plain' }).end(answer.body)
+        const delay = request.url === '/api/assembly/roster' ? rosterDelay(body) : 0
+        return delay > 0 ? setTimeout(send, delay) : send()
       }
       if (request.url !== '/api/poll-date') return response.writeHead(200).end('{"ok":true}')
       const scenario: RsvpScenario = existsSync(SCENARIO) ? JSON.parse(readFileSync(SCENARIO, 'utf8')) : {}
       if (scenario.status && scenario.status !== 200) return response.writeHead(scenario.status).end('{}')
+      // Wie rsvp-app (app/lib/poll-date.ts dort): nur bestätigte Events (eventIds) oder eigene übernehmen den Termin.
+      const message = decode(body) as { typ: string; eventIds?: string[] }
+      const confirmed = new Set(message.eventIds ?? [])
+      const events = scenario.events ?? []
+      const trusted = (id: string) => confirmed.has(id) || !!events.find(e => e.id === id)?.own
       response.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify({
         ok: true,
-        events: scenario.events ?? [],
+        events: events.map(({ id, title, datePending }) => ({ id, title, datePending, trusted: trusted(id) })),
         canCreate: scenario.canCreate ?? false,
-        updated: scenario.updated ?? [],
+        updated: message.typ === 'poll-date-set' ? (scenario.updated ?? []).filter(e => trusted(e.id)).map(e => ({ ...e, trusted: true })) : [],
         created: scenario.created ?? null,
-        unchanged: (scenario.events ?? []).filter(e => !e.datePending).map(e => ({ id: e.id, title: e.title }))
+        unchanged: events.filter(e => !e.datePending && trusted(e.id)).map(e => ({ id: e.id, title: e.title })),
+        ignored: events.filter(e => !trusted(e.id)).map(e => ({ id: e.id, title: e.title }))
       }))
     })
   })

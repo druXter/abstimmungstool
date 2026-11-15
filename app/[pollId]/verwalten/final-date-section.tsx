@@ -3,7 +3,7 @@ import { Notice, SubmitButton } from '../../ui/kit'
 import type { OptionKind } from '@prisma/client'
 import { confirmPollDate, retryRsvpTransfer } from '../../actions'
 import { finalDateLabel, needsDecision, reachableCount, voterContacts } from '../../lib/final-date'
-import { parseTransfer, rsvpDateStatus } from '../../lib/rsvp-date'
+import { parseTransfer, rsvpDateStatus, trustedEvent } from '../../lib/rsvp-date'
 import type { PollResult } from '../../lib/results'
 
 type Poll = {
@@ -16,6 +16,7 @@ type Poll = {
   finalizedAt: Date | null
   finalStartsAt: Date | null
   rsvpTransfer: string | null
+  rsvpEventId: string | null
   owner: { email: string; name: string | null } | null
 }
 
@@ -35,6 +36,7 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
 
   if (poll.finalizedAt && poll.finalStartsAt) {
     const transfer = parseTransfer(poll.rsvpTransfer)
+    const trusted = trustedEvent(transfer)
     return (
       <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm space-y-3">
         <h2 className="font-semibold text-gray-900 dark:text-gray-100">Termin festgelegt</h2>
@@ -50,7 +52,9 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
         )}
         {transfer && !transfer.error && (
           <ul className="text-sm text-gray-700 dark:text-gray-300 list-disc list-inside space-y-1">
-            {transfer.updated?.map(e => <li key={e.id}>In rsvp-app übernommen: <a href={e.url} className="underline">{e.title}</a></li>)}
+            {transfer.updated?.map(e => e.id === trusted?.id || e.trusted
+              ? <li key={e.id}>In rsvp-app übernommen: <a href={e.url} className="underline">{e.title}</a></li>
+              : <li key={e.id}>In rsvp-app übernommen, aber nicht mit dieser Abstimmung verknüpft: {e.title} - sein Link ging nicht an die Abstimmenden.</li>)}
             {transfer.created && (
               <li>
                 In rsvp-app neu angelegt: <a href={transfer.created.url} className="underline">{transfer.created.title}</a> (
@@ -58,7 +62,8 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
               </li>
             )}
             {transfer.unchanged?.map(e => <li key={e.id}>Nicht geändert (dort schon festes Datum): {e.title}</li>)}
-            {!transfer.updated?.length && !transfer.created && !transfer.unchanged?.length && <li>In rsvp-app gab es kein passendes Event.</li>}
+            {transfer.ignored?.map(e => <li key={e.id}>Nicht übernommen, weil nicht mit dieser Abstimmung verknüpft: {e.title}</li>)}
+            {!transfer.updated?.length && !transfer.created && !transfer.unchanged?.length && !transfer.ignored?.length && <li>In rsvp-app gab es kein passendes Event.</li>}
           </ul>
         )}
       </div>
@@ -123,19 +128,36 @@ export default async function FinalDateSection({ poll, result, legacyToken, erro
           <ul className="list-disc list-inside">
             {status.events.map(e => (
               <li key={e.id}>
-                rsvp-app-Event &quot;{e.title}&quot;: {e.datePending ? 'übernimmt den Termin, seine Zusagenden werden benachrichtigt.' : 'hat schon ein festes Datum und bleibt unverändert.'}
+                rsvp-app-Event &quot;{e.title}&quot;: {!e.datePending
+                  ? 'hat schon ein festes Datum und bleibt unverändert.'
+                  : e.trusted
+                    ? 'übernimmt den Termin, seine Zusagenden werden benachrichtigt.'
+                    : 'zeigt auf diese Abstimmung, ist aber nicht mit ihr verknüpft - bleibt unverändert, außer du kreuzt es an.'}
+                {e.datePending && !e.trusted && (
+                  <label className="mt-1 ml-5 flex items-start gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
+                    <input type="checkbox" name="acceptEventId" value={e.id} className="mt-0.5 h-4 w-4 shrink-0" />
+                    <span>
+                      Das ist unser Event - es übernimmt den Termin, sein Link geht an die Abstimmenden.{' '}
+                      <span className="text-gray-500 dark:text-gray-400">
+                        Nur ankreuzen, wenn ihr es selbst angelegt habt: In rsvp-app kann jede Verwaltung den Link dieser
+                        Abstimmung eintragen, auch mit demselben Titel.
+                      </span>
+                    </span>
+                  </label>
+                )}
               </li>
             ))}
           </ul>
         )}
-        {status.state === 'ok' && status.events.length === 0 && status.canCreate && (
+        {status.state === 'ok' && status.canCreate && (
           <label className="flex items-center gap-2 cursor-pointer text-gray-800 dark:text-gray-200">
             <input type="checkbox" name="createRsvpEvent" defaultChecked className="w-4 h-4" />
-            In rsvp-app ein neues Event anlegen (gehört dort {poll.owner?.name || poll.owner?.email || 'dem Konto dieser Abstimmung'})
+            In rsvp-app ein neues Event anlegen (gehört dort {poll.owner?.name || poll.owner?.email || 'dem Konto dieser Abstimmung'}
+            {status.events.length > 0 ? ' - nur, wenn du oben keins als eures ankreuzt' : ''})
           </label>
         )}
-        {status.state === 'ok' && status.events.length === 0 && !status.canCreate && (
-          <p>In rsvp-app zeigt kein Event auf diese Abstimmung. Ein neues kann nur entstehen, wenn das Konto dieser Abstimmung mit einem rsvp-app-Konto verknüpft ist (Mein Konto → verknüpfen).</p>
+        {status.state === 'ok' && !status.canCreate && !status.events.some(e => e.trusted) && (
+          <p>In rsvp-app zeigt kein mit dieser Abstimmung verknüpftes Event auf sie. Ein neues kann nur entstehen, wenn das Konto dieser Abstimmung mit einem rsvp-app-Konto verknüpft ist (Mein Konto → verknüpfen).</p>
         )}
         <p>
           {poll.voterIdentity === 'COOKIE'

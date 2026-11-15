@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const polls = await prisma.poll.findMany({
     where: { assemblyId: assembly.id, closedAt: { not: null } }, orderBy: { closedAt: 'asc' }, take: MAX_DECISIONS,
-    select: { id: true, title: true, secretBallot: true, createdAt: true, closedAt: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true }
+    select: { id: true, title: true, secretBallot: true, createdAt: true, closedAt: true, assemblyPresent: true, assemblyQuorumMet: true, assemblyMajority: true, assemblyMembers: true, assemblyQuorum: true }
   })
   const decisions: Decision[] = []
   for (const poll of polls) {

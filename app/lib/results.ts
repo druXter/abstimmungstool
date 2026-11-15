@@ -131,6 +131,15 @@ export function choiceLimits(poll: { minChoices: number | null; maxChoices: numb
 }
 
 /** Darf die öffentliche Seite das Ergebnis gerade zeigen? (Poll.resultsVisibility) */
+/**
+ * Geheime Wahl, noch nicht beendet: Den Zwischenstand sieht niemand, auch die Verwaltung nicht - sie sieht je Stimmlink,
+ * wer abgestimmt hat, und könnte sonst nach jeder einzelnen Stimme ablesen, welche Option dazugekommen ist
+ * (docs/AUDIT-2026-11.md, V-11). Verwaltungsseite, CSV-Export und öffentliche Seite fragen das hier ab.
+ */
+export function tallySealed(poll: { secretBallot: boolean }, ended: boolean): boolean {
+  return poll.secretBallot && !ended
+}
+
 export function resultsVisible(visibility: 'ALWAYS' | 'AFTER_VOTE' | 'AFTER_CLOSE' | 'MANAGERS', state: { hasVoted: boolean; closed: boolean }): boolean {
   switch (visibility) {
     case 'ALWAYS': return true

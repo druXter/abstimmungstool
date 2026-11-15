@@ -17,7 +17,7 @@ import { isPushConfigured } from './lib/push'
 import { afterPollClosed } from './lib/poll-closed'
 import { choiceLimits, loadResult } from './lib/results'
 import { needsDecision, notifyVoters, voterContacts } from './lib/final-date'
-import { emailHash, parseTransfer, transferFinalDate } from './lib/rsvp-date'
+import { acceptedEventIds, emailHash, parseTransfer, transferFinalDate, trustedEvent } from './lib/rsvp-date'
 import { DEFAULT_POINTS_BUDGET, MAX_POINTS_BUDGET, parseBallot, parsePollType, type BallotEntry } from './lib/poll-types'
 import { POLL_PRESETS, presetOf } from './lib/poll-presets'
 import { getCurrentUser, requireUser } from './lib/auth'
@@ -25,6 +25,8 @@ import { canCreatePolls, getPollLevel, isAtLeast } from './lib/permissions'
 import { identityFromForm, loadManageablePoll, manageUrl, pollUrl } from './lib/manage'
 import { formString, formText, normalizeEmail } from './lib/form'
 import { withVoted } from './lib/assembly'
+import { pollStatus } from './lib/poll-status'
+import { bindRsvpEvent } from './lib/rsvp-binding'
 
 const MAX_OPTIONS = 25 // Muss mit dem `max`-Default in app/erstellen/options-field-list.tsx übereinstimmen
 const MAX_TEXT_LENGTH = 200
@@ -64,6 +66,11 @@ function parsePollSettings(formData: FormData) {
     // Ohne Mail und Push fehlt das Feld im Formular - dann die bisherige Einstellung nicht überschreiben.
     notifyOwnerOnClose: isMailConfigured() || isPushConfigured() ? formData.get('notifyOwnerOnClose') === 'on' : undefined
   }
+}
+
+/** Zeigt das öffentliche Ergebnis Namen? Genau dann sagt das Abstimmformular "namentlich angezeigt" (app/[pollId]/page.tsx). */
+function publicNames(poll: { showVoterNames: boolean; resultsVisibility: ResultsVisibility }): boolean {
+  return poll.showVoterNames && poll.resultsVisibility !== 'MANAGERS'
 }
 
 /** Das optionale Schließdatum (datetime-local in der Zeitzone des Servers); Ungültiges = keins. */
@@ -150,6 +157,11 @@ export async function createPoll(formData: FormData) {
  * Löschwunsch wird stillschweigend ignoriert) - das verhindert, versehentlich bereits
  * abgegebene Stimmen zu verwaisen/verlieren. Optionen ohne Stimmen dürfen frei entfernt
  * werden, neue können jederzeit ergänzt werden (bis MAX_OPTIONS insgesamt).
+ *
+ * Nach dem Ende bleibt alles, was das Ergebnis berührt, wie es ist: Optionen, Mindestbeteiligung, Art, Grenzen,
+ * Höchstzahl und Enddatum (docs/AUDIT-2026-11.md, V-06) - sonst ließe sich ein verkündetes Ergebnis drehen. Und nach
+ * der ersten Stimme lässt sich die öffentliche namentliche Anzeige nur noch abschalten: Wer abgestimmt hat, hat sich
+ * auf den Hinweis "öffentlich bleibt das Ergebnis anonym" verlassen (V-05).
  */
 export async function updatePoll(formData: FormData) {
   const ctx = await loadManageablePoll(formData, 'moderator')
@@ -182,6 +194,18 @@ export async function updatePoll(formData: FormData) {
   // hätten frühere Stimmen mehr (oder weniger) Punkte verteilt, als jetzt erlaubt ist.
   const pollType = locked ? poll.pollType : parsePollType(formData.get('pollType'))
   const pointsBudget = locked ? poll.pointsBudget : pollType === 'POINTS' ? parsePointsBudget(formData) : null
+  // Namen öffentlich nur, wenn sie es schon beim Abstimmen waren (derselbe Ausdruck wie der Hinweis im Formular).
+  if (locked && !publicNames(poll) && publicNames(settings)) settings.showVoterNames = false
+
+  // Beendet: geschlossen oder Enddatum erreicht (wie castVote)
+  const ended = pollStatus(poll).state !== 'open'
+  if (ended) {
+    const { quorum, allowMultipleChoices, minChoices, maxChoices, maxVoters, closesAt } = poll
+    Object.assign(settings, { quorum, allowMultipleChoices, minChoices, maxChoices, maxVoters, closesAt })
+    await prisma.poll.update({ where: { id: pollId }, data: { title, description, voterIdentity, secretBallot, pollType, pointsBudget, ...settings } })
+    revalidatePath(`/${pollId}`)
+    redirect(manageUrl(pollId, token, 'saved', 'bearbeiten'))
+  }
 
   // Die Optionsart steht seit dem Anlegen fest (sonst passten Labels und startsAt nicht zusammen).
   const keptOptions: (OptionInput & { id: string })[] = []
@@ -234,14 +258,18 @@ export async function updatePoll(formData: FormData) {
  *
  * In einer Transaktion: Zwei gleichzeitige Abgaben derselben Person hinterlassen nie eine
  * Mischung beider Auswahlen, und die Höchstzahl (Poll.maxVoters) wird in derselben
- * Transaktion geprüft, in der die neue Person dazukommt. Gibt false zurück, wenn sie voll ist.
+ * Transaktion geprüft, in der die neue Person dazukommt. Ebenso, ob die Abstimmung noch offen ist: castVote prüft das
+ * zwar am Anfang, dazwischen kann aber Zeit vergehen (Sitzung: Anwesenheit frisch bei rsvp-app, bis zu 4 Sekunden) -
+ * eine Stimme, die erst nach dem Schließen ankommt, darf das verkündete Ergebnis nicht mehr ändern.
  */
-async function replaceVotes(pollId: string, voter: Voter, entries: BallotEntry[], maxVoters: number | null): Promise<boolean> {
+async function replaceVotes(pollId: string, voter: Voter, entries: BallotEntry[], maxVoters: number | null): Promise<'ok' | 'full' | 'closed'> {
   const optionIds = entries.map(e => e.optionId)
   return prisma.$transaction(async (tx) => {
+    const current = await tx.poll.findUnique({ where: { id: pollId }, select: { closedAt: true, closesAt: true } })
+    if (!current || current.closedAt || (current.closesAt !== null && current.closesAt <= new Date())) return 'closed'
     if (maxVoters !== null && (await tx.vote.count({ where: { pollId, voterKey: voter.key } })) === 0) {
       const voters = await tx.vote.groupBy({ by: ['voterKey'], where: { pollId } })
-      if (voters.length >= maxVoters) return false
+      if (voters.length >= maxVoters) return 'full'
     }
 
     await tx.vote.deleteMany({
@@ -267,7 +295,7 @@ async function replaceVotes(pollId: string, voter: Voter, entries: BallotEntry[]
       const member = await tx.assemblyMember.findUnique({ where: { id: voter.memberId }, select: { votedPolls: true } })
       if (member) await tx.assemblyMember.update({ where: { id: voter.memberId }, data: { votedPolls: withVoted(member.votedPolls, pollId) } })
     }
-    return true
+    return 'ok'
   })
 }
 
@@ -332,9 +360,9 @@ export async function castVote(formData: FormData): Promise<void> {
     }
   }
 
-  if (!(await replaceVotes(pollId, voter, ballot.entries, poll.maxVoters))) {
-    redirect(back('voll'))
-  }
+  const stored = await replaceVotes(pollId, voter, ballot.entries, poll.maxVoters)
+  if (stored === 'full') redirect(back('voll'))
+  if (stored === 'closed') redirect(back('geschlossen'))
   revalidatePath(`/${pollId}`)
   if (poll.assemblyId) revalidatePath(`/sitzung/${poll.assemblyId}`)
   // Auf die Seite ohne ?hinweis= - sonst stünde eine frühere Ablehnung (z.B. falsche Anzahl)
@@ -434,11 +462,14 @@ export async function confirmPollDate(formData: FormData): Promise<void> {
   // Wen wir selbst benachrichtigen, lässt rsvp-app aus - RSVP-Abstimmende gehören nicht dazu,
   // um die kümmert sich rsvp-app, sobald eines seiner Events den Termin übernimmt.
   const skipEmailHashes = [...new Set([...contacts.mail, ...contacts.accounts.map(a => a.email)])].map(emailHash)
-  const transfer = await transferFinalDate(poll, startsAt, { create: formData.get('createRsvpEvent') === 'on', skipEmailHashes })
+  const transfer = await transferFinalDate(poll, startsAt, { create: formData.get('createRsvpEvent') === 'on', skipEmailHashes, accepted: acceptedEventIds(formData) })
   if (transfer) await prisma.poll.update({ where: { id: poll.id }, data: { rsvpTransfer: JSON.stringify(transfer) } })
 
-  const eventUrl = transfer?.created?.url ?? transfer?.updated?.[0]?.url ?? null
-  await notifyVoters(poll, startsAt, contacts, { rsvpCovered: (transfer?.updated?.length ?? 0) > 0, eventUrl })
+  // Nur das neu angelegte, das des gebundenen Termins oder eins, das die Verwaltung als ihres angekreuzt hat - ein anderes, das bloß auf die Abstimmung zeigt, bekommt
+  // weder die Abstimmenden noch übernimmt es deren Benachrichtigung (docs/AUDIT-2026-11.md, V-02).
+  const event = trustedEvent(transfer)
+  const rsvpCovered = !!event && !!transfer?.updated?.some(e => e.id === event.id)
+  await notifyVoters(poll, startsAt, contacts, { rsvpCovered, eventUrl: event?.url ?? null })
 
   revalidatePath(`/${poll.id}`)
   redirect(manageUrl(poll.id, token, 'festgelegt'))
@@ -457,7 +488,7 @@ export async function retryRsvpTransfer(formData: FormData): Promise<void> {
 
   const contacts = await voterContacts(poll.id)
   const skipEmailHashes = [...new Set([...contacts.mail, ...contacts.accounts.map(a => a.email)])].map(emailHash)
-  const transfer = await transferFinalDate(poll, poll.finalStartsAt, { create: previous.create, skipEmailHashes })
+  const transfer = await transferFinalDate(poll, poll.finalStartsAt, { create: previous.create, skipEmailHashes, accepted: previous.acceptedEventIds ?? [] })
   if (transfer) await prisma.poll.update({ where: { id: poll.id }, data: { rsvpTransfer: JSON.stringify(transfer) } })
   redirect(manageUrl(poll.id, token))
 }
@@ -589,14 +620,43 @@ export async function duplicatePoll(formData: FormData) {
 
 /**
  * Löst die Bindung an einen Termin in rsvp-app (Poll.rsvpEventId, app/lib/rsvp-binding.ts) - nur Owner und Admin.
- * Danach bindet der nächste Termin, über den abgestimmt oder eine Zu-/Absage gemeldet wird. Stimmen bleiben.
+ * Danach bindet der nächste Termin, über den abgestimmt oder eine Zu-/Absage gemeldet wird. Stimmen bleiben - außer
+ * die Besitzerin wählt "Stimmen über diesen Termin entfernen" (war es der falsche Termin, zählten sonst dessen Gäste
+ * weiter, docs/AUDIT-2026-11.md V-01). Über rsvp-app kann nur der gebundene Termin abstimmen, alle Stimmen mit
+ * Nachweis von rsvp-app stammen also von ihm. Nach dem Ende nie: das Ergebnis steht (V-06).
  */
 export async function unlinkRsvpEvent(formData: FormData) {
   const ctx = await loadManageablePoll(formData, 'owner')
   if (!ctx) return
-  await prisma.poll.update({ where: { id: ctx.poll.id }, data: { rsvpEventId: null } })
+  const dropVotes = formData.get('deleteVotes') === 'on' && pollStatus(ctx.poll).state === 'open'
+  await prisma.$transaction([
+    ...(dropVotes ? [prisma.vote.deleteMany({ where: { pollId: ctx.poll.id, identityKind: 'RSVP', poll: { closedAt: null } } })] : []),
+    prisma.poll.update({ where: { id: ctx.poll.id }, data: { rsvpEventId: null, rsvpEventTitle: null } })
+  ])
   revalidatePath(`/${ctx.poll.id}`)
   redirect(manageUrl(ctx.poll.id, ctx.token, 'geloest'))
+}
+
+/**
+ * Bindet die Abstimmung an einen vorgemerkten Termin aus rsvp-app (RsvpEventCandidate, app/lib/rsvp-binding.ts) - nur
+ * Owner und Admin, nur im Modus RSVP und nur, solange noch kein Termin gebunden ist (docs/AUDIT-2026-11.md, V-01 b).
+ */
+export async function confirmRsvpEvent(formData: FormData) {
+  const ctx = await loadManageablePoll(formData, 'owner')
+  if (!ctx) return
+  const eventId = formString(formData, 'eventId')
+  const candidate = eventId ? await prisma.rsvpEventCandidate.findUnique({ where: { pollId_eventId: { pollId: ctx.poll.id, eventId } } }) : null
+  if (candidate) await bindRsvpEvent(ctx.poll.id, candidate.eventId, candidate.eventTitle)
+  revalidatePath(`/${ctx.poll.id}`)
+  redirect(manageUrl(ctx.poll.id, ctx.token, 'verknuepft'))
+}
+
+/** Verwirft einen vorgemerkten Termin (meldet er sich wieder, steht er wieder da). Nur Owner und Admin. */
+export async function dismissRsvpEvent(formData: FormData) {
+  const ctx = await loadManageablePoll(formData, 'owner')
+  if (!ctx) return
+  await prisma.rsvpEventCandidate.deleteMany({ where: { pollId: ctx.poll.id, eventId: formString(formData, 'eventId') } })
+  redirect(manageUrl(ctx.poll.id, ctx.token))
 }
 
 /**
