@@ -420,6 +420,12 @@ Rechteverwaltung (z.B. entzogene Freigaben) aushebeln.
 
 ### Sicherheit
 
+* **Gemeinsame Regeln der Suite:** `normalizeEmail` (`app/lib/form.ts`) ist nur noch ein Aufruf von `normalizeEmail` aus
+  `suite-kit/web` (seit v0.17.0): genau eine nackte Adresse, Schreibweisen wie `<a@b.de>` oder `a@b.de;` werden
+  abgelehnt. `clientIp` bleibt die volle Adresse, weil `ipRules` zweistufig zählt (siehe „Zweistufige IP-Zählung“).
+  `tests/unit/suite-rules.test.ts` lässt die Regelsammlung `suite-kit/rules` gegen `normalizeEmail` und die Netz-Stufe
+  von `ipRules` laufen: Kommt aus dem Audit eines anderen Tools eine Regel dazu, wird sie hier nach dem Update von
+  suite-kit von selbst rot.
 * **Passwörter:** scrypt (`node:crypto`, N=2^15, r=8, p=3) mit eingebetteten Parametern
   (später erhöhbar, alte Hashes werden beim nächsten Login aktualisiert). Mind. 10 Zeichen,
   keine Zeichenklassen-Regeln, Abgleich gegen naheliegende Fälle.

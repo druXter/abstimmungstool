@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",
-    "next": "^16.4.3",
+    "next": "^16.4.6",
     "nodemailer": "^10.2.1",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "suite-kit": "github:druXter/suite-kit#v0.14.0"
+    "suite-kit": "github:druXter/suite-kit#v0.17.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",
@@ -30,7 +30,7 @@
     "@types/react-dom": "^19",
     "autoprefixer": "^10.5.4",
     "eslint": "^9",
-    "eslint-config-next": "^16.4.3",
+    "eslint-config-next": "^16.4.6",
     "http_ece": "^1.2.0",
     "postcss": "^8.5.23",
     "prisma": "^6.19.3",

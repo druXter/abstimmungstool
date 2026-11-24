@@ -1,6 +1,6 @@
 // app/lib/form.ts
 
-import { singleLine } from 'suite-kit/web'
+import { normalizeEmail as suiteNormalizeEmail, singleLine } from 'suite-kit/web'
 
 /**
  * Formularwerte kommen als FormDataEntryValue (String ODER Datei) oder null - ein
@@ -32,9 +32,12 @@ export function formPassword(formData: FormData, name: string): string {
   return typeof value === 'string' && value.length <= 1000 ? value : ''
 }
 
-/** Normalisiert und prüft eine E-Mail-Adresse. Gibt null zurück, wenn sie offensichtlich ungültig ist. */
+/**
+ * Normalisiert und prüft eine E-Mail-Adresse: Ränder weg, klein geschrieben, genau EINE nackte Adresse - sonst null.
+ * Aus suite-kit (seit v0.17.0) statt einer eigenen Kopie: `<a@b.de>`, `(x)a@b.de` oder `a@b.de;` stellt nodemailer an
+ * a@b.de zu, für Drosselung und „eine Adresse je …“ wären es aber eigene Adressen. Geprüft in
+ * tests/unit/suite-rules.test.ts.
+ */
 export function normalizeEmail(input: string): string | null {
-  const email = input.trim().toLowerCase()
-  if (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return null
-  return email
+  return suiteNormalizeEmail(input)
 }
